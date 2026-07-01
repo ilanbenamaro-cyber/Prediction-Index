@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  decideBeforeProbe, decideAfterProbe, CACHE_TTL_MS, PROBE_TTL_MS, CACHE_TTL_HOURS,
+  decideBeforeProbe, decideAfterProbe, CACHE_TTL_MS, PROBE_TTL_MS,
 } from '../lib/decide-cache-action.mjs';
 
 const NOW = Date.UTC(2026, 5, 17, 12, 0, 0);
@@ -75,7 +75,3 @@ test('after probe: CLOSED_PENDING → RECOMPUTE (left OPEN; re-freeze, do not se
   assert.equal(decideAfterProbe('CLOSED_PENDING'), 'RECOMPUTE');
 });
 
-test('CACHE_TTL_HOURS is the TTL in hours (for buildSnapshotRecord freshness)', () => {
-  assert.equal(CACHE_TTL_HOURS, CACHE_TTL_MS / 3_600_000);
-  assert.equal(CACHE_TTL_HOURS, 0.25);
-});

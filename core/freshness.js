@@ -25,6 +25,17 @@ export const SCHEDULE = Object.freeze({
 // A normal overnight pause (~12h) never flags; missing the first post-pause run
 // (~14h gap) still doesn't cry wolf; anything beyond that is a genuine pipeline
 // failure and trips the flag.
+//
+// ALSO CORRECT for the HOSTED product's cadence: the Vercel snapshot cron
+// (vercel.json → /api/snapshot at 02:00 + 18:00 UTC) has a max gap of 16h
+// (02:00→18:00), so 17h (= 16h + ~1h jitter) means a watched market refreshed on
+// EITHER cron never reads STALE before the next cron runs — while an on-demand view
+// recomputes anything past the 15-min cache TTL anyway. CRITICALLY, this 17h TRUST
+// threshold is DISTINCT from CACHE_TTL_HOURS (15min, the server recompute horizon in
+// lib/decide-cache-action.mjs): the rail reads cached stale_after WITHOUT recomputing
+// per view, so using the 15-min TTL as stale_after made every rail market flip STALE
+// ~15min after a cron/view. compute.mjs therefore passes NO threshold (→ this 17h).
+// (Two horizons — see gotchas "price-match window ≠ liveness window".)
 export const STALENESS_THRESHOLD_HOURS =
   SCHEDULE.MAX_EXPECTED_GAP_H + SCHEDULE.CADENCE_H + SCHEDULE.JITTER_MARGIN_H;
 export const EXPECTED_CADENCE =
