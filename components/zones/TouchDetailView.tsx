@@ -8,7 +8,7 @@
 // (confidence, freshness, provenance + hash-verify) is identical to every other detail.
 import { canonicalizeRawInputs } from '@/core/fetch.js';
 import { fmtEastern, displayTitle, pointChange, touchNarrative, daysToExpiryLabel, barrierPathUncertainty } from '@/lib/format-detail.mjs';
-import { rangeBarLayout } from '@/lib/touch-rangebar.mjs';
+import { rangeBarLayout, niceTicks } from '@/lib/touch-rangebar.mjs';
 import { ChartCrosshair, type InterpConfig, type InterpChannel } from './ChartCrosshair';
 import { interpSeriesAtLevel } from '@/lib/chart-hover.mjs';
 import { ConfidenceBadges, ConfidenceBasisGroup } from './ConfidenceBasis';
@@ -25,6 +25,16 @@ const LIFECYCLE_LABEL: Record<string, string> = { OPEN: 'OPEN', CLOSED_PENDING: 
 
 const fmtVol = (v: number | null | undefined) => (v == null ? '—' : `$${Math.round(v).toLocaleString('en-US')}`);
 
+// Item 4 redesign — a padded 480×150 viewBox (no clipping), a real tick axis reusing
+// DistributionSVG's dist-tick/dist-grid tokens, and the implied band + markers in the middle.
+const RB_VB_W = 480, RB_VB_H = 150;
+const RB_PAD = { t: 28, r: 16, b: 40, l: 16 };
+const RB_PLOT_L = RB_PAD.l, RB_PLOT_R = RB_VB_W - RB_PAD.r, RB_PLOT_W = RB_PLOT_R - RB_PLOT_L; // 16 … 464 (448 wide)
+const RB_BAND_TOP = 52, RB_BAND_H = 22, RB_TRACK_Y = RB_BAND_TOP + RB_BAND_H / 2; // band 52..74, track 63
+const RB_MARK_TOP = 44, RB_MARK_BOT = 82;
+const RB_LABEL_ABOVE_Y = 40, RB_LABEL_BELOW_Y = 96; // hi/lo bound-label baselines (wide vs narrow)
+const RB_AXIS_Y = 110, RB_TICK_H = 5, RB_TICK_LABEL_Y = 120; // tick axis + rotated labels
+
 /** Horizontal range bar: the implied [low, high] band within the full strike span. A null
  *  bound (50% crossover outside the quoted ladder) extends the band to that edge. Hover along the
  *  axis interpolates P(touch ≥) / P(touch ≤) at that price level from the touch-probability table. */
@@ -32,13 +42,14 @@ function RangeBar({ low, high, lowLabel, highLabel, levels, unit, highPts, lowPt
   low: number | null; high: number | null; lowLabel: string; highLabel: string; levels: number[];
   unit: string; highPts: { level: number; prob: number }[]; lowPts: { level: number; prob: number }[];
 }) {
-  const layout = rangeBarLayout(low, high, levels);
+  const layout = rangeBarLayout(low, high, levels,
+    { x0: RB_PLOT_L, W: RB_PLOT_W, yAbove: RB_LABEL_ABOVE_Y, yBelow: RB_LABEL_BELOW_Y });
   if (!layout) return null;
-  const { min, max, W, bandL, bandR, narrow, lo, hi } = layout;
+  const { min, max, bandL, bandR, narrow, lo, hi } = layout;
+  const span = (max - min) || 1;
+  const xOf = (lvl: number) => RB_PLOT_L + ((lvl - min) / span) * RB_PLOT_W;
   // Interpolate each touch side over the union of strike levels → a serializable interp config the
   // shared crosshair reads. P(touch ≥) comes from the HIGH legs, P(touch ≤) from the LOW legs.
-  const span = (max - min) || 1;
-  const xOf = (lvl: number) => ((lvl - min) / span) * W;
   const unionLevels = [...new Set(levels)].sort((a, b) => a - b);
   const rows: InterpChannel[] = [];
   if (highPts.length) rows.push({ label: 'P(touch ≥)', swatch: 'var(--accent-blue)', values: unionLevels.map((l) => interpSeriesAtLevel(highPts, l)), fmt: { scale: 100, digits: 0, suffix: '%' } });
@@ -49,23 +60,38 @@ function RangeBar({ low, high, lowLabel, highLabel, levels, unit, highPts, lowPt
     titleFmt: { prefix: '$', suffix: unit, digits: 2 },
     rows,
   };
+  const ticks = niceTicks(min, max, 6);
   return (
-    <ChartCrosshair vbW={1000} vbH={80} plotLeft={0} plotRight={W} plotTop={8} plotBottom={64}
+    // crosshair spans the band+axis region (plotTop below the bound labels) so its tooltip never
+    // collides with the hi/lo labels sitting in the padded top zone.
+    <ChartCrosshair vbW={RB_VB_W} vbH={RB_VB_H} plotLeft={RB_PLOT_L} plotRight={RB_PLOT_R} plotTop={RB_BAND_TOP} plotBottom={RB_AXIS_Y}
       mode="interpolate" interp={interp} ariaLabel="Implied barrier range — hover for P(touch) at each price level">
-    <svg className="touch-rangebar" viewBox="0 0 1000 80" preserveAspectRatio="none" role="img" aria-label="implied trading range" data-field="range-bar" data-narrow={narrow ? 'true' : 'false'}>
+    <svg className="touch-rangebar" viewBox={`0 0 ${RB_VB_W} ${RB_VB_H}`} preserveAspectRatio="none" role="img" aria-label="implied trading range" data-field="range-bar" data-narrow={narrow ? 'true' : 'false'}>
+      {/* nice-tick axis: faint vertical gridlines + a baseline + rotated $ labels (dist-* tokens) */}
+      <g data-field="range-axis">
+        {ticks.map((t, i) => {
+          const x = xOf(t);
+          return (
+            <g key={i}>
+              <line className="dist-grid" x1={x} x2={x} y1={RB_PAD.t} y2={RB_AXIS_Y} />
+              <line className="dist-grid" x1={x} x2={x} y1={RB_AXIS_Y} y2={RB_AXIS_Y + RB_TICK_H} />
+              <text className="dist-tick" transform={`rotate(-45 ${x.toFixed(1)} ${RB_TICK_LABEL_Y})`} x={x.toFixed(1)} y={RB_TICK_LABEL_Y} textAnchor="end">{`$${t}${unit}`}</text>
+            </g>
+          );
+        })}
+        <line className="touch-axis" x1={RB_PLOT_L} x2={RB_PLOT_R} y1={RB_AXIS_Y} y2={RB_AXIS_Y} />
+      </g>
       {/* full strike track */}
-      <line x1={0} y1={40} x2={W} y2={40} className="touch-track" />
+      <line x1={RB_PLOT_L} y1={RB_TRACK_Y} x2={RB_PLOT_R} y2={RB_TRACK_Y} className="touch-track" />
       {/* implied band */}
-      <rect x={Math.max(0, bandL)} y={28} width={Math.max(2, bandR - bandL)} height={24} className="touch-band" />
+      <rect x={Math.max(RB_PLOT_L, bandL)} y={RB_BAND_TOP} width={Math.max(2, bandR - bandL)} height={RB_BAND_H} className="touch-band" />
       {/* bound markers */}
-      {low != null && <line x1={bandL} y1={20} x2={bandL} y2={60} className="touch-mark" />}
-      {high != null && <line x1={bandR} y1={20} x2={bandR} y2={60} className="touch-mark" />}
+      {low != null && <line x1={bandL} y1={RB_MARK_TOP} x2={bandL} y2={RB_MARK_BOT} className="touch-mark" />}
+      {high != null && <line x1={bandR} y1={RB_MARK_TOP} x2={bandR} y2={RB_MARK_BOT} className="touch-mark" />}
       {/* bound labels — above-left/above-right when the band is wide; stacked hi-above/lo-below
           (centred on the band) when narrow, so they never overlap (Bug B). */}
       <text x={lo.x} y={lo.y} className="touch-axislabel" textAnchor={lo.anchor as 'start' | 'end' | 'middle'} data-field="range-lo-label">{lowLabel}</text>
       <text x={hi.x} y={hi.y} className="touch-axislabel" textAnchor={hi.anchor as 'start' | 'end' | 'middle'} data-field="range-hi-label">{highLabel}</text>
-      <text x={0} y={74} className="touch-axisend" textAnchor="start">{`$${min}`}</text>
-      <text x={W} y={74} className="touch-axisend" textAnchor="end">{`$${max}`}</text>
     </svg>
     </ChartCrosshair>
   );

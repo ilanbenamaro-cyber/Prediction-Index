@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rangeBarLayout, RANGEBAR_W, NARROW_FRAC } from '../lib/touch-rangebar.mjs';
+import { rangeBarLayout, RANGEBAR_W, NARROW_FRAC, niceTicks } from '../lib/touch-rangebar.mjs';
 
 const LEVELS = [0, 50, 100, 150, 200]; // axis 0..200
 
@@ -51,4 +51,28 @@ test('narrow band at an extreme edge hugs that edge so the label stays in view',
   assert.equal(lo.hi.anchor, 'start');       // < 15% → left-anchored, not centred off-screen
   const hi = rangeBarLayout(196, 198, LEVELS); // band near the far right
   assert.equal(hi.hi.anchor, 'end');         // > 85% → right-anchored
+});
+
+test('geom params offset x + set label baselines (defaults reproduce the legacy layout)', () => {
+  // default (no geom) is byte-identical to the 3-arg legacy call
+  const legacy = rangeBarLayout(40, 160, LEVELS);
+  assert.equal(legacy.bandL, (40 / 200) * RANGEBAR_W); // x0=0, W=1000
+  assert.equal(legacy.lo.y, 16);
+  // padded 480×150 geometry: x offset by x0, width W, custom baselines
+  const geom = { x0: 16, W: 448, yAbove: 40, yBelow: 96 };
+  const L = rangeBarLayout(40, 160, LEVELS, geom);
+  assert.equal(L.bandL, 16 + (40 / 200) * 448);
+  assert.equal(L.bandR, 16 + (160 / 200) * 448);
+  assert.equal(L.lo.y, 40);   // yAbove
+  assert.ok(L.bandL >= 16 && L.bandR <= 16 + 448, 'band stays within the plot box');
+});
+
+test('niceTicks: round 1/2/5×10ⁿ ticks within range', () => {
+  assert.deepEqual(niceTicks(0, 200, 6), [0, 50, 100, 150, 200]);
+  assert.deepEqual(niceTicks(35, 250, 6), [50, 100, 150, 200, 250]); // endpoints not forced
+  const t = niceTicks(1.1, 3.9, 5);
+  assert.ok(t.every((v) => v >= 1.1 && v <= 3.9));
+  assert.ok(t.length >= 2);
+  assert.deepEqual(niceTicks(5, 5), [5]);   // degenerate range
+  assert.deepEqual(niceTicks(NaN, 10), [NaN]);
 });

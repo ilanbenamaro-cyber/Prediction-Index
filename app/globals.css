@@ -509,8 +509,11 @@ a:hover { text-decoration: underline; }
 .touch-track { stroke: var(--border-strong); stroke-width: 2; }
 .touch-band { fill: var(--accent-blue); fill-opacity: 0.18; stroke: var(--accent-blue); stroke-opacity: 0.5; stroke-width: 1; }
 .touch-mark { stroke: var(--accent-amber); stroke-width: 1.5; stroke-dasharray: 4 3; }
-.touch-axislabel { fill: var(--accent-amber); font-family: var(--font-mono); font-size: 26px; font-weight: 600; }
-.touch-axisend { fill: var(--text-faint); font-family: var(--font-mono); font-size: 22px; }
+/* Item 4: bound labels sized for the padded 480×150 viewBox (were 26px in an 80-tall box → clipped);
+   the axis baseline + ticks reuse the dist-tick/dist-grid tokens for visual parity with the CDF. */
+.touch-axislabel { fill: var(--accent-amber); font-family: var(--font-mono); font-size: 12px; font-weight: 600; }
+.touch-axis { stroke: var(--border-strong); stroke-width: 1; }
+.touch-axisend { fill: var(--text-faint); font-family: var(--font-mono); font-size: 22px; } /* still used by SettlementConsensus */
 .touch-hot { color: var(--accent-amber); font-weight: 700; }
 /* Bug B: settled-leg filtering — footer note + "show all" toggle, and the collapsed 0%-run row. */
 .touch-table-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
