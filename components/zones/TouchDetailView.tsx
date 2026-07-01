@@ -71,7 +71,7 @@ function RangeBar({ low, high, lowLabel, highLabel, levels, unit, highPts, lowPt
   );
 }
 
-export function TouchDetailView({ record, envelope, hist }: { record: MarketRecord; envelope: ServeBody; hist?: HistoryUI }) {
+export function TouchDetailView({ record, envelope, hist, addControl }: { record: MarketRecord; envelope: ServeBody; hist?: HistoryUI; addControl?: React.ReactNode }) {
   const s = record?.snapshot ?? {};
   const d = s?.derived ?? {};
   const asset = record?.asset ?? {};
@@ -122,6 +122,7 @@ export function TouchDetailView({ record, envelope, hist }: { record: MarketReco
           </div>
         </div>
         <div className="detail-head-actions">
+          {addControl}
           {envelope?.market_id && <RefreshButton slug={envelope.market_id} />}
           {near ? (
             <span className="detail-lifecycle state-pending" data-field="lifecycle" data-near-settlement="true">

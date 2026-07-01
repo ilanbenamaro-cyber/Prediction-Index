@@ -28,7 +28,7 @@ function binaryOutcome(outcome: ResolvedLeg[] | undefined): string | null {
   return yes ? `resolved ${yes.outcome.toUpperCase()}` : null;
 }
 
-export function BinaryDetailView({ record, envelope, hist }: { record: MarketRecord; envelope: ServeBody; hist?: HistoryUI }) {
+export function BinaryDetailView({ record, envelope, hist, addControl }: { record: MarketRecord; envelope: ServeBody; hist?: HistoryUI; addControl?: React.ReactNode }) {
   const s = record?.snapshot ?? {};
   const d = s?.derived ?? {};
   const asset = record?.asset ?? {};
@@ -74,6 +74,7 @@ export function BinaryDetailView({ record, envelope, hist }: { record: MarketRec
           </div>
         </div>
         <div className="detail-head-actions">
+          {addControl}
           {envelope?.market_id && <RefreshButton slug={envelope.market_id} />}
           <span className={`detail-lifecycle ${LIFECYCLE_CLASS[lifecycleState] ?? ''}`} data-field="lifecycle">
             ● {LIFECYCLE_LABEL[lifecycleState] ?? lifecycleState}
