@@ -140,7 +140,14 @@ export async function DetailData({ id }: { id: string }) {
       personal: mine.some((v) => v.scope === 'personal'),
       orgIds: [...new Set(mine.filter((v) => v.scope === 'org' && v.org_id).map((v) => v.org_id as string))],
     };
-    addControl = <AddToWatchlist slug={id} orgs={orgs} initial={membership} />;
+    // KEY the control on the current server-side membership. AddToWatchlist holds optimistic local
+    // state (the ✓/Add flip), and useState(initial.*) does NOT re-read `initial` on a re-render — so
+    // when membership changes EXTERNALLY (e.g. a remove from the rail revalidates the layout and
+    // re-runs this fetch with personal=false), a stable component would keep its stale ✓. Changing
+    // the key on a membership change forces a remount → useState re-initializes from fresh `initial`
+    // → the Add button reappears. (React's "reset state when a prop changes" via key.)
+    const membershipKey = `${id}|${membership.personal ? 'p' : '-'}|${[...membership.orgIds].sort().join(',')}`;
+    addControl = <AddToWatchlist key={membershipKey} slug={id} orgs={orgs} initial={membership} />;
   } catch (e) {
     console.error('[detail] add-to-watchlist membership read failed:', e);
   }
