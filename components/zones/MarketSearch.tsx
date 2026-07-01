@@ -1,9 +1,13 @@
 'use client';
 // components/zones/MarketSearch.tsx — Zone 3 search+add, the command-bar island.
-// Keyboard-first: ⌘/Ctrl-K focuses, ↑/↓ move, Enter adds, Esc dismisses, click-outside
-// closes. Debounced fetch to the /api/search proxy (no direct gamma call). Selecting a
-// result runs the addMarket server action (compute-then-add); on success the rail is
-// already revalidated, and we navigate to ?m=<slug> so the new market's detail opens.
+// Keyboard-first: ⌘/Ctrl-K focuses, ↑/↓ move, Enter SELECTS (previews) a result, Esc dismisses,
+// click-outside closes. Debounced fetch to the /api/search proxy (no direct gamma call).
+//
+// Issues 1 + 4 (UX pass): selecting a result no longer auto-adds. A click/Enter PREVIEWS it
+// (highlights + opens an action bar) WITHOUT committing; the user then presses an explicit
+// per-scope button — "Add to Watchlist"/"Personal" plus one button per org they belong to — which
+// runs the addMarket server action (compute-then-add) for that scope and navigates to the detail.
+// This replaces the old auto-add-on-click + scope <select> dropdown.
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
@@ -27,12 +31,13 @@ export function MarketSearch({ orgs }: { orgs: Array<{ id: string; name: string 
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
-  const [scope, setScope] = useState<string | null>(null); // null = personal, else orgId
+  const [selected, setSelected] = useState<SearchResult | null>(null); // the PREVIEWED result (not yet added)
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const primaryBtnRef = useRef<HTMLButtonElement>(null);
 
   // ⌘/Ctrl-K focuses the search line.
   useEffect(() => {
@@ -64,6 +69,12 @@ export function MarketSearch({ orgs }: { orgs: Array<{ id: string; name: string 
     return () => window.removeEventListener(KBD.escape, onEsc);
   }, []);
 
+  // When a result is previewed, move focus to the primary add button so a keyboard user can
+  // commit with one more Enter (browse → select → add, all from the keyboard).
+  useEffect(() => {
+    if (selected) primaryBtnRef.current?.focus();
+  }, [selected]);
+
   // Debounced search via the proxy; abort the in-flight request on each keystroke.
   useEffect(() => {
     const q = query.trim();
@@ -85,13 +96,22 @@ export function MarketSearch({ orgs }: { orgs: Array<{ id: string; name: string 
     return () => { clearTimeout(t); ctrl.abort(); };
   }, [query]);
 
-  function select(r: SearchResult) {
-    if (pending) return; // prevent double-submit
+  /** Preview a result: highlight + open the action bar. Does NOT add (Issue 1). */
+  function preview(r: SearchResult) {
+    if (pending) return;
+    setError(null);
+    setSelected(r);
+  }
+
+  /** Explicit commit for a scope (Issue 4): null = personal, else the org id. */
+  function commit(orgId: string | null) {
+    if (pending || !selected) return;
+    const slug = selected.slug;
     setError(null);
     startTransition(async () => {
-      const res = await addMarket(r.slug, scope);
+      const res = await addMarket(slug, orgId);
       if (res.ok && res.slug) {
-        setOpen(false); setQuery(''); setResults([]);
+        setOpen(false); setQuery(''); setResults([]); setSelected(null);
         router.push(`/?m=${encodeURIComponent(res.slug)}`); // rail already revalidated; open the detail
       } else {
         setError(res.error ?? 'could not add market');
@@ -99,14 +119,25 @@ export function MarketSearch({ orgs }: { orgs: Array<{ id: string; name: string 
     });
   }
 
+  function onQueryChange(v: string) {
+    setQuery(v);
+    setOpen(true);
+    setSelected(null); // a new query invalidates any previewed result
+    setError(null);
+  }
+
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight((h) => Math.min(h + 1, results.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight((h) => Math.max(h - 1, 0)); }
-    else if (e.key === 'Enter') { e.preventDefault(); const r = results[highlight]; if (r) select(r); }
-    else if (e.key === 'Escape') { setOpen(false); inputRef.current?.blur(); }
+    else if (e.key === 'Enter') { e.preventDefault(); const r = results[highlight]; if (r) preview(r); } // select, not add
+    else if (e.key === 'Escape') {
+      if (selected) { setSelected(null); inputRef.current?.focus(); } // step back to browsing
+      else { setOpen(false); inputRef.current?.blur(); }
+    }
   }
 
   const showOverlay = open && (loading || results.length > 0 || error != null || (query.trim().length >= MIN_Q));
+  const orgless = orgs.length === 0;
 
   return (
     <div className="cmdbar-search-wrap" ref={containerRef}>
@@ -117,24 +148,12 @@ export function MarketSearch({ orgs }: { orgs: Array<{ id: string; name: string 
           className="cmdbar-input mono"
           placeholder="search markets…  (⌘K)"
           value={query}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onChange={(e) => onQueryChange(e.target.value)}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
           data-field="search-input"
           aria-label="Search markets"
         />
-        {orgs.length > 0 && (
-          <select
-            className="scope-select mono"
-            value={scope ?? ''}
-            onChange={(e) => setScope(e.target.value || null)}
-            title="add to"
-            data-field="scope-select"
-          >
-            <option value="">Personal</option>
-            {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
-        )}
       </div>
 
       {showOverlay && (
@@ -148,12 +167,12 @@ export function MarketSearch({ orgs }: { orgs: Array<{ id: string; name: string 
               key={r.slug}
               type="button"
               role="option"
-              aria-selected={i === highlight}
-              className={`search-row${i === highlight ? ' is-highlighted' : ''}`}
+              aria-selected={selected?.slug === r.slug}
+              className={`search-row${i === highlight ? ' is-highlighted' : ''}${selected?.slug === r.slug ? ' is-selected' : ''}`}
               data-field="search-row"
               data-slug={r.slug}
               onMouseEnter={() => setHighlight(i)}
-              onClick={() => select(r)}
+              onClick={() => preview(r)}
               disabled={pending}
             >
               <span className={`wl-dot ${r.closed ? 'state-resolved' : 'state-open'}`} aria-hidden="true" />
@@ -167,7 +186,39 @@ export function MarketSearch({ orgs }: { orgs: Array<{ id: string; name: string 
               {r.volume != null && <span className="search-vol faint num">{fmtVolHuman(r.volume)}</span>}
             </button>
           ))}
-          {pending && <div className="search-state faint" data-field="search-adding">adding…</div>}
+
+          {/* Issue 1 + 4: explicit add action bar — appears only once a result is PREVIEWED. Each
+              button independently commits compute-then-add for its scope (no dropdown, no auto-add). */}
+          {selected && (
+            <div className="search-actionbar" data-field="search-actionbar">
+              <span className="search-action-label faint">
+                Add <span className="search-action-market">{selected.title}</span> to
+              </span>
+              <div className="search-action-btns">
+                <button
+                  ref={primaryBtnRef}
+                  type="button"
+                  className="search-add-btn is-primary"
+                  data-field="add-personal"
+                  onClick={() => commit(null)}
+                  disabled={pending}
+                >{orgless ? 'Add to Watchlist' : 'Personal'}</button>
+                {orgs.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    className="search-add-btn"
+                    data-field="add-org"
+                    data-org-id={o.id}
+                    onClick={() => commit(o.id)}
+                    disabled={pending}
+                  >{o.name}</button>
+                ))}
+              </div>
+              {pending && <span className="search-state faint" data-field="search-adding">adding…</span>}
+            </div>
+          )}
+
           {error && <div className="search-error" data-field="search-error">{error}</div>}
         </div>
       )}
