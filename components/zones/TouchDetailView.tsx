@@ -34,6 +34,7 @@ const RB_BAND_TOP = 52, RB_BAND_H = 22, RB_TRACK_Y = RB_BAND_TOP + RB_BAND_H / 2
 const RB_MARK_TOP = 44, RB_MARK_BOT = 82;
 const RB_LABEL_ABOVE_Y = 40, RB_LABEL_BELOW_Y = 96; // hi/lo bound-label baselines (wide vs narrow)
 const RB_AXIS_Y = 110, RB_TICK_H = 5, RB_TICK_LABEL_Y = 120; // tick axis + rotated labels
+const RB_BAND_GRAD = 'touch-band-grad'; // one range bar per detail page → a stable id is unique
 
 /** Horizontal range bar: the implied [low, high] band within the full strike span. A null
  *  bound (50% crossover outside the quoted ladder) extends the band to that edge. Hover along the
@@ -82,6 +83,19 @@ function RangeBar({ low, high, lowLabel, highLabel, levels, unit, highPts, lowPt
     rows,
   };
   const ticks = niceTicks(min, max, 6);
+  // An OPEN bound ("> $X" / "< $X", i.e. the 50% crossover is outside the quoted ladder) makes the
+  // band fill FLUSH to that plot edge — no domain margin can add breathing room there (bandL/bandR
+  // = the edge by definition). Fade the band toward an open edge instead: it gives the missing
+  // breathing room AND honestly signals the range is unbounded on that side (a hard fill to a
+  // specific pixel would imply false precision). Finite-bound markets (WTI/silver/SpaceX) are
+  // untouched — both edges are hard markers with symmetric domain margin. The open-bound LABEL is
+  // nudged in from the edge so it sits on the solid part of the band, not the faded tip.
+  const openLow = low == null, openHigh = high == null;
+  const bandOpen = openLow || openHigh;
+  const bandW = Math.max(2, bandR - bandL);
+  const FADE_FRAC = 0.14;
+  const loLabelX = openLow ? Math.max(RB_PLOT_L, bandL) + FADE_FRAC * bandW : lo.x;
+  const hiLabelX = openHigh ? Math.min(RB_PLOT_R, bandR) - FADE_FRAC * bandW : hi.x;
   return (
     // crosshair spans the band+axis region (plotTop below the bound labels) so its tooltip never
     // collides with the hi/lo labels sitting in the padded top zone.
@@ -102,17 +116,29 @@ function RangeBar({ low, high, lowLabel, highLabel, levels, unit, highPts, lowPt
         })}
         <line className="touch-axis" x1={RB_PLOT_L} x2={RB_PLOT_R} y1={RB_AXIS_Y} y2={RB_AXIS_Y} />
       </g>
+      {/* fade an OPEN band edge to transparent (breathing room + "unbounded" signal) */}
+      {bandOpen && (
+        <defs>
+          <linearGradient id={RB_BAND_GRAD} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="var(--accent-blue)" stopOpacity={openLow ? 0 : 0.18} />
+            <stop offset={`${FADE_FRAC * 100}%`} stopColor="var(--accent-blue)" stopOpacity={0.18} />
+            <stop offset={`${(1 - FADE_FRAC) * 100}%`} stopColor="var(--accent-blue)" stopOpacity={0.18} />
+            <stop offset="100%" stopColor="var(--accent-blue)" stopOpacity={openHigh ? 0 : 0.18} />
+          </linearGradient>
+        </defs>
+      )}
       {/* full strike track */}
       <line x1={RB_PLOT_L} y1={RB_TRACK_Y} x2={RB_PLOT_R} y2={RB_TRACK_Y} className="touch-track" />
-      {/* implied band */}
-      <rect x={Math.max(RB_PLOT_L, bandL)} y={RB_BAND_TOP} width={Math.max(2, bandR - bandL)} height={RB_BAND_H} className="touch-band" />
-      {/* bound markers */}
+      {/* implied band (gradient fill + no hard border when a bound is open) */}
+      <rect x={Math.max(RB_PLOT_L, bandL)} y={RB_BAND_TOP} width={bandW} height={RB_BAND_H}
+        className={bandOpen ? 'touch-band-open' : 'touch-band'} fill={bandOpen ? `url(#${RB_BAND_GRAD})` : undefined} />
+      {/* bound markers — only for FINITE bounds (an open edge has no marker line) */}
       {low != null && <line x1={bandL} y1={RB_MARK_TOP} x2={bandL} y2={RB_MARK_BOT} className="touch-mark" />}
       {high != null && <line x1={bandR} y1={RB_MARK_TOP} x2={bandR} y2={RB_MARK_BOT} className="touch-mark" />}
       {/* bound labels — above-left/above-right when the band is wide; stacked hi-above/lo-below
-          (centred on the band) when narrow, so they never overlap (Bug B). */}
-      <text x={lo.x} y={lo.y} className="touch-axislabel" textAnchor={lo.anchor as 'start' | 'end' | 'middle'} data-field="range-lo-label">{lowLabel}</text>
-      <text x={hi.x} y={hi.y} className="touch-axislabel" textAnchor={hi.anchor as 'start' | 'end' | 'middle'} data-field="range-hi-label">{highLabel}</text>
+          (centred on the band) when narrow (Bug B). An OPEN bound's label is nudged in from the edge. */}
+      <text x={loLabelX} y={lo.y} className="touch-axislabel" textAnchor={lo.anchor as 'start' | 'end' | 'middle'} data-field="range-lo-label">{lowLabel}</text>
+      <text x={hiLabelX} y={hi.y} className="touch-axislabel" textAnchor={hi.anchor as 'start' | 'end' | 'middle'} data-field="range-hi-label">{highLabel}</text>
     </svg>
     </ChartCrosshair>
   );

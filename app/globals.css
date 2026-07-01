@@ -508,6 +508,8 @@ a:hover { text-decoration: underline; }
 .touch-rangebar { width: 100%; height: auto; margin-top: var(--sp-3); display: block; }
 .touch-track { stroke: var(--border-strong); stroke-width: 2; }
 .touch-band { fill: var(--accent-blue); fill-opacity: 0.18; stroke: var(--accent-blue); stroke-opacity: 0.5; stroke-width: 1; }
+/* Item 4: a band with an OPEN bound uses a gradient fill (faded toward the open edge) + no hard border */
+.touch-band-open { stroke: none; }
 .touch-mark { stroke: var(--accent-amber); stroke-width: 1.5; stroke-dasharray: 4 3; }
 /* Item 4: bound labels sized for the padded 480×150 viewBox (were 26px in an 80-tall box → clipped);
    the axis baseline + ticks reuse the dist-tick/dist-grid tokens for visual parity with the CDF. */
