@@ -49,54 +49,68 @@ export interface ChartCrosshairProps {
   anchors?: SnapAnchor[];
   interp?: InterpConfig;
   ariaLabel?: string;
+  // Position the tooltip adjacent to the CURSOR (following its Y) instead of pinned to the top of
+  // the plot. Use for a SHORT chart (the touch range bar) where a top-pinned tooltip floats away
+  // from the crosshair line; tall charts keep the top-pinned default (the line spans past it).
+  tooltipAtCursor?: boolean;
   children: ReactNode; // the server-rendered chart SVG
 }
 
-interface Hover { vbX: number; payload: TooltipPayload; dots?: { y: number; color: string }[] }
+interface Hover { vbX: number; vbY: number; payload: TooltipPayload; dots?: { y: number; color: string }[] }
 
 export function ChartCrosshair({
   vbW, vbH, plotLeft, plotRight, plotTop, plotBottom,
-  mode, anchors, interp, ariaLabel, children,
+  mode, anchors, interp, ariaLabel, tooltipAtCursor = false, children,
 }: ChartCrosshairProps) {
   const overlayRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<Hover | null>(null);
 
   /** Map a client-space pointer to a resolved hover (crosshair x + tooltip), or null. */
-  const resolve = (clientX: number): Hover | null => {
+  const resolve = (clientX: number, clientY: number): Hover | null => {
     const el = overlayRef.current;
     if (!el) return null;
     const rect = el.getBoundingClientRect();
     if (rect.width === 0) return null;
-    // viewBox-x from the pointer: linear because the overlay uses preserveAspectRatio="none".
+    // viewBox coords from the pointer: linear because the overlay uses preserveAspectRatio="none".
     const raw = ((clientX - rect.left) / rect.width) * vbW;
     const cursorVbX = Math.max(plotLeft, Math.min(plotRight, raw));
+    const vbY = rect.height ? Math.max(plotTop, Math.min(plotBottom, ((clientY - rect.top) / rect.height) * vbH)) : plotTop;
 
     if (mode === 'snap') {
       if (!anchors || anchors.length === 0) return null;
       const best = anchors[nearestAnchor(anchors.map((a) => a.x), cursorVbX)];
-      return { vbX: best.x, payload: best.payload, dots: best.dots };
+      return { vbX: best.x, vbY, payload: best.payload, dots: best.dots };
     }
     // interpolate: linearly blend the channels between the two bracketing anchors at the cursor
     if (!interp || interp.anchorsVbX.length === 0) return null;
     const { i, t } = bracket(interp.anchorsVbX, cursorVbX);
     const vbX = interp.anchorsVbX.length === 1 ? interp.anchorsVbX[0] : cursorVbX;
-    return { vbX, payload: buildInterpPayload(interp, i, t) };
+    return { vbX, vbY, payload: buildInterpPayload(interp, i, t) };
   };
 
-  const onMove = (e: ReactPointerEvent<SVGSVGElement>) => setHover(resolve(e.clientX));
+  const onMove = (e: ReactPointerEvent<SVGSVGElement>) => setHover(resolve(e.clientX, e.clientY));
   const onLeave = () => setHover(null);
 
-  // Tooltip horizontal placement (percent of width) with an edge flip near the right side so the
-  // box never clips off the container. Anchored to the top of the plot area.
+  // Tooltip placement (percent of the box) with edge flips so it never clips. X flips near the
+  // right edge; when following the cursor, Y flips past the vertical midline. Tall charts pin the
+  // tooltip to the top of the plot (the crosshair line runs past it); short charts follow the cursor.
   const fx = hover ? hover.vbX / vbW : 0;
-  const flip = fx > 0.6; // near the right edge → grow leftward
-  const tipStyle: React.CSSProperties = hover
-    ? {
-        left: `${fx * 100}%`,
-        top: `${(plotTop / vbH) * 100}%`,
-        transform: flip ? 'translateX(calc(-100% - 8px))' : 'translateX(8px)',
-      }
-    : { display: 'none' };
+  const fy = hover ? hover.vbY / vbH : 0;
+  const flipX = fx > 0.6;
+  const flipY = fy > 0.5;
+  const tipStyle: React.CSSProperties = !hover
+    ? { display: 'none' }
+    : tooltipAtCursor
+      ? {
+          left: `${fx * 100}%`,
+          top: `${fy * 100}%`,
+          transform: `translate(${flipX ? 'calc(-100% - 10px)' : '10px'}, ${flipY ? 'calc(-100% - 10px)' : '10px'})`,
+        }
+      : {
+          left: `${fx * 100}%`,
+          top: `${(plotTop / vbH) * 100}%`,
+          transform: flipX ? 'translateX(calc(-100% - 8px))' : 'translateX(8px)',
+        };
 
   return (
     <div className="chart-hover" data-field="chart-hover">

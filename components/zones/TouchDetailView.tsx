@@ -42,15 +42,32 @@ function RangeBar({ low, high, lowLabel, highLabel, levels, unit, highPts, lowPt
   low: number | null; high: number | null; lowLabel: string; highLabel: string; levels: number[];
   unit: string; highPts: { level: number; prob: number }[]; lowPts: { level: number; prob: number }[];
 }) {
+  const unionLevels = [...new Set(levels)].sort((a, b) => a - b);
+  // Scope the axis to the IMPLIED RANGE plus a couple of context levels just beyond each bound, then
+  // a 12% margin. "Will it ever hit $X" touch markets have heavy tails — deep strikes keep a few %
+  // touch probability all the way out (Anthropic: P(touch≥$5T)=5.5%), so a probability threshold
+  // never crops them and the real signal ($0.8–1.7T) gets squeezed into a sliver. Anchoring on the
+  // range + context crops the far dead tail (still shown in the probability table below) so the band
+  // is prominent. A wide-range market (range spans most of the ladder) keeps ~all levels: the
+  // context levels beyond the bounds ARE the ladder ends.
+  const CONTEXT = 2; // quoted levels to keep beyond each range bound, for context
+  const rHi = high != null ? high : (unionLevels[unionLevels.length - 1] ?? 1);
+  const rLo = low != null ? low : (unionLevels[0] ?? 0);
+  const above = unionLevels.filter((l) => l > rHi).slice(0, CONTEXT);
+  const below = unionLevels.filter((l) => l < rLo).slice(-CONTEXT);
+  const focusVals = [rLo, rHi, ...above, ...below];
+  let dMin = Math.min(...focusVals), dMax = Math.max(...focusVals);
+  const margin = ((dMax - dMin) || Math.abs(dMax) || 1) * 0.12;
+  dMin = Math.max(0, dMin - margin); dMax = dMax + margin;
+
   const layout = rangeBarLayout(low, high, levels,
-    { x0: RB_PLOT_L, W: RB_PLOT_W, yAbove: RB_LABEL_ABOVE_Y, yBelow: RB_LABEL_BELOW_Y });
+    { x0: RB_PLOT_L, W: RB_PLOT_W, yAbove: RB_LABEL_ABOVE_Y, yBelow: RB_LABEL_BELOW_Y, domain: [dMin, dMax] });
   if (!layout) return null;
   const { min, max, bandL, bandR, narrow, lo, hi } = layout;
   const span = (max - min) || 1;
   const xOf = (lvl: number) => RB_PLOT_L + ((lvl - min) / span) * RB_PLOT_W;
   // Interpolate each touch side over the union of strike levels → a serializable interp config the
   // shared crosshair reads. P(touch ≥) comes from the HIGH legs, P(touch ≤) from the LOW legs.
-  const unionLevels = [...new Set(levels)].sort((a, b) => a - b);
   const rows: InterpChannel[] = [];
   if (highPts.length) rows.push({ label: 'P(touch ≥)', swatch: 'var(--accent-blue)', values: unionLevels.map((l) => interpSeriesAtLevel(highPts, l)), fmt: { scale: 100, digits: 0, suffix: '%' } });
   if (lowPts.length) rows.push({ label: 'P(touch ≤)', swatch: 'var(--accent-amber)', values: unionLevels.map((l) => interpSeriesAtLevel(lowPts, l)), fmt: { scale: 100, digits: 0, suffix: '%' } });
@@ -65,7 +82,7 @@ function RangeBar({ low, high, lowLabel, highLabel, levels, unit, highPts, lowPt
     // crosshair spans the band+axis region (plotTop below the bound labels) so its tooltip never
     // collides with the hi/lo labels sitting in the padded top zone.
     <ChartCrosshair vbW={RB_VB_W} vbH={RB_VB_H} plotLeft={RB_PLOT_L} plotRight={RB_PLOT_R} plotTop={RB_BAND_TOP} plotBottom={RB_AXIS_Y}
-      mode="interpolate" interp={interp} ariaLabel="Implied barrier range — hover for P(touch) at each price level">
+      mode="interpolate" interp={interp} tooltipAtCursor ariaLabel="Implied barrier range — hover for P(touch) at each price level">
     <svg className="touch-rangebar" viewBox={`0 0 ${RB_VB_W} ${RB_VB_H}`} preserveAspectRatio="none" role="img" aria-label="implied trading range" data-field="range-bar" data-narrow={narrow ? 'true' : 'false'}>
       {/* nice-tick axis: faint vertical gridlines + a baseline + rotated $ labels (dist-* tokens) */}
       <g data-field="range-axis">
@@ -223,8 +240,14 @@ export function TouchDetailView({ record, envelope, hist, addControl }: { record
           </div>
           <div className="acard" data-field="pcard-width">
             <div className="label">Range width <span className="faint">· path uncertainty</span></div>
-            <div className="acard-v">{width != null ? `$${width.toFixed(2)}${unit}` : '—'}</div>
-            <div className="acard-s faint" data-field="range-width-interp">{pathUncertainty ? `${pathUncertainty.label} — ${pathUncertainty.detail}` : 'upper − lower bound'}</div>
+            {/* A one-sided range (an open "> $X" / "< $X" bound) has no finite width — say so honestly
+                instead of a bare dash (the product's never-dashes principle). */}
+            <div className="acard-v">{width != null ? `$${width.toFixed(2)}${unit}` : 'n/a'}</div>
+            <div className="acard-s faint" data-field="range-width-interp">{
+              width != null
+                ? (pathUncertainty ? `${pathUncertainty.label} — ${pathUncertainty.detail}` : 'upper − lower bound')
+                : `open-ended ${lo == null ? 'lower' : 'upper'} bound — no finite width`
+            }</div>
           </div>
           <VolumeCard liquidity={d.liquidity} allTimeVolume={d.total_volume} />
         </div>
