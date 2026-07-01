@@ -422,24 +422,6 @@ a:hover { text-decoration: underline; }
   background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px var(--sp-3); }
 .cmdbar-input { flex: 1; min-width: 0; background: transparent; border: none; color: var(--text); font-size: var(--fs-tiny); outline: none; }
 .cmdbar-input::placeholder { color: var(--text-faint); }
-/* Issue 1+4: explicit add action bar (replaces the scope dropdown + auto-add) */
-.search-actionbar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; align-items: center;
-  gap: var(--sp-2) var(--sp-3); padding: var(--sp-3) var(--sp-4);
-  background: var(--bg-card); border-top: 1px solid var(--border-strong); }
-.search-action-label { font-size: var(--fs-tiny); display: inline-flex; align-items: baseline; gap: 4px;
-  min-width: 0; max-width: 100%; }
-.search-action-market { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; max-width: 22ch; }
-.search-action-btns { display: inline-flex; flex-wrap: wrap; gap: var(--sp-2); margin-left: auto; }
-.search-add-btn { flex: 0 0 auto; background: var(--bg-elev); border: 1px solid var(--border-strong);
-  color: var(--text); font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 600;
-  letter-spacing: var(--track-label); padding: 3px var(--sp-3); border-radius: var(--radius-sm); cursor: pointer;
-  transition: border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease); }
-.search-add-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
-.search-add-btn.is-primary { border-color: var(--accent-amber); color: var(--accent-amber); }
-.search-add-btn.is-primary:hover { background: var(--accent-amber); color: var(--bg-base); }
-.search-add-btn:disabled { opacity: 0.5; cursor: default; }
-.search-add-btn:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 1px; }
 
 .search-overlay { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
   background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
@@ -450,7 +432,6 @@ a:hover { text-decoration: underline; }
   padding: var(--sp-2) var(--sp-4); background: transparent; border: none; border-bottom: 1px solid var(--border);
   color: var(--text); cursor: pointer; font: inherit; transition: background var(--t-fast) var(--ease); }
 .search-row.is-highlighted { background: var(--bg-card); }
-.search-row.is-selected { background: var(--bg-card); box-shadow: inset 3px 0 0 var(--accent-amber); }
 .search-row:disabled { opacity: 0.6; cursor: default; }
 .search-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-tiny); }
 .search-vol { flex: 0 0 auto; font-size: var(--fs-micro); }
