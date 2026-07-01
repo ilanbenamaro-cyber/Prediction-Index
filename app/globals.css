@@ -136,6 +136,22 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--border);
 }
 
+/* Item 3: rail Personal/Org scope toggle */
+.wl-toggle { display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--border); }
+.wl-toggle-btn { flex: 0 0 auto; background: transparent; border: 1px solid var(--border);
+  color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 600;
+  letter-spacing: var(--track-label); padding: 2px var(--sp-2); border-radius: var(--radius-sm); cursor: pointer;
+  transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); max-width: 14ch;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-toggle-btn:hover { color: var(--accent-blue); border-color: var(--border-strong); }
+.wl-toggle-btn.is-active { color: var(--accent-amber); border-color: var(--accent-amber); }
+.wl-toggle-select { flex: 0 1 auto; min-width: 0; max-width: 16ch; background: transparent;
+  border: 1px solid var(--border); color: var(--text-muted); font-family: var(--font-mono);
+  font-size: var(--fs-micro); font-weight: 600; padding: 2px var(--sp-1); border-radius: var(--radius-sm);
+  cursor: pointer; outline: none; }
+.wl-toggle-select.is-active { color: var(--accent-amber); border-color: var(--accent-amber); }
+
 /* empty-state used by every zone shell in 2c.1 */
 .empty {
   display: flex;
