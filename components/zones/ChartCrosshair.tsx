@@ -18,7 +18,7 @@
 //                   between the two bracketing anchors at the exact cursor x, then formatted.
 // Pointer events (not mouse) unify mouse + touch: a tap/drag on mobile shows the same tooltip.
 
-import { useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react';
+import { useId, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react';
 import { fmtNum, lerpAt, nearestAnchor, bracket } from '@/lib/chart-hover.mjs';
 
 /** A single formatted line in the tooltip: an optional colour swatch (matching a series), a label
@@ -64,6 +64,7 @@ export function ChartCrosshair({
 }: ChartCrosshairProps) {
   const overlayRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<Hover | null>(null);
+  const clipId = useId(); // unique per instance (multiple charts on one page)
 
   /** Map a client-space pointer to a resolved hover (crosshair x + tooltip), or null. */
   const resolve = (clientX: number, clientY: number): Hover | null => {
@@ -127,12 +128,19 @@ export function ChartCrosshair({
         onPointerLeave={onLeave}
         onPointerCancel={onLeave}
       >
+        {/* clip the crosshair marks to the PLOT rectangle so the line/dots can never bleed past the
+            plot's vertical bounds (into the axis labels / the section below), regardless of scaling. */}
+        <defs>
+          <clipPath id={clipId}>
+            <rect x={plotLeft} y={plotTop} width={Math.max(0, plotRight - plotLeft)} height={Math.max(0, plotBottom - plotTop)} />
+          </clipPath>
+        </defs>
         {/* transparent capture rect over the WHOLE chart box so tracking is continuous even over
             the axis padding (the crosshair x still clamps to the plot range). touch-action:pan-y
             lets the page scroll vertically while a horizontal drag drives the crosshair. */}
         <rect className="chart-hover-capture" x={0} y={0} width={vbW} height={vbH} />
         {hover && (
-          <g className="chart-hover-marks" pointerEvents="none">
+          <g className="chart-hover-marks" pointerEvents="none" clipPath={`url(#${clipId})`}>
             <line className="chart-cross-line" x1={hover.vbX} x2={hover.vbX} y1={plotTop} y2={plotBottom} />
             {hover.dots?.map((d, i) => (
               <circle key={i} className="chart-cross-dot" cx={hover.vbX} cy={d.y} r={2.8} style={{ fill: d.color }} />

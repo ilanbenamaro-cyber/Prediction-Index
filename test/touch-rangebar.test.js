@@ -3,7 +3,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rangeBarLayout, RANGEBAR_W, NARROW_FRAC, niceTicks } from '../lib/touch-rangebar.mjs';
+import { rangeBarLayout, RANGEBAR_W, NARROW_FRAC, niceTicks, buildAxisSamples } from '../lib/touch-rangebar.mjs';
+import { bracket, lerpAt } from '../lib/chart-hover.mjs';
 
 const LEVELS = [0, 50, 100, 150, 200]; // axis 0..200
 
@@ -65,6 +66,25 @@ test('geom params offset x + set label baselines (defaults reproduce the legacy 
   assert.equal(L.bandR, 16 + (160 / 200) * 448);
   assert.equal(L.lo.y, 40);   // yAbove
   assert.ok(L.bandL >= 16 && L.bandR <= 16 + 448, 'band stays within the plot box');
+});
+
+test('crosshair-to-axis ALIGNMENT: cursor at a tick pixel reports that tick value (not a clamped level)', () => {
+  // Anthropic-shaped domain: axis scoped to 0.43..2.17T (ticks 0.5/1/1.5/2), while the LOWEST quoted
+  // level is 0.6 — the bug was the crosshair snapping to the 0.6 level anchor in the [0.43,0.6] margin.
+  const dMin = 0.43, dMax = 2.17, plotL = 16, plotW = 448;
+  const { xs, prices } = buildAxisSamples(dMin, dMax, plotL, plotW, 96);
+  const xOf = (v) => plotL + ((v - dMin) / (dMax - dMin)) * plotW; // the SAME map the axis ticks use
+  const valueAt = (vbX) => { const { i, t } = bracket(xs, vbX); return lerpAt(prices, i, t); };
+
+  for (const tick of niceTicks(dMin, dMax, 6)) { // [0.5, 1, 1.5, 2]
+    const got = valueAt(xOf(tick));
+    assert.ok(Math.abs(got - tick) < 0.02, `cursor on the $${tick}T tick → ${got.toFixed(3)} (must ≈ ${tick})`);
+  }
+  // The exact regression: at the $0.5T tick the crosshair must read ~0.5, NOT the old clamped 0.6.
+  const at05 = valueAt(xOf(0.5));
+  assert.ok(Math.abs(at05 - 0.5) < 0.02 && at05 < 0.55, `at $0.5T must read ~0.50, not the old 0.60 (got ${at05.toFixed(3)})`);
+  // and the value is monotonic left→right across the plot (linear axis)
+  assert.ok(valueAt(plotL) < valueAt(plotL + plotW / 2) && valueAt(plotL + plotW / 2) < valueAt(plotL + plotW));
 });
 
 test('niceTicks: round 1/2/5×10ⁿ ticks within range', () => {

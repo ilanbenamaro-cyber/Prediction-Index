@@ -8,7 +8,7 @@
 // (confidence, freshness, provenance + hash-verify) is identical to every other detail.
 import { canonicalizeRawInputs } from '@/core/fetch.js';
 import { fmtEastern, displayTitle, pointChange, touchNarrative, daysToExpiryLabel, barrierPathUncertainty } from '@/lib/format-detail.mjs';
-import { rangeBarLayout, niceTicks } from '@/lib/touch-rangebar.mjs';
+import { rangeBarLayout, niceTicks, buildAxisSamples } from '@/lib/touch-rangebar.mjs';
 import { ChartCrosshair, type InterpConfig, type InterpChannel } from './ChartCrosshair';
 import { interpSeriesAtLevel } from '@/lib/chart-hover.mjs';
 import { ConfidenceBadges, ConfidenceBasisGroup } from './ConfidenceBasis';
@@ -66,14 +66,18 @@ function RangeBar({ low, high, lowLabel, highLabel, levels, unit, highPts, lowPt
   const { min, max, bandL, bandR, narrow, lo, hi } = layout;
   const span = (max - min) || 1;
   const xOf = (lvl: number) => RB_PLOT_L + ((lvl - min) / span) * RB_PLOT_W;
-  // Interpolate each touch side over the union of strike levels → a serializable interp config the
-  // shared crosshair reads. P(touch ≥) comes from the HIGH legs, P(touch ≤) from the LOW legs.
+  // Crosshair interp: sample the SCOPED axis domain [min,max] UNIFORMLY (same scale as the ticks),
+  // so the tooltip's price reads linearly off the axis at every pixel — NOT off sparse level anchors
+  // (which reported the clamped lowest/highest level in the axis margins, e.g. "$0.60T" while the
+  // crosshair sat on the $0.50T tick). P(touch ≥/≤) is interpolated from the series at each sampled
+  // price. min/max here are the [dMin,dMax] the axis ticks use → crosshair and ticks can't disagree.
+  const { xs: sampleX, prices: samplePrice } = buildAxisSamples(min, max, RB_PLOT_L, RB_PLOT_W);
   const rows: InterpChannel[] = [];
-  if (highPts.length) rows.push({ label: 'P(touch ≥)', swatch: 'var(--accent-blue)', values: unionLevels.map((l) => interpSeriesAtLevel(highPts, l)), fmt: { scale: 100, digits: 0, suffix: '%' } });
-  if (lowPts.length) rows.push({ label: 'P(touch ≤)', swatch: 'var(--accent-amber)', values: unionLevels.map((l) => interpSeriesAtLevel(lowPts, l)), fmt: { scale: 100, digits: 0, suffix: '%' } });
+  if (highPts.length) rows.push({ label: 'P(touch ≥)', swatch: 'var(--accent-blue)', values: samplePrice.map((p) => interpSeriesAtLevel(highPts, p)), fmt: { scale: 100, digits: 0, suffix: '%' } });
+  if (lowPts.length) rows.push({ label: 'P(touch ≤)', swatch: 'var(--accent-amber)', values: samplePrice.map((p) => interpSeriesAtLevel(lowPts, p)), fmt: { scale: 100, digits: 0, suffix: '%' } });
   const interp: InterpConfig = {
-    anchorsVbX: unionLevels.map(xOf),
-    titleValues: unionLevels,
+    anchorsVbX: sampleX,
+    titleValues: samplePrice,
     titleFmt: { prefix: '$', suffix: unit, digits: 2 },
     rows,
   };
