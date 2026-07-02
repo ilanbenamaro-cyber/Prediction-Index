@@ -107,9 +107,14 @@ export function buildPmfLadder(legs) {
   let mean = 0;
   for (const l of valid) {
     let mid;
-    if (l.lo <= 0 && Number.isFinite(l.hi)) mid = l.hi - offset; // bottom bucket [0, hi)
+    // Open-bottom bucket: only a TRULY open (non-finite) lo gets the floor-offset midpoint. A
+    // BOUNDED lo — even zero or negative, e.g. a percent rung [-2%, 0%) or dollar's [0, hi) — has
+    // a well-defined width and uses its own [lo,hi) midpoint like any other bucket. `lo <= 0` was
+    // too broad: it caught genuine bounded-negative percent rungs (a real leg, not an artificially
+    // huge open floor) and biased their contribution to the mean. Hard Stop 2, 2026-07-02.
+    if (!Number.isFinite(l.lo) && Number.isFinite(l.hi)) mid = l.hi - offset; // truly open bottom bucket
     else if (!Number.isFinite(l.hi)) mid = l.lo + offset; // top bucket [lo, ∞)
-    else mid = (l.lo + l.hi) / 2; // middle bucket
+    else mid = (l.lo + l.hi) / 2; // middle bucket (incl. a bounded lo of 0 or negative)
     mean += mid * l.prob;
   }
 

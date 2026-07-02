@@ -15,6 +15,7 @@ import { jumpNarrative } from '../lib/format-detail.mjs';
 import { deriveReliabilityTrend, deriveLiquidityTrend } from '../lib/market-history.mjs';
 import { buildBackfillRecord } from '../lib/backfill-record.mjs';
 import { defaultConfigForLadder } from '../core/market-config.js';
+import { buildPmfLadder } from '../core/bucket.js';
 
 // ── quantileValuation / computeImpliedMean (THE median/mean primitives) ────────────────────────
 test('quantileValuation: interpolates the crossing; null when S is never crossed', () => {
@@ -152,3 +153,74 @@ test('deriveReliabilityTrend / deriveLiquidityTrend: rising, falling, steady, nu
   assert.equal(deriveLiquidityTrend(rows('liquidity_score', [0.2, 0.5])), 'rising');
   assert.equal(deriveLiquidityTrend([]), null);
 });
+
+// ── buildPmfLadder open-bottom heuristic (Hard Stop 2, 2026-07-02) ─────────────────────────────
+// The old `l.lo <= 0` gate treated ANY leg with lo<=0 as "the open floor bucket" (mid = hi -
+// offset), which is right for a TRULY open (-Infinity) rung but WRONG for a bounded finite rung
+// that merely happens to sit at/below 0 (a real percent leg like [-2%, 0%)) — that leg has a
+// well-defined width and should use its own (lo+hi)/2 midpoint like any other bucket. Fixed to
+// gate strictly on `!Number.isFinite(l.lo)`.
+
+test('buildPmfLadder: a TRULY open-bottom leg (lo=-Infinity) still gets the floor-offset midpoint', () => {
+  const legs = [
+    { lo: -Infinity, hi: -1, prob: 0.2 },
+    { lo: -1, hi: 1, prob: 0.5 },
+    { lo: 1, hi: Infinity, prob: 0.3 },
+  ];
+  const { mean } = buildPmfLadder(legs);
+  assert.ok(Number.isFinite(mean), `mean must be finite, got ${mean}`);
+  // offset = half the [-1,1) middle-bucket width (2) = 1.
+  // open-bottom mid = hi(-1) - offset(1) = -2; middle mid = (-1+1)/2 = 0; top mid = 1 + 1 = 2.
+  // mean = .2*(-2) + .5*0 + .3*2 = -0.4 + 0 + 0.6 = 0.2
+  assert.ok(Math.abs(mean - 0.2) < 1e-9, `mean=${mean}`);
+});
+
+test('buildPmfLadder: a BOUNDED negative leg (lo=-2, finite) uses its own midpoint — minimal isolation', () => {
+  // A single bounded leg [-2,0): with no other legs, offset falls back to the boundary span (0
+  // here, since there's only one boundary) — so the OLD floor formula gave mid = hi - 0 = 0, while
+  // the leg's real midpoint is (-2+0)/2 = -1. This isolates the fix with zero ambiguity from offset.
+  const { mean } = buildPmfLadder([{ lo: -2, hi: 0, prob: 1.0 }]);
+  assert.equal(mean, -1); // was 0 under the old lo<=0 heuristic
+});
+
+test('buildPmfLadder: a BOUNDED negative rung in a realistic multi-bucket percent ladder', () => {
+  const legs = [
+    { lo: -2, hi: 0, prob: 0.2 },   // bounded negative — must use its own midpoint, not the floor
+    { lo: 0, hi: 10, prob: 0.2 },
+    { lo: 10, hi: 20, prob: 0.3 },  // the only lo>0 leg → drives the offset (width 10 → offset 5)
+    { lo: 20, hi: Infinity, prob: 0.3 },
+  ];
+  const { mean } = buildPmfLadder(legs);
+  // offset = 5 (median of the single lo>0 width, 10, halved).
+  // leg1 (-2,0): mid = (-2+0)/2 = -1   [was hi-offset = 0-5 = -5 under the old heuristic]
+  // leg2 (0,10): mid = (0+10)/2 = 5    [unaffected here — coincides with hi-offset=10-5=5]
+  // leg3 (10,20): mid = 15 (unaffected, lo>0 both before and after)
+  // leg4 (20,∞): mid = 20+5 = 25 (unaffected, top bucket)
+  // mean = .2*(-1) + .2*5 + .3*15 + .3*25 = -0.2 + 1 + 4.5 + 7.5 = 12.8
+  assert.ok(Math.abs(mean - 12.8) < 1e-9, `mean=${mean}`); // was 12.0 under the old heuristic
+});
+
+test('buildPmfLadder: dollar-ladder legs with POSITIVE lo are byte-identical (untouched by the fix)', () => {
+  // Every leg here has lo > 0, so neither the old `lo<=0` gate nor the new `!isFinite(lo)` gate
+  // ever fires for them — both formulas fall through to the same middle/top-bucket branches.
+  const legs = [
+    { lo: 60_000, hi: 62_000, prob: 0.5 },
+    { lo: 62_000, hi: 64_000, prob: 0.3 },
+    { lo: 64_000, hi: Infinity, prob: 0.2 },
+  ];
+  const { mean } = buildPmfLadder(legs);
+  // offset: widths pool = [{60000,62000}=2000, {62000,64000}=2000] → median=2000 → offset=1000.
+  // mid1=(60000+62000)/2=61000; mid2=(62000+64000)/2=63000; mid3(top)=64000+1000=65000.
+  const expected = 0.5 * 61_000 + 0.3 * 63_000 + 0.2 * 65_000;
+  assert.ok(Math.abs(mean - expected) < 1e-6, `mean=${mean} expected=${expected}`);
+});
+
+// NOTE (disclosed consequence, not covered by the "positive lo unchanged" guarantee above): a
+// dollar ladder's OWN "less than $X" leg parses to `{lo: 0, hi: X}` — lo is finite and EXACTLY
+// zero, not negative and not -Infinity. Under the literal `!Number.isFinite(l.lo)` fix this leg
+// ALSO reroutes out of the floor-offset branch into the plain (lo+hi)/2 midpoint — changing the
+// PMF mean contribution of every dollar bucket_pmf market's LOWEST bucket (not just percent
+// negative rungs, which is all the background text discussed). See the updated assertion in
+// test/bucket.test.js "derived median + PMF mean are correct" for the concrete before/after
+// values (61200 -> 55400 on that fixture) and core/bucket.js's inline comment for the rationale
+// (a bounded lo=0 has a well-defined width just like any other bucket boundary).
