@@ -5,6 +5,26 @@ Newest at top. If you're about to change one of these, read the entry first.
 
 ---
 
+### latest.json schema_version label — preserved as historical record
+DATE: 2026-07-02
+STATUS: ACTIVE — INTENTIONALLY LEFT AS-IS
+
+DECISION: docs/api/v1/latest.json's schema_version reads "1.3.0" while
+the confidence sub-block inside it is 2.0.0-shaped (the confidence block
+was retroactively filled at Increment A / migration 0010). The version
+label reflects the epoch of the original SpaceX freeze, not the current
+schema version. This label is intentionally preserved as a historical
+record of the freeze time. It is not a bug.
+
+RATIONALE: Changing the label retroactively would misrepresent when
+the freeze occurred. The 2.0.0-shaped confidence block is already
+documented in the parity gate notes (Gate 2b faithfulness proof).
+Any reader inspecting the file should consult decisions.md for the
+provenance context.
+
+TRIGGERS_REVIEW_IF: The frozen artifact is formally versioned and
+needs a migration path to a new schema format.
+
 ## Detail history reads use a LEAN server-side projection — efficiency ≠ data reduction
 **Decided (2026-07-02):** the detail Server Component's history read switched from `readHistory`
 (full `record` JSONB × up to 365 rows) to a new `readHistoryLean` that projects ONLY the two record

@@ -8,6 +8,35 @@
 > There is **no `.workflows/_system/` dir, no `codebase.md`/`MEMORY.md`** — the global `/sync`
 > skill tolerates their absence (updated 2026-06-18); don't be alarmed when it skips them.
 
+## ⮕ DIRECTION (2026-07-02, latest): 4 approved HARD-STOP core/ fixes — 4 more commits on `fix/predemo-polish-pass`
+- **Operator pre-approved and specified all 4 HARD-STOP items** from the pass below; implemented as
+  4 separate commits (16→17 total on the branch). **377/377 (+7 over the 370 from the prior pass);
+  parity 4/4 byte-identical; tsc clean.** `fix/predemo-polish-pass` had already been merged into
+  `main` between sessions (`d00bd09`, pushed) — fast-forwarded the branch onto that tip before
+  starting, so these commits sit cleanly on top for the next merge.
+- **`core/confidence.js` `windowedVolumeSignal`:** the MEDIUM-tier reason string named `'24h'`
+  whenever `volume_24hr` was merely PRESENT (even $0), not whichever window actually crossed its
+  own threshold — a market that qualified via 7d could read "moderate 24h volume ($0)". Now names
+  the window that actually crossed VOL24_MEDIUM/VOL1WK_MEDIUM (24h preferred only when both cross).
+  No threshold/tier logic changed. +2 tests.
+- **`core/bucket.js` `buildPmfLadder`:** the open-bottom mean heuristic used `l.lo <= 0`, which
+  wrongly caught a BOUNDED finite negative rung (a real percent leg like `[-2%, 0%)`) as if it were
+  the open floor, biasing its midpoint contribution. Tightened to `!Number.isFinite(l.lo)`. **⚠
+  Disclosed side effect (outside the "positive lo" guarantee):** a dollar ladder's own `[0, hi)`
+  "less than $X" leg ALSO reroutes (lo=0 is finite, not -Infinity) — changing every dollar
+  bucket_pmf market's LOWEST-bucket mean contribution (background text only discussed percent; this
+  wasn't limited to percent by the literal fix). Updated the one existing test this touched
+  (61200→55400, comment explains why); no frozen/committed artifact covers it (SpaceX is
+  survival-only). +4 tests.
+- **`core/touch-record.js` `buildTouchNarrative`:** the STORED narrative still said "implied 50%
+  trading range" after the display layer switched to barrier-option language (INC 7) — the
+  persisted text contradicted the UI. One string changed to "implied barrier range"; no test
+  previously covered this exact function's output. +1 test.
+- **[[decisions]]:** added the `latest.json` schema_version-label provenance entry (operator's
+  verbatim decision) — preserved as-is, a historical record of the freeze epoch, not a bug.
+- **NEXT:** operator review + merge these 4 commits; the earlier pass's other items (re-seed
+  SpaceX, METHODOLOGY.md realignment) are still open.
+
 ## ⮕ DIRECTION (2026-07-02, later): PRE-DEMO POLISH PASS — 12 commits on `fix/predemo-polish-pass`, AWAITING OPERATOR MERGE
 - **Full-codebase audit (every file in core/lib/app/components/test) + fix pass + browser gate.** On
   branch `fix/predemo-polish-pass` (NOT merged/pushed — operator reviews per convention). **370/370
@@ -1105,9 +1134,9 @@ core record. **Public Polymarket data only** — no grey-market/secondary data (
   scripts/seed-spacex.mjs`. The dev row is the PRE-SPLIT (schema-1.3.0 single-tier) record, so any
   freeze-path revalidation 422s ("Record invalid") — this is verify-phase2a C4's remaining red.
   General rule (new [[gotchas]] entry): a breaking `derived` reshape must re-seed stored FINAL records.
-- [ ] **OPERATOR DECISION: `latest.json` says `schema_version: "1.3.0"` but carries the 2.0.0 split
-  confidence shape** (only the confidence sub-block was regenerated at Increment A). Bumping the label
-  edits the frozen artifact → operator's call (found 2026-07-02).
+- [x] **`latest.json`'s `schema_version: "1.3.0"` label vs its 2.0.0-shaped confidence block** —
+  [DECIDED — session 2026-07-02: preserved as-is, intentionally. See [[decisions]] "latest.json
+  schema_version label — preserved as historical record".]
 - [ ] **HARD-STOP candidates from the 2026-07-02 audit, awaiting operator "proceed"** (all core/):
   (a) `windowedVolumeSignal` can emit "moderate 24h volume ($0)" when the 7d leg qualified — name the
   qualifying window; (b) `buildPmfLadder`'s `lo <= 0` bottom-bucket heuristic biases the PMF mean for
