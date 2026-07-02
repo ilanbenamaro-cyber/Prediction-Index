@@ -14,7 +14,7 @@ import { createClient } from '@/lib/supabase/server';
 import { listVisible } from '@/lib/watchlist.mjs';
 import { AddToWatchlist, type Membership } from './AddToWatchlist';
 import { canonicalizeRawInputs } from '@/core/fetch.js';
-import { readHistory, headlineValue, deriveVelocity, deriveDispersion, deriveDeltas, deriveBiggestMoves, deriveChartSeries, headlineChange, latestSnapshotWindow, deriveReliabilityTrend, readBackfillStatus } from '@/lib/market-history.mjs';
+import { readHistoryLean, headlineValue, deriveVelocity, deriveDispersion, deriveDeltas, deriveBiggestMoves, deriveChartSeries, headlineChange, latestSnapshotWindow, deriveReliabilityTrend, readBackfillStatus } from '@/lib/market-history.mjs';
 import { unitFromLadder, fmtMoney, fmtRange, fmtEastern, impliedMedianLabel, displayTitle, fmtDeltaPp, deltaSign, meanRobustnessLabel, modeBucket, detailNarrative, daysToExpiryLabel, synthesizeSignals } from '@/lib/format-detail.mjs';
 import { DistributionSVG } from './DistributionSVG';
 import { SettlementConsensus } from './SettlementConsensus';
@@ -76,8 +76,11 @@ export async function DetailData({ id }: { id: string }) {
   // RESOLVED market whose data ends weeks ago the 90-day-from-today window caught only the tail).
   // The velocity/dispersion/Δ/mover derivations look only at fixed horizons, so the wider read
   // doesn't change them. Lean {date,value} points are shipped to the client — not the records.
+  // LEAN read (perf, 2026-07-02): the derivations consume ONLY derived.markets + derived.iqr from
+  // each record, so the projection happens in Postgres — full-JSONB 365-row reads measured 1.6MB /
+  // 287ms p50 vs 323KB / 75ms lean on a 180-day ladder. Every displayed field still flows.
   let rows: HistoryRow[] = [];
-  try { rows = (await readHistory(id, 365)) as HistoryRow[]; } catch { rows = []; }
+  try { rows = (await readHistoryLean(id, 365)) as HistoryRow[]; } catch { rows = []; }
   // Backfill provenance: a freshly-added market whose CLOB reconstruction hasn't finished
   // (status null/'pending') shows "Backfilling history…" instead of the bare "Collecting" state.
   // A read failure degrades to null → the neutral collecting state, never breaks the serve.
