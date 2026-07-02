@@ -24,6 +24,21 @@ test('windowedVolumeSignal: MEDIUM at 24h ≥ $5K or 7d ≥ $25K', () => {
   assert.match(m.reason, /moderate 24h volume \(\$6,000\)/);
 });
 
+test('windowedVolumeSignal: MEDIUM via 7d-only names "7d" in the reason, not a $0-24h "24h"', () => {
+  // 24h is present but BELOW the medium floor (didn't qualify); 7d alone crosses it. The reason
+  // must name the window that actually earned the tier — not just whichever field is present.
+  const via7 = winSig({ volume_24hr: 0, volume_1wk: 30_000 });
+  assert.equal(via7.tier, 'medium');
+  assert.match(via7.reason, /moderate 7d volume \(\$30,000\)/);
+  assert.doesNotMatch(via7.reason, /24h/);
+});
+
+test('windowedVolumeSignal: MEDIUM via BOTH windows still prefers 24h (unchanged default)', () => {
+  const both = winSig({ volume_24hr: 5_500, volume_1wk: 30_000 });
+  assert.equal(both.tier, 'medium');
+  assert.match(both.reason, /moderate 24h volume \(\$5,500\)/);
+});
+
 test('windowedVolumeSignal: LOW catches the dormant-but-historically-traded market', () => {
   // US recession: $478/24h, $16K/7d — thin recently despite a $1.6M all-time total.
   const l = winSig({ volume_24hr: 478, volume_1wk: 16_071 });
