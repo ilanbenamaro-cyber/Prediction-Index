@@ -28,9 +28,10 @@ export interface HistoryUI { velocity: VelocityResult; dispersion: DispersionRes
  *  "Collecting" state below the minimum. */
 function VelocityCard({ v, unit }: { v: VelocityResult; unit: string }) {
   const isProb = v.kind === 'binary' || v.kind === 'categorical';
+  const pfx = unit === '%' ? '' : '$'; // percent-DENOMINATED value ladders carry no '$'
   const fmtMag = (m: number) => isProb
     ? `${m >= 0 ? '+' : '−'}${Math.abs(m * 100).toFixed(1)}pp`
-    : `${m >= 0 ? '+' : '−'}$${Math.abs(m).toFixed(2)}${unit}`;
+    : `${m >= 0 ? '+' : '−'}${pfx}${Math.abs(m).toFixed(2)}${unit}`;
   let value = '—';
   let sub = '';
   if (v.status === 'collecting') {
@@ -40,7 +41,7 @@ function VelocityCard({ v, unit }: { v: VelocityResult; unit: string }) {
     // Increment 4: a recent jump — report convergence/volatility, not a misleading "rising fast".
     const j = v.jump;
     const mag = v.jump.jumpMagnitude; // narrowed to number on this access path by the guard above
-    const sigma = isProb ? `${((j.postJumpStdDev ?? 0) * 100).toFixed(1)}pp` : `$${(j.postJumpStdDev ?? 0).toFixed(2)}${unit}`;
+    const sigma = isProb ? `${((j.postJumpStdDev ?? 0) * 100).toFixed(1)}pp` : `${pfx}${(j.postJumpStdDev ?? 0).toFixed(2)}${unit}`;
     value = j.stable ? 'converged' : 'volatile';
     sub = j.stable
       ? `jumped ${fmtMag(mag)} on ${j.jumpDate} · stable since (σ=${sigma})`
@@ -50,7 +51,7 @@ function VelocityCard({ v, unit }: { v: VelocityResult; unit: string }) {
     const ch = v.change ?? 0;
     sub = isProb
       ? `${ch >= 0 ? '+' : ''}${(ch * 100).toFixed(1)}pp over ${v.period ?? '7d'}`
-      : `${ch >= 0 ? '+' : ''}${ch.toFixed(2)} $${unit} over ${v.period ?? '7d'}`;
+      : `${ch >= 0 ? '+' : ''}${ch.toFixed(2)} ${pfx}${unit} over ${v.period ?? '7d'}`;
   }
   return (
     <div className="acard" data-field="velocity-card">
@@ -71,7 +72,8 @@ function DispersionCard({ d, unit }: { d: DispersionResult; unit: string }) {
   else if (d.status === 'ok') {
     value = d.direction ?? '—';
     const p = (d.change_pct ?? 0) * 100;
-    sub = `IQR ${p >= 0 ? '+' : ''}${p.toFixed(0)}% · width ${d.current_width != null ? `$${d.current_width.toFixed(2)}${unit}` : '—'} (30d)`;
+    const pfx = unit === '%' ? '' : '$'; // percent-DENOMINATED ladders carry no '$'
+    sub = `IQR ${p >= 0 ? '+' : ''}${p.toFixed(0)}% · width ${d.current_width != null ? `${pfx}${d.current_width.toFixed(2)}${unit}` : '—'} (30d)`;
   }
   return (
     <div className="acard" data-field="dispersion-card">

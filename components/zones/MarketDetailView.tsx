@@ -436,6 +436,7 @@ function ResolvedMetricsSection({ outcome, medianLabel, resolvedAt, unit }:
  *  the movers list is empty → an explicit collecting state (never a blank section). */
 function BiggestMoversSection({ movers, unit }: { movers: BiggestMoves; unit: string }) {
   const list: Mover[] = Array.isArray(movers?.movers) ? movers.movers : [];
+  const uPfx = unit === '%' ? '' : '$'; // percentage-denominated buckets carry no '$' prefix
   return (
     <section className="detail-section" data-field="biggest-movers">
       <h2 className="detail-h2">Biggest movers <span className="faint">· {movers?.period ?? '30d'} · P(&gt;X)</span></h2>
@@ -448,7 +449,7 @@ function BiggestMoversSection({ movers, unit }: { movers: BiggestMoves; unit: st
             const arrow = mv.direction === 'up' ? '▲' : mv.direction === 'down' ? '▼' : '◆';
             return (
               <div key={`${mv.threshold}-${i}`} className="acard mover-card">
-                <div className="label">&gt;${mv.threshold}{unit}</div>
+                <div className="label">&gt;{uPfx}{mv.threshold}{unit}</div>
                 {/* v1 ITEM 10: start → end → delta — where it was, where it is, how much it moved. */}
                 <div className={`acard-v ${cls}`} data-field="mover-change">{arrow} {pct(mv.start)} → {pct(mv.end)}</div>
                 <div className="acard-s faint">{fmtDeltaPp(mv.change)} pp · {movers?.period ?? '30d'}</div>

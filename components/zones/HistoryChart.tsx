@@ -42,11 +42,14 @@ const ms = (date: string) => Date.parse(`${date}T00:00:00Z`);
 /** Probability-axis kinds use a 0–100% scale; value kinds use a padded data range. */
 const isPctKind = (kind: string) => kind === 'binary' || kind === 'categorical';
 
-/** Axis-label formatter by kind: probability kinds → %, otherwise value + unit. */
+/** Axis-label formatter by kind: probability kinds → %, otherwise value + unit.
+ *  A percent-DENOMINATED value ladder (UK GDP, unit '%') carries no '$' prefix. */
 function fmtVal(v: number, kind: string, unit: string): string {
   if (isPctKind(kind)) return `${Math.round(v * 100)}%`;
-  return `$${v.toFixed(2)}${unit}`;
+  return `${unit === '%' ? '' : '$'}${v.toFixed(2)}${unit}`;
 }
+/** The ladder unit's money prefix ('' for percent-denominated, '$' otherwise). */
+const unitPfx = (unit: string) => (unit === '%' ? '' : '$');
 
 export function HistoryChart({ points, kind, unit = '', label = 'Value', series = null, backfilling = false }:
   { points: HistoryPoint[]; kind: string; unit?: string; label?: string; series?: ChartSeries | null; backfilling?: boolean }) {
@@ -234,14 +237,14 @@ function DualPlot({ probLines, valueLines, lowDays, unit }:
       const pt = l.points.find((p) => p.date === date);
       if (!pt) return;
       const color = swatchColor(PROB_CLASSES[i] ?? 'hist-line-p2');
-      rows.push({ label: `P(>$${l.threshold}${unit})`, swatch: color, value: `${(pt.value * 100).toFixed(1)}%` });
+      rows.push({ label: `P(>${unitPfx(unit)}${l.threshold}${unit})`, swatch: color, value: `${(pt.value * 100).toFixed(1)}%` });
       dots.push({ y: yP(pt.value), color });
     });
     valueLines.forEach((l) => {
       const pt = l.points.find((p) => p.date === date);
       if (!pt) return;
       const color = swatchColor(l.key === 'median' ? 'hist-line-median' : 'hist-line-mean');
-      rows.push({ label: l.label ?? l.key, swatch: color, value: `$${pt.value.toFixed(2)}${unit}` });
+      rows.push({ label: l.label ?? l.key, swatch: color, value: `${unitPfx(unit)}${pt.value.toFixed(2)}${unit}` });
       dots.push({ y: yV(pt.value), color });
     });
     return { x: xScale(ms(date)), payload: { title: date, rows }, dots };
@@ -260,7 +263,7 @@ function DualPlot({ probLines, valueLines, lowDays, unit }:
       ))}
       {/* right value axis ticks (no grid lines — they belong to the left axis) */}
       {valueLines.length > 0 && valTicks.map((v, i) => (
-        <text key={`v${i}`} className="hist-axis-r" x={VB_W - P.r + 5} y={yV(v) + 3} textAnchor="start">{`$${v.toFixed(2)}${unit}`}</text>
+        <text key={`v${i}`} className="hist-axis-r" x={VB_W - P.r + 5} y={yV(v) + 3} textAnchor="start">{`${unitPfx(unit)}${v.toFixed(2)}${unit}`}</text>
       ))}
       {/* probability lines (left axis) */}
       {probLines.map((l, i) => segments(l, yP, PROB_CLASSES[i] ?? 'hist-line-p2'))}
@@ -292,7 +295,7 @@ function DualLegend({ probLines, valueLines, unit }: { probLines: ChartLine[]; v
         {probLines.map((l, i) => (
           <span key={l.key} className="hist-leg">
             <span className="hist-swatch" style={swatch(PROB_CLASSES[i] ?? 'hist-line-p2')} />
-            {`P(>$${l.threshold}${unit})`}
+            {`P(>${unit === '%' ? '' : '$'}${l.threshold}${unit})`}
           </span>
         ))}
         {valueLines.map((l) => (
