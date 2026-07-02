@@ -1058,13 +1058,29 @@ core record. **Public Polymarket data only** — no grey-market/secondary data (
 - [x] **Full-history invariant sweep test** (181 days through production validators) + CSV constraint.
 
 ## Immediate open tasks
-- [ ] **Document the 0.5% confidence threshold** (`MATERIAL_ADJUSTMENT` in `core/confidence.js`) in
-  `core/methodology.json` — an isotonic tweak below 0.5% is treated as immaterial and keeps tier high;
-  that rule should be written down in the methodology, not just the code.
+- [x] **Document the 0.5% confidence threshold** (`MATERIAL_ADJUSTMENT` in `core/confidence.js`) in
+  `core/methodology.json` — [DONE — session 2026-07-02, methodology 1.7.1, which also documented the
+  $2K 24h floor, the CORRECTED book_depth dominant-leg selection, and the placeholder-leg filter].
 - [ ] **P2 backlog from the audit** (documented, deliberately deferred): scenarios.js pct Math.round
   asymmetric on negatives vs roundT (changing alters published Tier-2 values — needs its own
   methodology note); inline money() can render $-0.00T (unreachable today); quantileValuation
   CDF-touches-0.50-at-last-node returns null (definitional).
+- [ ] **OPERATOR: re-seed the stored SpaceX final on dev (+ prod at standup)** — `node
+  scripts/seed-spacex.mjs`. The dev row is the PRE-SPLIT (schema-1.3.0 single-tier) record, so any
+  freeze-path revalidation 422s ("Record invalid") — this is verify-phase2a C4's remaining red.
+  General rule (new [[gotchas]] entry): a breaking `derived` reshape must re-seed stored FINAL records.
+- [ ] **OPERATOR DECISION: `latest.json` says `schema_version: "1.3.0"` but carries the 2.0.0 split
+  confidence shape** (only the confidence sub-block was regenerated at Increment A). Bumping the label
+  edits the frozen artifact → operator's call (found 2026-07-02).
+- [ ] **HARD-STOP candidates from the 2026-07-02 audit, awaiting operator "proceed"** (all core/):
+  (a) `windowedVolumeSignal` can emit "moderate 24h volume ($0)" when the 7d leg qualified — name the
+  qualifying window; (b) `buildPmfLadder`'s `lo <= 0` bottom-bucket heuristic biases the PMF mean for
+  NON-UNIFORM percent ladders straddling 0 (no live market affected); (c) the STORED touch narrative
+  still says "implied 50% trading range" (display uses barrier language since INC 7).
+- [ ] **METHODOLOGY.md is pinned at 1.2.1** — broadly behind methodology.json (1.7.1); only the
+  MATERIAL_ADJUSTMENT note was added 2026-07-02. A full realignment pass is pending.
+- [ ] Carried: the INC-1 red-team calibration call is CLOSED (the $2K floor shipped + is now
+  documented); PROD-STANDUP still needs migrations 0001–0011 + CRON_SECRET + the 18:00 cron.
 
 ## Pointers
 - Why things are the way they are → `.workflows/_knowledge/decisions.md`

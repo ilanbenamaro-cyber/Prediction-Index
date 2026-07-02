@@ -5,6 +5,35 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## A breaking `derived` reshape also invalidates STORED FINAL records — the freeze path revalidates them
+**Symptom (verify-phase2a C4, found 2026-07-02):** the C4 cache-poison check (claim SpaceX OPEN →
+the serve must probe, catch resolution, and re-freeze) returned `lifecycle_state: undefined` — the
+serve 422'd "Record invalid". **Reality:** `freezePriorRecord` (lib/compute.mjs) re-validates the
+PRIOR record against the CURRENT schema before re-freezing, and the dev-seeded SpaceX row still
+carries the PRE-SPLIT schema-1.3.0 single-tier confidence — the Increment-A artifact migration
+covered the COMMITTED files (latest.json regenerated, history-full.json split in place; see the
+existing entry below) but nobody re-seeded the DB. Any market whose stored record predates a
+breaking reshape will 422 exactly at its freeze transition (resolution day — when the record
+matters most). A characterization test locks the failure mode (test/coverage-gaps.test.js).
+**Lesson:** a breaking `derived` reshape has THREE artifact surfaces, not two: code + fixtures,
+committed `docs/api/v1/` files, **and stored DB records — above all the cache-final RESOLVED rows,
+which no cron ever recomputes**. Re-seed them (dev + prod) as part of the reshape. Fix here:
+operator re-runs `scripts/seed-spacex.mjs` (the seed source, latest.json, already has the new shape).
+
+## A propagation pass must sweep EVERY display surface AND the backfill mirror — grep the pattern, don't trust the feature list
+**Symptom (found 2026-07-02):** the percent-bucket pass (UK GDP) updated `fmtMoney/fmtRange/
+impliedMedianLabel/DistributionSVG` but SIX more surfaces still hardcoded `'$'` adjacent to the
+ladder unit (modeBucket, detailNarrative deltas, settlementZoneLabel, the Biggest Movers rung
+label, HistoryChart's dual-tooltip/right-axis/legend/single-axis, TrendHistory's velocity/
+dispersion magnitudes) → "$1–2%"-style mixed units; AND the backfill mirror (`fetchBackfillMeta`/
+`bucketRecord`) never got the percent update at all — hardcoded `unit_prefix '$'`, a `v > 0`
+boundary filter that drops 0/negative rungs, and an open-bottom leg's `lo = -Infinity` landing in
+hashed raw_inputs (`JSON.stringify(-Infinity)` → `null` → a broken canonical).
+**Lesson:** when a unit/shape rule changes, `grep -rn '\\$\\$\\{' `-style for the OLD pattern across
+components/ + lib/ AND check the parallel backfill assemblers (lib/backfill*.mjs mirror the live
+fetchers by construction — every live-path rule change must be mirrored or the reconstruction
+diverges). The `-Infinity` case is the worst kind: it hashes and stores without erroring.
+
 ## Redefining a base TABLE via migration does NOT propagate to a dependent VIEW — `*` is frozen at create time
 **Symptom (bit prod, 2026-07-01):** migration 0010 added `reliability_tier/score` + `liquidity_tier/score`
 to `market_snapshots`, and its comment asserted "market_latest is `select distinct on (market_id) *`, so
