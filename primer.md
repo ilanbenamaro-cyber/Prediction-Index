@@ -8,6 +8,46 @@
 > There is **no `.workflows/_system/` dir, no `codebase.md`/`MEMORY.md`** — the global `/sync`
 > skill tolerates their absence (updated 2026-06-18); don't be alarmed when it skips them.
 
+## ⮕ DIRECTION (2026-07-02): SEARCH/FRESHNESS/WATCHLIST UX + TOUCH-CHART OVERHAUL — MERGED + PUSHED
+- **MERGED to main** (`--no-ff` `6a55a95`; branch `feature/ux-pass-search-freshness-barrier`, 12 commits;
+  **pushed, in sync**). A 4-item UX pass, all display/action-layer → **no `core/` or hash change; parity
+  4/4 byte-identical; 351/351; tsc + build clean.** Operator-verified via screenshots throughout.
+- **FRESHNESS (Issue 2):** `lib/compute.mjs` stopped passing `CACHE_TTL_HOURS` (15min) as the freshness
+  threshold — the rail read STALE ~15min after any cron/view (it reads cached `stale_after` without
+  recomputing). On-demand records now use `core/freshness.js`'s schedule-derived **17h**, validated
+  against the Vercel twice-daily cron (02:00+18:00 UTC, 16h max gap). `CACHE_TTL_HOURS` removed (dead).
+  The two-horizons gotcha (cache-recompute ≠ trust-staleness). No SCHEDULE change → SpaceX parity intact.
+- **SEARCH (Item 1):** `MarketSearch` selecting a result NAVIGATES to `?m=<slug>` (compute-then-serve on
+  the detail page) — no preview/action-bar, no auto-add. **Landing on a detail ≠ being watchlisted** (the
+  detail's `serveMarket` computes+caches but does NOT call addPersonal/addOrg). CommandBar/layout no longer
+  pass `orgs` to search.
+- **ADD CONTROL (Item 2):** new `components/zones/AddToWatchlist.tsx` in every detail header, adapting to org
+  count (0→one button / 1→two / 2+→picker+confirm); shows "✓ On …watchlist" when already added; inline
+  pending/error. `DetailData` fetches orgs + membership (listVisible) and passes a ready-made client element
+  down to all 5 views. **BUG FIXED:** the control is `key`ed on server membership so an EXTERNAL remove (from
+  the rail) re-runs DetailData and REMOUNTS it (useState(initial) is sticky otherwise) → the Add button
+  returns. React's "reset state via key".
+- **RAIL TOGGLE (Item 3):** `WatchlistRows` gains a Personal/Org toggle (0 orgs→none, 1→two buttons, 2+→org
+  `<select>`), a pure client-side filter over the existing `listVisible` union — `assembleScanRows` now
+  accumulates **`org_ids: string[]`** (every org a market is in, for correct multi-org filtering). Default
+  Personal; scope-aware remove (removes from the viewed scope); per-scope empty states; keyboard nav over
+  the filtered list. Layout passes `orgs` → WatchlistRail → WatchlistRows.
+- **TOUCH CHART (Item 4 + many follow-ups):** `TouchDetailView` barrier bar rebuilt in a padded **480×150**
+  viewBox (was a clipping 1000×80 strip). New pure helpers in `lib/touch-rangebar.mjs` (all unit-tested):
+  `niceTicks` (round 1/2/5×10ⁿ ticks), `buildAxisSamples` (uniform axis sampling for the crosshair),
+  `resolveBound` (DIRECTION-AWARE null handling), `rangeBarLayout` parameterized with `{x0,W,yAbove,yBelow,
+  domain}` (defaults = legacy). Fixes, each screenshot-verified: (a) real tick axis, no clipped labels;
+  (b) axis SCOPED to the implied range + 2 context levels + 12% margin (heavy-tail "will it hit $X" markets
+  no longer a sliver; dead tail stays in the table); (c) crosshair value reads LINEARLY off the SCOPED axis
+  — locked by an alignment test (cursor at a tick's pixel → that tick's value; the old level-anchor interp
+  reported the clamped end level in the margins); (d) crosshair marks CLIPPED to the plot rect; tooltip
+  follows the cursor (`tooltipAtCursor`); (e) **direction-aware null bound** — a LOW ">$max" floor (P(touch≤)
+  never hits 50%, e.g. Anthropic ">$0.80T") ANCHORS the band at the ladder top (was falsely extending to the
+  far-left edge, contradicting its own label) with a **dashed** unresolved marker + explicit caption;
+  RESOLVED bound markers are now SOLID (were dashed); "< $min" / ">$max" EXTEND cases fade to the edge
+  (not live → fixture-tested); one-sided range width shows "n/a — open-ended bound", never a dash.
+  See [[gotchas]] "A server SVG can carry an interactive client overlay" for the crosshair pattern.
+
 ## ⮕ DIRECTION (2026-07-01): BACKFILL OBSERVABILITY + CHART HOVER + market_latest VIEW FIX — MERGED + PUSHED
 - **MERGED to main** (`--no-ff` `30fc3c0`; branch `feature/backfill-observability-chart-hover`, 4 commits;
   **pushed, in sync**). Three-part display/ops pass. No `core/` or hash change → **parity 4/4 byte-identical;
