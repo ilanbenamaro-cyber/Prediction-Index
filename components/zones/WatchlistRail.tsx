@@ -14,18 +14,18 @@ import { listVisible } from '@/lib/watchlist.mjs';
 import { readScan } from '@/lib/market-scan.mjs';
 import { WatchlistRows, type ScanRow } from './WatchlistRows';
 
-export function WatchlistRail() {
+export function WatchlistRail({ orgs = [] }: { orgs?: Array<{ id: string; name: string }> }) {
   return (
     <aside className="rail" data-zone="rail">
       <div className="zone-head">Watchlist</div>
       <Suspense fallback={<RailSkeleton />}>
-        <RailData />
+        <RailData orgs={orgs} />
       </Suspense>
     </aside>
   );
 }
 
-async function RailData() {
+async function RailData({ orgs }: { orgs: Array<{ id: string; name: string }> }) {
   let rows: ScanRow[];
   try {
     const supabase = await createClient();
@@ -44,11 +44,11 @@ async function RailData() {
   if (rows.length === 0) {
     return (
       <div className="empty" data-zone="rail-empty">
-        No markets yet.<br />Search and add one (2c.4).
+        No markets yet.<br />Search a market, open it, and add it from its header.
       </div>
     );
   }
-  return <WatchlistRows rows={rows} />;
+  return <WatchlistRows rows={rows} orgs={orgs} />;
 }
 
 function RailSkeleton() {

@@ -10,6 +10,9 @@
 // Defensive: optional-chaining + per-section fallbacks so a thin record degrades, never throws.
 import { serveMarket } from '@/lib/serve-market.mjs';
 import { DEPS } from '@/lib/market-deps.mjs';
+import { createClient } from '@/lib/supabase/server';
+import { listVisible } from '@/lib/watchlist.mjs';
+import { AddToWatchlist, type Membership } from './AddToWatchlist';
 import { canonicalizeRawInputs } from '@/core/fetch.js';
 import { readHistory, headlineValue, deriveVelocity, deriveDispersion, deriveDeltas, deriveBiggestMoves, deriveChartSeries, headlineChange, latestSnapshotWindow, deriveReliabilityTrend, readBackfillStatus } from '@/lib/market-history.mjs';
 import { unitFromLadder, fmtMoney, fmtRange, fmtEastern, impliedMedianLabel, displayTitle, fmtDeltaPp, deltaSign, meanRobustnessLabel, modeBucket, detailNarrative, daysToExpiryLabel, synthesizeSignals } from '@/lib/format-detail.mjs';
@@ -119,24 +122,53 @@ export async function DetailData({ id }: { id: string }) {
       ? (hist.dispersion.direction === 'converging' ? 'narrowing' : hist.dispersion.direction === 'diverging' ? 'widening' : 'steady')
       : null,
   };
-  return <MarketDetailView record={body.record} envelope={body} hist={hist} deltas={deltas} movers={movers} narrativeBits={narrativeBits} />;
+  // Item 2: the header "Add to Watchlist" control. Fetch the user's orgs + this market's current
+  // membership (personal / which orgs) via the cookie-bound user client (RLS-scoped), and build the
+  // control here so it threads as one ready-made client element into every detail view's header. A
+  // read failure degrades to no control rather than breaking the authoritative serve.
+  let addControl: React.ReactNode = null;
+  try {
+    const supabase = await createClient();
+    const [orgsRes, visible] = await Promise.all([
+      supabase.from('organizations').select('id, name'),
+      listVisible(supabase),
+    ]);
+    const orgs = (orgsRes.data ?? []).map((o) => ({ id: o.id as string, name: (o.name as string) ?? 'Org' }));
+    const rows = (visible ?? []) as Array<{ market_id: string; scope: string; org_id: string | null }>;
+    const mine = rows.filter((v) => v.market_id === id);
+    const membership: Membership = {
+      personal: mine.some((v) => v.scope === 'personal'),
+      orgIds: [...new Set(mine.filter((v) => v.scope === 'org' && v.org_id).map((v) => v.org_id as string))],
+    };
+    // KEY the control on the current server-side membership. AddToWatchlist holds optimistic local
+    // state (the ✓/Add flip), and useState(initial.*) does NOT re-read `initial` on a re-render — so
+    // when membership changes EXTERNALLY (e.g. a remove from the rail revalidates the layout and
+    // re-runs this fetch with personal=false), a stable component would keep its stale ✓. Changing
+    // the key on a membership change forces a remount → useState re-initializes from fresh `initial`
+    // → the Add button reappears. (React's "reset state when a prop changes" via key.)
+    const membershipKey = `${id}|${membership.personal ? 'p' : '-'}|${[...membership.orgIds].sort().join(',')}`;
+    addControl = <AddToWatchlist key={membershipKey} slug={id} orgs={orgs} initial={membership} />;
+  } catch (e) {
+    console.error('[detail] add-to-watchlist membership read failed:', e);
+  }
+  return <MarketDetailView record={body.record} envelope={body} hist={hist} deltas={deltas} movers={movers} narrativeBits={narrativeBits} addControl={addControl} />;
 }
 
 interface NarrativeBits { change7: number | null; change30: number | null; bandDirection: 'narrowing' | 'widening' | 'steady' | null; }
 
-function MarketDetailView({ record, envelope, hist, deltas, movers, narrativeBits }:
-  { record: MarketRecord; envelope: ServeBody; hist: HistoryUI; deltas: ThresholdDelta[]; movers: BiggestMoves; narrativeBits: NarrativeBits }) {
+function MarketDetailView({ record, envelope, hist, deltas, movers, narrativeBits, addControl }:
+  { record: MarketRecord; envelope: ServeBody; hist: HistoryUI; deltas: ThresholdDelta[]; movers: BiggestMoves; narrativeBits: NarrativeBits; addControl?: React.ReactNode }) {
   // Binary (Yes/No) markets get a distinct, simpler layout — no CDF/ladder/analytics.
   if (record?.snapshot?.derived?.kind === 'binary') {
-    return <BinaryDetailView record={record} envelope={envelope} hist={hist} />;
+    return <BinaryDetailView record={record} envelope={envelope} hist={hist} addControl={addControl} />;
   }
   // Directional-touch (WTI/Silver "hit $X") markets: implied range + touch table, no CDF.
   if (record?.snapshot?.derived?.kind === 'directional_touch') {
-    return <TouchDetailView record={record} envelope={envelope} hist={hist} />;
+    return <TouchDetailView record={record} envelope={envelope} hist={hist} addControl={addControl} />;
   }
   // Categorical (named outcomes, e.g. Fed rate cuts): outcome distribution, no CDF.
   if (record?.snapshot?.derived?.kind === 'categorical') {
-    return <CategoricalDetailView record={record} envelope={envelope} hist={hist} />;
+    return <CategoricalDetailView record={record} envelope={envelope} hist={hist} addControl={addControl} />;
   }
   const s = record?.snapshot ?? {};
   const d = s?.derived ?? {};
@@ -171,6 +203,7 @@ function MarketDetailView({ record, envelope, hist, deltas, movers, narrativeBit
           </div>
         </div>
         <div className="detail-head-actions">
+          {addControl}
           {envelope?.market_id && <RefreshButton slug={envelope.market_id} />}
           {near ? (
             <span className="detail-lifecycle state-pending" data-field="lifecycle" data-near-settlement="true">

@@ -22,6 +22,7 @@ export interface ScanRow {
   scopes: Array<'personal' | 'org'>;
   personal: boolean;
   org_id: string | null;
+  org_ids: string[]; // every org this market is shared in (drives the Personal/Org toggle filter)
   median_display: string; // probability % for binary, $median for ladder (kind-formatted server-side)
   // Two-dimension confidence (0010): reliability (trustworthy number) + liquidity (can transact).
   // Null for a pre-split row → that dot renders neutral ("—").
@@ -78,10 +79,19 @@ function Freshness({ staleAfter, fetchedAt, isFinal }: { staleAfter: string | nu
   );
 }
 
-export function WatchlistRows({ rows }: { rows: ScanRow[] }) {
+type View = { mode: 'personal' } | { mode: 'org'; orgId: string };
+
+export function WatchlistRows({ rows, orgs = [] }: { rows: ScanRow[]; orgs?: Array<{ id: string; name: string }> }) {
   const router = useRouter();
   const selected = useSearchParams().get('m');
   const [removing, startRemove] = useTransition();
+
+  // Item 3: Personal/Org toggle. Pure client-side filter over the union rows we already have
+  // (each row carries `personal` + `org_ids`). Default is Personal; the toggle is hidden when the
+  // user has no orgs (the list is then just their personal watchlist, unchanged).
+  const [view, setView] = useState<View>({ mode: 'personal' });
+  const activeOrg = view.mode === 'org' ? view.orgId : null;
+  const filtered = rows.filter((r) => (view.mode === 'personal' ? r.personal : r.org_ids.includes(view.orgId)));
 
   // Keyboard navigation (Enh 8): a focus CURSOR distinct from the URL selection — J/K move
   // it, Enter opens it. A ref backs the window listeners (no stale closures); state drives
@@ -89,12 +99,17 @@ export function WatchlistRows({ rows }: { rows: ScanRow[] }) {
   const [focus, setFocus] = useState(-1);
   const focusRef = useRef(-1);
   const setF = (n: number) => { focusRef.current = n; setFocus(n); };
+  // Keyboard nav operates over the CURRENTLY-VISIBLE (filtered) rows. A ref holds the latest
+  // filtered list so the window listeners stay stable (no re-subscribe per render).
+  const filteredRef = useRef(filtered);
+  filteredRef.current = filtered;
+  const viewKey = view.mode === 'org' ? `org:${view.orgId}` : 'personal';
 
   useEffect(() => {
-    const i = rows.findIndex((r) => r.market_id === selected);
-    setF(i); // -1 when nothing is selected
+    const i = filteredRef.current.findIndex((r) => r.market_id === selected);
+    setF(i); // -1 when nothing is selected / not in the current scope
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, rows.length]);
+  }, [selected, viewKey, filtered.length]);
 
   useEffect(() => {
     function scrollTo(id: string) {
@@ -102,17 +117,19 @@ export function WatchlistRows({ rows }: { rows: ScanRow[] }) {
         ?.scrollIntoView({ block: 'nearest' });
     }
     function onNav(e: Event) {
-      if (rows.length === 0) return;
+      const list = filteredRef.current;
+      if (list.length === 0) return;
       const dir = ((e as CustomEvent).detail?.dir ?? 1) as number;
       const cur = focusRef.current;
-      const next = cur < 0 ? (dir > 0 ? 0 : rows.length - 1)
-        : Math.max(0, Math.min(rows.length - 1, cur + dir));
+      const next = cur < 0 ? (dir > 0 ? 0 : list.length - 1)
+        : Math.max(0, Math.min(list.length - 1, cur + dir));
       setF(next);
-      scrollTo(rows[next].market_id);
+      scrollTo(list[next].market_id);
     }
     function onOpen() {
+      const list = filteredRef.current;
       const i = focusRef.current;
-      if (i >= 0 && rows[i]) router.push(`/?m=${encodeURIComponent(rows[i].market_id)}`, { scroll: false });
+      if (i >= 0 && list[i]) router.push(`/?m=${encodeURIComponent(list[i].market_id)}`, { scroll: false });
     }
     function onEscape() { setF(-1); }
     window.addEventListener(KBD.nav, onNav);
@@ -123,18 +140,59 @@ export function WatchlistRows({ rows }: { rows: ScanRow[] }) {
       window.removeEventListener(KBD.open, onOpen);
       window.removeEventListener(KBD.escape, onEscape);
     };
-  }, [rows, router]);
+  }, [router]);
 
   function remove(r: ScanRow) {
-    // dual-scope/personal row → drop the personal entry (row stays via org); org-only → drop the org entry.
-    const orgId = r.scopes.includes('personal') ? null : r.org_id;
+    // Remove from the CURRENTLY-VIEWED scope: Personal view → the personal entry; an org view →
+    // that org's entry. (A market on both lists is removed only from the list you're looking at.)
+    const orgId = view.mode === 'personal' ? null : view.orgId;
     startRemove(async () => { await removeMarket(r.market_id, orgId); });
   }
 
-  const maxVol = Math.max(1, ...rows.map((r) => r.volume ?? 0)); // Enh 2: normalize the volume tint
+  const orgName = (id: string | null) => orgs.find((o) => o.id === id)?.name ?? 'Org';
+  const maxVol = Math.max(1, ...filtered.map((r) => r.volume ?? 0)); // Enh 2: normalize the volume tint
   return (
+    <>
+      {orgs.length > 0 && (
+        <div className="wl-toggle" role="group" aria-label="watchlist scope" data-field="rail-scope-toggle">
+          <button
+            type="button"
+            className={`wl-toggle-btn${view.mode === 'personal' ? ' is-active' : ''}`}
+            aria-pressed={view.mode === 'personal'}
+            onClick={() => setView({ mode: 'personal' })}
+            data-field="scope-personal"
+          >Personal</button>
+          {orgs.length === 1 ? (
+            <button
+              type="button"
+              className={`wl-toggle-btn${view.mode === 'org' ? ' is-active' : ''}`}
+              aria-pressed={view.mode === 'org'}
+              onClick={() => setView({ mode: 'org', orgId: orgs[0].id })}
+              data-field="scope-org"
+            >{orgs[0].name}</button>
+          ) : (
+            <select
+              className={`wl-toggle-select${view.mode === 'org' ? ' is-active' : ''}`}
+              value={activeOrg ?? ''}
+              onChange={(e) => setView({ mode: 'org', orgId: e.target.value })}
+              aria-label="select an org watchlist"
+              data-field="scope-org-select"
+            >
+              <option value="" disabled>Org ▾</option>
+              {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+          )}
+        </div>
+      )}
+      {filtered.length === 0 ? (
+        <div className="empty" data-zone="rail-empty-scope">
+          {view.mode === 'personal'
+            ? 'No markets in your personal watchlist.'
+            : `No markets in ${orgName(activeOrg)}'s watchlist.`}
+        </div>
+      ) : (
     <ul className="wl-list" data-zone="rail-list">
-      {rows.map((r, i) => {
+      {filtered.map((r, i) => {
         const isSel = r.market_id === selected;
         const isFocus = i === focus;
         const relClass = r.reliability_tier ? CONF_CLASS[r.reliability_tier] : 'conf-none';
@@ -197,5 +255,7 @@ export function WatchlistRows({ rows }: { rows: ScanRow[] }) {
         );
       })}
     </ul>
+      )}
+    </>
   );
 }

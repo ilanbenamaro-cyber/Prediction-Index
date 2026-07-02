@@ -44,6 +44,20 @@ test('dedups by market_id and MERGES both scopes into one row', () => {
   assert.equal(rows[0].personal, true);
   assert.deepEqual(rows[0].scopes.sort(), ['org', 'personal']);
   assert.equal(rows[0].org_id, 'orgA', 'captures the org_id for org-scoped remove');
+  assert.deepEqual(rows[0].org_ids, ['orgA'], 'org_ids carries the org for the per-org filter');
+});
+
+test('org_ids accumulates EVERY org a market is shared in (multi-org)', () => {
+  const visible = [
+    { scope: 'org', org_id: 'orgA', market_id: 'm1', created_at: '2026-06-20T00:00:00Z' },
+    { scope: 'org', org_id: 'orgB', market_id: 'm1', created_at: '2026-06-19T00:00:00Z' },
+  ];
+  const markets = [{ id: 'm1', title: 'In two orgs' }];
+  const latest = [{ market_id: 'm1', implied_median: 1.0, confidence_tier: 'medium', lifecycle_state: 'OPEN', is_final: false, stale_after: null, fetched_at: '2026-06-20T00:00:00Z', record: recWithDelta(null, 'flat') }];
+  const [row] = assembleScanRows(visible, markets, latest);
+  assert.equal(row.personal, false);
+  assert.deepEqual(row.org_ids.sort(), ['orgA', 'orgB'], 'both orgs present so the toggle shows it under each');
+  assert.equal(row.org_id, 'orgA', 'org_id keeps the first for back-compat remove');
 });
 
 test('orders personal-first, then most-recently-added', () => {

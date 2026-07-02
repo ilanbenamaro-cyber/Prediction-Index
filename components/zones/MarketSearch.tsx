@@ -1,13 +1,15 @@
 'use client';
-// components/zones/MarketSearch.tsx — Zone 3 search+add, the command-bar island.
-// Keyboard-first: ⌘/Ctrl-K focuses, ↑/↓ move, Enter adds, Esc dismisses, click-outside
-// closes. Debounced fetch to the /api/search proxy (no direct gamma call). Selecting a
-// result runs the addMarket server action (compute-then-add); on success the rail is
-// already revalidated, and we navigate to ?m=<slug> so the new market's detail opens.
+// components/zones/MarketSearch.tsx — Zone 3 search, the command-bar island.
+// Keyboard-first: ⌘/Ctrl-K focuses, ↑/↓ move, Enter opens the result, Esc dismisses,
+// click-outside closes. Debounced fetch to the /api/search proxy (no direct gamma call).
+//
+// Selecting a result NAVIGATES to ?m=<slug> (compute-then-serve on the detail page) — it does
+// NOT add the market to any watchlist. Landing on the detail page only computes + serves the
+// verified record (DetailData → serveMarket, which populates the catalog); adding is a separate,
+// explicit action on the detail page (see AddToWatchlist). Browsing never mutates the watchlist.
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { addMarket } from '@/app/(app)/actions';
 import { KBD } from './kbd';
 import { fmtVolHuman } from '@/lib/format-detail.mjs';
 import type { SearchResult, MarketType } from '@/app/api/search/route';
@@ -15,21 +17,18 @@ import type { SearchResult, MarketType } from '@/app/api/search/route';
 const DEBOUNCE_MS = 250;
 const MIN_Q = 2;
 
-// Enh 5: friendly type chips so the market shape is legible BEFORE the add attempt.
+// Enh 5: friendly type chips so the market shape is legible BEFORE opening it.
 const TYPE_LABEL: Record<MarketType, string> = {
   binary: 'YES/NO', survival: 'LADDER', bucket_pmf: 'PMF', directional_touch: 'RANGE', categorical: 'CATEGORICAL',
 };
 
-export function MarketSearch({ orgs }: { orgs: Array<{ id: string; name: string }> }) {
+export function MarketSearch() {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
-  const [scope, setScope] = useState<string | null>(null); // null = personal, else orgId
-  const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
 
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -85,28 +84,20 @@ export function MarketSearch({ orgs }: { orgs: Array<{ id: string; name: string 
     return () => { clearTimeout(t); ctrl.abort(); };
   }, [query]);
 
-  function select(r: SearchResult) {
-    if (pending) return; // prevent double-submit
-    setError(null);
-    startTransition(async () => {
-      const res = await addMarket(r.slug, scope);
-      if (res.ok && res.slug) {
-        setOpen(false); setQuery(''); setResults([]);
-        router.push(`/?m=${encodeURIComponent(res.slug)}`); // rail already revalidated; open the detail
-      } else {
-        setError(res.error ?? 'could not add market');
-      }
-    });
+  /** Open a result: navigate to its detail (compute-then-serve). Does NOT add to any watchlist. */
+  function open_(r: SearchResult) {
+    setOpen(false); setQuery(''); setResults([]);
+    router.push(`/?m=${encodeURIComponent(r.slug)}`);
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight((h) => Math.min(h + 1, results.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight((h) => Math.max(h - 1, 0)); }
-    else if (e.key === 'Enter') { e.preventDefault(); const r = results[highlight]; if (r) select(r); }
+    else if (e.key === 'Enter') { e.preventDefault(); const r = results[highlight]; if (r) open_(r); }
     else if (e.key === 'Escape') { setOpen(false); inputRef.current?.blur(); }
   }
 
-  const showOverlay = open && (loading || results.length > 0 || error != null || (query.trim().length >= MIN_Q));
+  const showOverlay = open && (loading || results.length > 0 || (query.trim().length >= MIN_Q));
 
   return (
     <div className="cmdbar-search-wrap" ref={containerRef}>
@@ -123,24 +114,12 @@ export function MarketSearch({ orgs }: { orgs: Array<{ id: string; name: string 
           data-field="search-input"
           aria-label="Search markets"
         />
-        {orgs.length > 0 && (
-          <select
-            className="scope-select mono"
-            value={scope ?? ''}
-            onChange={(e) => setScope(e.target.value || null)}
-            title="add to"
-            data-field="scope-select"
-          >
-            <option value="">Personal</option>
-            {orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
-        )}
       </div>
 
       {showOverlay && (
         <div className="search-overlay" role="listbox" data-field="search-overlay">
           {loading && <div className="search-state faint">searching…</div>}
-          {!loading && results.length === 0 && query.trim().length >= MIN_Q && !error && (
+          {!loading && results.length === 0 && query.trim().length >= MIN_Q && (
             <div className="search-state faint">no markets found</div>
           )}
           {results.map((r, i) => (
@@ -153,8 +132,7 @@ export function MarketSearch({ orgs }: { orgs: Array<{ id: string; name: string 
               data-field="search-row"
               data-slug={r.slug}
               onMouseEnter={() => setHighlight(i)}
-              onClick={() => select(r)}
-              disabled={pending}
+              onClick={() => open_(r)}
             >
               <span className={`wl-dot ${r.closed ? 'state-resolved' : 'state-open'}`} aria-hidden="true" />
               <span className="search-title">{r.title}</span>
@@ -167,8 +145,6 @@ export function MarketSearch({ orgs }: { orgs: Array<{ id: string; name: string 
               {r.volume != null && <span className="search-vol faint num">{fmtVolHuman(r.volume)}</span>}
             </button>
           ))}
-          {pending && <div className="search-state faint" data-field="search-adding">adding…</div>}
-          {error && <div className="search-error" data-field="search-error">{error}</div>}
         </div>
       )}
     </div>

@@ -149,10 +149,12 @@ export function buildSnapshotRecord(live, methodologyVersion, anomalies = null, 
     liquidity: live.liquidity ?? null, // Increment 1 windowed volume; absent on frozen replay → omitted
   });
   // Tier-1 freshness: pure function of this snapshot's own as-of timestamp + a
-  // threshold. The cron path passes nothing → the schedule-derived 17h (SpaceX
-  // byte-identical); the on-demand serverless path passes CACHE_TTL_HOURS so the
-  // record's stale_after is TTL-based (ARCHITECTURE §3.2). A non-OPEN market is
-  // FINAL, not stale — freshness records that so consumers don't show STALE.
+  // threshold. BOTH the cron path and the on-demand serverless path now pass nothing
+  // → the schedule-derived 17h default (SpaceX byte-identical). The on-demand path
+  // formerly passed the 15-min cache TTL here, which made the rail read STALE ~15min
+  // after any cron/view — the cache-recompute horizon is NOT the trust-staleness
+  // horizon (see core/freshness.js). A non-OPEN market is FINAL, not stale —
+  // freshness records that so consumers don't show STALE.
   derived.freshness = buildFreshness(live.fetched_at, null, freshnessThresholdHours, lifecycle);
   const asset = config
     ? { id: config.id, name: config.name, platform: config.platform, market_url: config.market_url, resolves: config.resolves }

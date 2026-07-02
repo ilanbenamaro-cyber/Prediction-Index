@@ -13,15 +13,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login'); // defense-in-depth; middleware already guards
 
-  // The user's orgs (RLS-scoped via org_select_member) drive the add-scope picker.
+  // The user's orgs (RLS-scoped) drive the rail's Personal/Org toggle (Item 3).
   const { data: orgRows } = await supabase.from('organizations').select('id, name');
   const orgs = (orgRows ?? []).map((o) => ({ id: o.id as string, name: (o.name as string) ?? 'Org' }));
 
   return (
     <div className="terminal">
       <KeyboardShortcuts />
-      <CommandBar userEmail={user.email ?? ''} orgs={orgs} />
-      <WatchlistRail />
+      <CommandBar userEmail={user.email ?? ''} />
+      <WatchlistRail orgs={orgs} />
       <main className="detail" data-zone="detail">{children}</main>
     </div>
   );

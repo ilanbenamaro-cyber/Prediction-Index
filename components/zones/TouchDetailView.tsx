@@ -8,7 +8,7 @@
 // (confidence, freshness, provenance + hash-verify) is identical to every other detail.
 import { canonicalizeRawInputs } from '@/core/fetch.js';
 import { fmtEastern, displayTitle, pointChange, touchNarrative, daysToExpiryLabel, barrierPathUncertainty } from '@/lib/format-detail.mjs';
-import { rangeBarLayout } from '@/lib/touch-rangebar.mjs';
+import { rangeBarLayout, niceTicks, buildAxisSamples, resolveBound } from '@/lib/touch-rangebar.mjs';
 import { ChartCrosshair, type InterpConfig, type InterpChannel } from './ChartCrosshair';
 import { interpSeriesAtLevel } from '@/lib/chart-hover.mjs';
 import { ConfidenceBadges, ConfidenceBasisGroup } from './ConfidenceBasis';
@@ -25,6 +25,17 @@ const LIFECYCLE_LABEL: Record<string, string> = { OPEN: 'OPEN', CLOSED_PENDING: 
 
 const fmtVol = (v: number | null | undefined) => (v == null ? '—' : `$${Math.round(v).toLocaleString('en-US')}`);
 
+// Item 4 redesign — a padded 480×150 viewBox (no clipping), a real tick axis reusing
+// DistributionSVG's dist-tick/dist-grid tokens, and the implied band + markers in the middle.
+const RB_VB_W = 480, RB_VB_H = 150;
+const RB_PAD = { t: 28, r: 16, b: 40, l: 16 };
+const RB_PLOT_L = RB_PAD.l, RB_PLOT_R = RB_VB_W - RB_PAD.r, RB_PLOT_W = RB_PLOT_R - RB_PLOT_L; // 16 … 464 (448 wide)
+const RB_BAND_TOP = 52, RB_BAND_H = 22, RB_TRACK_Y = RB_BAND_TOP + RB_BAND_H / 2; // band 52..74, track 63
+const RB_MARK_TOP = 44, RB_MARK_BOT = 82;
+const RB_LABEL_ABOVE_Y = 40, RB_LABEL_BELOW_Y = 96; // hi/lo bound-label baselines (wide vs narrow)
+const RB_AXIS_Y = 110, RB_TICK_H = 5, RB_TICK_LABEL_Y = 120; // tick axis + rotated labels
+const RB_BAND_GRAD = 'touch-band-grad'; // one range bar per detail page → a stable id is unique
+
 /** Horizontal range bar: the implied [low, high] band within the full strike span. A null
  *  bound (50% crossover outside the quoted ladder) extends the band to that edge. Hover along the
  *  axis interpolates P(touch ≥) / P(touch ≤) at that price level from the touch-probability table. */
@@ -32,46 +43,127 @@ function RangeBar({ low, high, lowLabel, highLabel, levels, unit, highPts, lowPt
   low: number | null; high: number | null; lowLabel: string; highLabel: string; levels: number[];
   unit: string; highPts: { level: number; prob: number }[]; lowPts: { level: number; prob: number }[];
 }) {
-  const layout = rangeBarLayout(low, high, levels);
-  if (!layout) return null;
-  const { min, max, W, bandL, bandR, narrow, lo, hi } = layout;
-  // Interpolate each touch side over the union of strike levels → a serializable interp config the
-  // shared crosshair reads. P(touch ≥) comes from the HIGH legs, P(touch ≤) from the LOW legs.
-  const span = (max - min) || 1;
-  const xOf = (lvl: number) => ((lvl - min) / span) * W;
   const unionLevels = [...new Set(levels)].sort((a, b) => a - b);
+  // DIRECTION-AWARE bound resolution: a null bound is not always "extend to the plot edge". A LOW
+  // "> $max" (50% floor is ABOVE the top low strike — Anthropic) ANCHORS the band's lower edge at
+  // the ladder top and must NOT extend below it; only a "< $min" (floor below the bottom) extends
+  // to the edge. Symmetric for HIGH. The band edge and its "> $X"/"< $X" label now always agree.
+  const loRes = resolveBound(low, lowPts, 'low');
+  const hiRes = resolveBound(high, highPts, 'high');
+  const extendLow = loRes.extend, extendHigh = hiRes.extend;
+  const unresolvedLow = loRes.unresolved, unresolvedHigh = hiRes.unresolved;
+
+  // Scope the axis to the IMPLIED RANGE plus a couple of context levels just beyond each bound, then
+  // a 12% margin. "Will it ever hit $X" touch markets have heavy tails — deep strikes keep a few %
+  // touch probability all the way out (Anthropic: P(touch≥$5T)=5.5%), so a probability threshold
+  // never crops them and the real signal ($0.8–1.7T) gets squeezed into a sliver. Anchoring on the
+  // range + context crops the far dead tail (still shown in the probability table below). The
+  // resolved bound VALUES (finite or anchored ladder boundary) drive the scope.
+  const CONTEXT = 2; // quoted levels to keep beyond each range bound, for context
+  const rHi = hiRes.value ?? (unionLevels[unionLevels.length - 1] ?? 1);
+  const rLo = loRes.value ?? (unionLevels[0] ?? 0);
+  const above = unionLevels.filter((l) => l > rHi).slice(0, CONTEXT);
+  const below = unionLevels.filter((l) => l < rLo).slice(-CONTEXT);
+  const focusVals = [rLo, rHi, ...above, ...below];
+  let dMin = Math.min(...focusVals), dMax = Math.max(...focusVals);
+  const margin = ((dMax - dMin) || Math.abs(dMax) || 1) * 0.12;
+  dMin = Math.max(0, dMin - margin); dMax = dMax + margin;
+
+  // Pass the RESOLVED edges: extend → null (fill to edge); finite/anchored → the value (band edge sits there).
+  const layout = rangeBarLayout(extendLow ? null : loRes.value, extendHigh ? null : hiRes.value, levels,
+    { x0: RB_PLOT_L, W: RB_PLOT_W, yAbove: RB_LABEL_ABOVE_Y, yBelow: RB_LABEL_BELOW_Y, domain: [dMin, dMax] });
+  if (!layout) return null;
+  const { min, max, bandL, bandR, narrow, lo, hi } = layout;
+  const span = (max - min) || 1;
+  const xOf = (lvl: number) => RB_PLOT_L + ((lvl - min) / span) * RB_PLOT_W;
+  // Crosshair interp: sample the SCOPED axis domain [min,max] UNIFORMLY (same scale as the ticks),
+  // so the tooltip's price reads linearly off the axis at every pixel — NOT off sparse level anchors
+  // (which reported the clamped lowest/highest level in the axis margins, e.g. "$0.60T" while the
+  // crosshair sat on the $0.50T tick). P(touch ≥/≤) is interpolated from the series at each sampled
+  // price. min/max here are the [dMin,dMax] the axis ticks use → crosshair and ticks can't disagree.
+  const { xs: sampleX, prices: samplePrice } = buildAxisSamples(min, max, RB_PLOT_L, RB_PLOT_W);
   const rows: InterpChannel[] = [];
-  if (highPts.length) rows.push({ label: 'P(touch ≥)', swatch: 'var(--accent-blue)', values: unionLevels.map((l) => interpSeriesAtLevel(highPts, l)), fmt: { scale: 100, digits: 0, suffix: '%' } });
-  if (lowPts.length) rows.push({ label: 'P(touch ≤)', swatch: 'var(--accent-amber)', values: unionLevels.map((l) => interpSeriesAtLevel(lowPts, l)), fmt: { scale: 100, digits: 0, suffix: '%' } });
+  if (highPts.length) rows.push({ label: 'P(touch ≥)', swatch: 'var(--accent-blue)', values: samplePrice.map((p) => interpSeriesAtLevel(highPts, p)), fmt: { scale: 100, digits: 0, suffix: '%' } });
+  if (lowPts.length) rows.push({ label: 'P(touch ≤)', swatch: 'var(--accent-amber)', values: samplePrice.map((p) => interpSeriesAtLevel(lowPts, p)), fmt: { scale: 100, digits: 0, suffix: '%' } });
   const interp: InterpConfig = {
-    anchorsVbX: unionLevels.map(xOf),
-    titleValues: unionLevels,
+    anchorsVbX: sampleX,
+    titleValues: samplePrice,
     titleFmt: { prefix: '$', suffix: unit, digits: 2 },
     rows,
   };
+  const ticks = niceTicks(min, max, 6);
+  // Edge treatments:
+  //  • FINITE bound → solid position + the normal dashed marker.
+  //  • UNRESOLVED bound (anchored at the ladder boundary, "> $max"/"< $min") → a faded dashed marker
+  //    at that edge + an explicit caption below (the true floor/cap is beyond the quoted strikes).
+  //  • EXTEND bound ("< $min" low / "> $max" high — the range genuinely runs off the ladder that
+  //    way) → the band fades toward the plot edge to signal "continues beyond". Not exercised by any
+  //    live market today (proven by a fixture test), so it stays a simple, honest fade.
+  const bandFades = extendLow || extendHigh;
+  const bandW = Math.max(2, bandR - bandL);
+  const FADE_FRAC = 0.14;
+  const loLabelX = extendLow ? Math.max(RB_PLOT_L, bandL) + FADE_FRAC * bandW : lo.x;
+  const hiLabelX = extendHigh ? Math.min(RB_PLOT_R, bandR) - FADE_FRAC * bandW : hi.x;
+  const captions: string[] = [];
+  if (unresolvedLow) captions.push(`Lower bound unresolved — the market doesn't quote low enough strikes to price a 50% floor; it sits ${lowLabel} (dashed edge).`);
+  if (unresolvedHigh) captions.push(`Upper bound unresolved — the market doesn't quote high enough strikes to price a 50% cap; it sits ${highLabel} (dashed edge).`);
   return (
-    <ChartCrosshair vbW={1000} vbH={80} plotLeft={0} plotRight={W} plotTop={8} plotBottom={64}
-      mode="interpolate" interp={interp} ariaLabel="Implied barrier range — hover for P(touch) at each price level">
-    <svg className="touch-rangebar" viewBox="0 0 1000 80" preserveAspectRatio="none" role="img" aria-label="implied trading range" data-field="range-bar" data-narrow={narrow ? 'true' : 'false'}>
+    <>
+    {/* crosshair spans the band+axis region (plotTop below the bound labels) so its tooltip
+        never collides with the hi/lo labels in the padded top zone. */}
+    <ChartCrosshair vbW={RB_VB_W} vbH={RB_VB_H} plotLeft={RB_PLOT_L} plotRight={RB_PLOT_R} plotTop={RB_BAND_TOP} plotBottom={RB_AXIS_Y}
+      mode="interpolate" interp={interp} tooltipAtCursor ariaLabel="Implied barrier range — hover for P(touch) at each price level">
+    <svg className="touch-rangebar" viewBox={`0 0 ${RB_VB_W} ${RB_VB_H}`} preserveAspectRatio="none" role="img" aria-label="implied trading range" data-field="range-bar" data-narrow={narrow ? 'true' : 'false'}>
+      {/* nice-tick axis: faint vertical gridlines + a baseline + rotated $ labels (dist-* tokens) */}
+      <g data-field="range-axis">
+        {ticks.map((t, i) => {
+          const x = xOf(t);
+          return (
+            <g key={i}>
+              <line className="dist-grid" x1={x} x2={x} y1={RB_PAD.t} y2={RB_AXIS_Y} />
+              <line className="dist-grid" x1={x} x2={x} y1={RB_AXIS_Y} y2={RB_AXIS_Y + RB_TICK_H} />
+              <text className="dist-tick" transform={`rotate(-45 ${x.toFixed(1)} ${RB_TICK_LABEL_Y})`} x={x.toFixed(1)} y={RB_TICK_LABEL_Y} textAnchor="end">{`$${t}${unit}`}</text>
+            </g>
+          );
+        })}
+        <line className="touch-axis" x1={RB_PLOT_L} x2={RB_PLOT_R} y1={RB_AXIS_Y} y2={RB_AXIS_Y} />
+      </g>
+      {/* fade the band toward a plot edge only when the range genuinely EXTENDS off the ladder there */}
+      {bandFades && (
+        <defs>
+          <linearGradient id={RB_BAND_GRAD} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="var(--accent-blue)" stopOpacity={extendLow ? 0 : 0.18} />
+            <stop offset={`${FADE_FRAC * 100}%`} stopColor="var(--accent-blue)" stopOpacity={0.18} />
+            <stop offset={`${(1 - FADE_FRAC) * 100}%`} stopColor="var(--accent-blue)" stopOpacity={0.18} />
+            <stop offset="100%" stopColor="var(--accent-blue)" stopOpacity={extendHigh ? 0 : 0.18} />
+          </linearGradient>
+        </defs>
+      )}
       {/* full strike track */}
-      <line x1={0} y1={40} x2={W} y2={40} className="touch-track" />
-      {/* implied band */}
-      <rect x={Math.max(0, bandL)} y={28} width={Math.max(2, bandR - bandL)} height={24} className="touch-band" />
-      {/* bound markers */}
-      {low != null && <line x1={bandL} y1={20} x2={bandL} y2={60} className="touch-mark" />}
-      {high != null && <line x1={bandR} y1={20} x2={bandR} y2={60} className="touch-mark" />}
+      <line x1={RB_PLOT_L} y1={RB_TRACK_Y} x2={RB_PLOT_R} y2={RB_TRACK_Y} className="touch-track" />
+      {/* implied band (gradient fill + no hard border only when it fades off an edge) */}
+      <rect x={Math.max(RB_PLOT_L, bandL)} y={RB_BAND_TOP} width={bandW} height={RB_BAND_H}
+        className={bandFades ? 'touch-band-open' : 'touch-band'} fill={bandFades ? `url(#${RB_BAND_GRAD})` : undefined} />
+      {/* bound markers: FINITE → solid dashed; UNRESOLVED (anchored beyond the strikes) → faded
+          dashed; EXTEND → none (the band fades to the edge instead). */}
+      {low != null && <line x1={bandL} y1={RB_MARK_TOP} x2={bandL} y2={RB_MARK_BOT} className="touch-mark" />}
+      {high != null && <line x1={bandR} y1={RB_MARK_TOP} x2={bandR} y2={RB_MARK_BOT} className="touch-mark" />}
+      {unresolvedLow && <line x1={bandL} y1={RB_MARK_TOP} x2={bandL} y2={RB_MARK_BOT} className="touch-mark-unresolved" data-field="range-lo-unresolved" />}
+      {unresolvedHigh && <line x1={bandR} y1={RB_MARK_TOP} x2={bandR} y2={RB_MARK_BOT} className="touch-mark-unresolved" data-field="range-hi-unresolved" />}
       {/* bound labels — above-left/above-right when the band is wide; stacked hi-above/lo-below
-          (centred on the band) when narrow, so they never overlap (Bug B). */}
-      <text x={lo.x} y={lo.y} className="touch-axislabel" textAnchor={lo.anchor as 'start' | 'end' | 'middle'} data-field="range-lo-label">{lowLabel}</text>
-      <text x={hi.x} y={hi.y} className="touch-axislabel" textAnchor={hi.anchor as 'start' | 'end' | 'middle'} data-field="range-hi-label">{highLabel}</text>
-      <text x={0} y={74} className="touch-axisend" textAnchor="start">{`$${min}`}</text>
-      <text x={W} y={74} className="touch-axisend" textAnchor="end">{`$${max}`}</text>
+          (centred on the band) when narrow (Bug B). An EXTEND bound's label is nudged in from the edge. */}
+      <text x={loLabelX} y={lo.y} className="touch-axislabel" textAnchor={lo.anchor as 'start' | 'end' | 'middle'} data-field="range-lo-label">{lowLabel}</text>
+      <text x={hiLabelX} y={hi.y} className="touch-axislabel" textAnchor={hi.anchor as 'start' | 'end' | 'middle'} data-field="range-hi-label">{highLabel}</text>
     </svg>
     </ChartCrosshair>
+    {captions.length > 0 && (
+      <p className="touch-range-note faint" data-field="range-unresolved-note">{captions.join(' ')}</p>
+    )}
+    </>
   );
 }
 
-export function TouchDetailView({ record, envelope, hist }: { record: MarketRecord; envelope: ServeBody; hist?: HistoryUI }) {
+export function TouchDetailView({ record, envelope, hist, addControl }: { record: MarketRecord; envelope: ServeBody; hist?: HistoryUI; addControl?: React.ReactNode }) {
   const s = record?.snapshot ?? {};
   const d = s?.derived ?? {};
   const asset = record?.asset ?? {};
@@ -122,6 +214,7 @@ export function TouchDetailView({ record, envelope, hist }: { record: MarketReco
           </div>
         </div>
         <div className="detail-head-actions">
+          {addControl}
           {envelope?.market_id && <RefreshButton slug={envelope.market_id} />}
           {near ? (
             <span className="detail-lifecycle state-pending" data-field="lifecycle" data-near-settlement="true">
@@ -196,8 +289,14 @@ export function TouchDetailView({ record, envelope, hist }: { record: MarketReco
           </div>
           <div className="acard" data-field="pcard-width">
             <div className="label">Range width <span className="faint">· path uncertainty</span></div>
-            <div className="acard-v">{width != null ? `$${width.toFixed(2)}${unit}` : '—'}</div>
-            <div className="acard-s faint" data-field="range-width-interp">{pathUncertainty ? `${pathUncertainty.label} — ${pathUncertainty.detail}` : 'upper − lower bound'}</div>
+            {/* A one-sided range (an open "> $X" / "< $X" bound) has no finite width — say so honestly
+                instead of a bare dash (the product's never-dashes principle). */}
+            <div className="acard-v">{width != null ? `$${width.toFixed(2)}${unit}` : 'n/a'}</div>
+            <div className="acard-s faint" data-field="range-width-interp">{
+              width != null
+                ? (pathUncertainty ? `${pathUncertainty.label} — ${pathUncertainty.detail}` : 'upper − lower bound')
+                : `open-ended ${lo == null ? 'lower' : 'upper'} bound — no finite width`
+            }</div>
           </div>
           <VolumeCard liquidity={d.liquidity} allTimeVolume={d.total_volume} />
         </div>

@@ -136,6 +136,22 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--border);
 }
 
+/* Item 3: rail Personal/Org scope toggle */
+.wl-toggle { display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--border); }
+.wl-toggle-btn { flex: 0 0 auto; background: transparent; border: 1px solid var(--border);
+  color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 600;
+  letter-spacing: var(--track-label); padding: 2px var(--sp-2); border-radius: var(--radius-sm); cursor: pointer;
+  transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); max-width: 14ch;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-toggle-btn:hover { color: var(--accent-blue); border-color: var(--border-strong); }
+.wl-toggle-btn.is-active { color: var(--accent-amber); border-color: var(--accent-amber); }
+.wl-toggle-select { flex: 0 1 auto; min-width: 0; max-width: 16ch; background: transparent;
+  border: 1px solid var(--border); color: var(--text-muted); font-family: var(--font-mono);
+  font-size: var(--fs-micro); font-weight: 600; padding: 2px var(--sp-1); border-radius: var(--radius-sm);
+  cursor: pointer; outline: none; }
+.wl-toggle-select.is-active { color: var(--accent-amber); border-color: var(--accent-amber); }
+
 /* empty-state used by every zone shell in 2c.1 */
 .empty {
   display: flex;
@@ -256,7 +272,26 @@ a:hover { text-decoration: underline; }
 .detail-sub { font-size: var(--fs-tiny); }
 .detail-lifecycle { flex: 0 0 auto; font-size: var(--fs-micro); letter-spacing: var(--track-label);
   font-weight: 600; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: var(--sp-1) var(--sp-2); }
-.detail-head-actions { display: flex; align-items: center; gap: var(--sp-2); flex: 0 0 auto; }
+.detail-head-actions { display: flex; align-items: center; gap: var(--sp-2); flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
+/* Item 2: detail-header "Add to Watchlist" control */
+.detail-add { display: inline-flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); }
+.detail-add-picker { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.detail-add-select { background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--text);
+  font-size: var(--fs-micro); padding: 2px var(--sp-1); border-radius: var(--radius-sm); outline: none; cursor: pointer; }
+.detail-add-btn { flex: 0 0 auto; background: var(--bg-card); border: 1px solid var(--border-strong);
+  color: var(--text); font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 600;
+  letter-spacing: var(--track-label); padding: var(--sp-1) var(--sp-2); border-radius: var(--radius-sm); cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), background var(--t-fast) var(--ease); }
+.detail-add-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+.detail-add-btn.is-primary { border-color: var(--accent-amber); color: var(--accent-amber); }
+.detail-add-btn.is-primary:hover { background: var(--accent-amber); color: var(--bg-base); }
+.detail-add-btn:disabled { opacity: 0.5; cursor: default; }
+.detail-add-btn:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 1px; }
+.detail-added { flex: 0 0 auto; font-size: var(--fs-micro); font-weight: 600; letter-spacing: var(--track-label);
+  color: var(--c-high); border: 1px solid var(--c-high); border-radius: var(--radius-sm); padding: var(--sp-1) var(--sp-2); }
+.detail-add-error { font-size: var(--fs-micro); color: var(--c-low); display: inline-flex; align-items: center; gap: 4px; }
+.detail-add-retry { background: none; border: none; color: var(--accent-blue); cursor: pointer; font: inherit;
+  text-decoration: underline; padding: 0; }
 .detail-refresh-wrap { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .detail-refresh { background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--accent-blue);
   border-radius: var(--radius-sm); padding: var(--sp-1) var(--sp-2); font-size: var(--fs-micro);
@@ -422,8 +457,6 @@ a:hover { text-decoration: underline; }
   background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px var(--sp-3); }
 .cmdbar-input { flex: 1; min-width: 0; background: transparent; border: none; color: var(--text); font-size: var(--fs-tiny); outline: none; }
 .cmdbar-input::placeholder { color: var(--text-faint); }
-.scope-select { flex: 0 0 auto; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm);
-  color: var(--text-muted); font-size: var(--fs-micro); padding: 2px var(--sp-1); outline: none; cursor: pointer; }
 
 .search-overlay { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
   background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
@@ -475,9 +508,19 @@ a:hover { text-decoration: underline; }
 .touch-rangebar { width: 100%; height: auto; margin-top: var(--sp-3); display: block; }
 .touch-track { stroke: var(--border-strong); stroke-width: 2; }
 .touch-band { fill: var(--accent-blue); fill-opacity: 0.18; stroke: var(--accent-blue); stroke-opacity: 0.5; stroke-width: 1; }
-.touch-mark { stroke: var(--accent-amber); stroke-width: 1.5; stroke-dasharray: 4 3; }
-.touch-axislabel { fill: var(--accent-amber); font-family: var(--font-mono); font-size: 26px; font-weight: 600; }
-.touch-axisend { fill: var(--text-faint); font-family: var(--font-mono); font-size: 22px; }
+/* Item 4: a band with an OPEN bound uses a gradient fill (faded toward the open edge) + no hard border */
+.touch-band-open { stroke: none; }
+/* RESOLVED bound marker: SOLID amber line at the boundary (e.g. the $1.70T upper bound). */
+.touch-mark { stroke: var(--accent-amber); stroke-width: 1.5; }
+/* UNRESOLVED bound marker: same amber, same position/weight, but DASHED — distinguishes an
+   anchored "beyond the quoted strikes" edge from a resolved one. Same treatment on both sides. */
+.touch-mark-unresolved { stroke: var(--accent-amber); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.touch-range-note { font-size: var(--fs-micro); color: var(--text-faint); margin-top: var(--sp-2); max-width: 72ch; line-height: var(--lh-prose); }
+/* Item 4: bound labels sized for the padded 480×150 viewBox (were 26px in an 80-tall box → clipped);
+   the axis baseline + ticks reuse the dist-tick/dist-grid tokens for visual parity with the CDF. */
+.touch-axislabel { fill: var(--accent-amber); font-family: var(--font-mono); font-size: 12px; font-weight: 600; }
+.touch-axis { stroke: var(--border-strong); stroke-width: 1; }
+.touch-axisend { fill: var(--text-faint); font-family: var(--font-mono); font-size: 22px; } /* still used by SettlementConsensus */
 .touch-hot { color: var(--accent-amber); font-weight: 700; }
 /* Bug B: settled-leg filtering — footer note + "show all" toggle, and the collapsed 0%-run row. */
 .touch-table-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);

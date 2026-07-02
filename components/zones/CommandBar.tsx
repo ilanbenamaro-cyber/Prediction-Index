@@ -1,18 +1,19 @@
-// components/zones/CommandBar.tsx — top command bar. Houses Zone 3 (search+add) as a
+// components/zones/CommandBar.tsx — top command bar. Houses Zone 3 (search) as a
 // terminal-style command input (keeps the detail zone maximally wide), plus brand +
-// the signed-in user / logout. 2c.4: the inert shell is replaced by the live
-// MarketSearch island (⌘K, compute-then-add); orgs are passed for the add-scope picker.
+// the signed-in user / logout. The MarketSearch island (⌘K) NAVIGATES to a result's
+// detail page (compute-then-serve); adding to a watchlist is a separate explicit action
+// on the detail page (AddToWatchlist), so no org/scope picker is needed here.
 import { LogoutButton } from '@/components/LogoutButton';
 import { MarketSearch } from '@/components/zones/MarketSearch';
 
-export function CommandBar({ userEmail, orgs }: { userEmail: string; orgs: Array<{ id: string; name: string }> }) {
+export function CommandBar({ userEmail }: { userEmail: string }) {
   return (
     <header className="cmdbar cmdbar-row">
       <div className="cmdbar-brand">
         <span className="num">PM</span> TERMINAL
       </div>
 
-      <MarketSearch orgs={orgs} />
+      <MarketSearch />
 
       <div className="cmdbar-user">
         <span className="mono faint" title={userEmail}>{userEmail}</span>
