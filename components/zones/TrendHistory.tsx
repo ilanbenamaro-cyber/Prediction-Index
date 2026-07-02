@@ -22,15 +22,20 @@ export interface DispersionResult { status: string; direction?: string; change_p
 // `backfillStatus` (backfill-observability pass): the market's history-backfill state
 // ('pending'|'done'|'failed'|null). null/'pending' on a still-thin market → the chart shows
 // "Backfilling history…" instead of the bare "Collecting" state; it clears once rows accrue.
-export interface HistoryUI { velocity: VelocityResult; dispersion: DispersionResult; points: HistoryPoint[]; kind: string; series?: ChartSeries | null; snapshotWindow?: 'us-hours' | 'off-peak' | null; synthesis?: string | null; backfillStatus?: string | null; }
+// `watched`: is the market on ANY of the viewer's lists? A never-watchlisted market (opened via
+// search-navigate) also reads status null, but NO backfill will ever run for it (only addMarket
+// triggers one; the cron retries watched ids only) — so a null status only means "backfilling"
+// when the market is actually watched. 'pending' always means an in-flight reconstruction.
+export interface HistoryUI { velocity: VelocityResult; dispersion: DispersionResult; points: HistoryPoint[]; kind: string; series?: ChartSeries | null; snapshotWindow?: 'us-hours' | 'off-peak' | null; synthesis?: string | null; backfillStatus?: string | null; watched?: boolean; }
 
 /** Velocity card: rate/direction of the headline value over the last 7 days, or an explicit
  *  "Collecting" state below the minimum. */
 function VelocityCard({ v, unit }: { v: VelocityResult; unit: string }) {
   const isProb = v.kind === 'binary' || v.kind === 'categorical';
+  const pfx = unit === '%' ? '' : '$'; // percent-DENOMINATED value ladders carry no '$'
   const fmtMag = (m: number) => isProb
     ? `${m >= 0 ? '+' : '−'}${Math.abs(m * 100).toFixed(1)}pp`
-    : `${m >= 0 ? '+' : '−'}$${Math.abs(m).toFixed(2)}${unit}`;
+    : `${m >= 0 ? '+' : '−'}${pfx}${Math.abs(m).toFixed(2)}${unit}`;
   let value = '—';
   let sub = '';
   if (v.status === 'collecting') {
@@ -40,7 +45,7 @@ function VelocityCard({ v, unit }: { v: VelocityResult; unit: string }) {
     // Increment 4: a recent jump — report convergence/volatility, not a misleading "rising fast".
     const j = v.jump;
     const mag = v.jump.jumpMagnitude; // narrowed to number on this access path by the guard above
-    const sigma = isProb ? `${((j.postJumpStdDev ?? 0) * 100).toFixed(1)}pp` : `$${(j.postJumpStdDev ?? 0).toFixed(2)}${unit}`;
+    const sigma = isProb ? `${((j.postJumpStdDev ?? 0) * 100).toFixed(1)}pp` : `${pfx}${(j.postJumpStdDev ?? 0).toFixed(2)}${unit}`;
     value = j.stable ? 'converged' : 'volatile';
     sub = j.stable
       ? `jumped ${fmtMag(mag)} on ${j.jumpDate} · stable since (σ=${sigma})`
@@ -50,7 +55,7 @@ function VelocityCard({ v, unit }: { v: VelocityResult; unit: string }) {
     const ch = v.change ?? 0;
     sub = isProb
       ? `${ch >= 0 ? '+' : ''}${(ch * 100).toFixed(1)}pp over ${v.period ?? '7d'}`
-      : `${ch >= 0 ? '+' : ''}${ch.toFixed(2)} $${unit} over ${v.period ?? '7d'}`;
+      : `${ch >= 0 ? '+' : ''}${ch.toFixed(2)} ${pfx}${unit} over ${v.period ?? '7d'}`;
   }
   return (
     <div className="acard" data-field="velocity-card">
@@ -71,7 +76,8 @@ function DispersionCard({ d, unit }: { d: DispersionResult; unit: string }) {
   else if (d.status === 'ok') {
     value = d.direction ?? '—';
     const p = (d.change_pct ?? 0) * 100;
-    sub = `IQR ${p >= 0 ? '+' : ''}${p.toFixed(0)}% · width ${d.current_width != null ? `$${d.current_width.toFixed(2)}${unit}` : '—'} (30d)`;
+    const pfx = unit === '%' ? '' : '$'; // percent-DENOMINATED ladders carry no '$'
+    sub = `IQR ${p >= 0 ? '+' : ''}${p.toFixed(0)}% · width ${d.current_width != null ? `${pfx}${d.current_width.toFixed(2)}${unit}` : '—'} (30d)`;
   }
   return (
     <div className="acard" data-field="dispersion-card">
@@ -86,7 +92,10 @@ function DispersionCard({ d, unit }: { d: DispersionResult; unit: string }) {
 export function TrendHistorySection({ hist, unit, label }: { hist: HistoryUI; unit: string; label: string }) {
   // A freshly-added market whose CLOB reconstruction hasn't completed (status null/'pending')
   // is actively backfilling, not merely waiting for daily snapshots — surface that distinction.
-  const backfilling = hist.backfillStatus == null || hist.backfillStatus === 'pending';
+  // A NULL status only implies a coming backfill when the market is WATCHED (add-time trigger or
+  // the cron retry); a search-navigated, never-added market would show a false "populates
+  // automatically" promise — it degrades to the plain Collecting state instead.
+  const backfilling = hist.backfillStatus === 'pending' || (hist.backfillStatus == null && hist.watched === true);
   return (
     <section className="detail-section" data-field="trend-history">
       <h2 className="detail-h2">Trend &amp; history <span className="tier1-tag">Tier 1 · market-derived</span></h2>

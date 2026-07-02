@@ -121,3 +121,24 @@ test('bucket_pmf: de-vig → derived survival ladder + PMF mean + market_shape',
 test('unsupported kind throws', () => {
   assert.throws(() => buildBackfillRecord({ meta: { kind: 'nope', config: minimalConfig('x', 'X', 'nope') }, prices: {}, date: '2026-03-01' }), /unsupported/i);
 });
+
+test('bucket_pmf PERCENT: finite thresholds in raw_inputs + %-labels without a "$" prefix', () => {
+  // Legs as bucketBackfillMeta now produces them: the open-bottom "below 0%" leg already carries
+  // its synthetic finite floor (-1). Every raw_inputs.threshold must be finite (hashable) and the
+  // derived rung labels must read ">0%" style — never ">$0%".
+  const config = defaultConfigForLadder([0, 1, 2], { id: 'gdp', event_slug: 'gdp', name: 'UK GDP', unit_prefix: '', unit_suffix: '%' });
+  const meta = { kind: 'bucket_pmf', config, unit: '%', legs: [
+    { token_id: 'p0', lo: -1, hi: 0 }, { token_id: 'p1', lo: 0, hi: 1 },
+    { token_id: 'p2', lo: 1, hi: 2 }, { token_id: 'p3', lo: 2, hi: Infinity },
+  ] };
+  const rec = buildBackfillRecord({ meta, prices: { p0: 0.1, p1: 0.5, p2: 0.3, p3: 0.1 }, date: '2026-03-01' });
+  const d = rec.snapshot.derived;
+  assert.ok(rec.snapshot.raw_inputs.every((r) => Number.isFinite(r.threshold)), 'every hashed threshold is finite');
+  assert.ok(d.markets.length >= 2);
+  for (const m of d.markets) {
+    assert.ok(!m.label.includes('$'), `percent label carries no $: ${m.label}`);
+    assert.ok(m.label.endsWith('%'), `percent label ends with %: ${m.label}`);
+  }
+  assert.ok(Number.isFinite(d.implied_mean));
+  assertBackfillProvenance(rec);
+});

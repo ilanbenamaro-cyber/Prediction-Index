@@ -104,3 +104,48 @@ test('backfillMarket: a fatal fetch error marks the market failed, never throws'
   assert.ok(res.error);
   assert.equal(statuses.at(-1), 'failed');
 });
+
+// ── bucketBackfillMeta (percent-bucket support — the synthetic floor + rung rule + unit prefix
+//    that mirror the LIVE path; the old inline shaping hashed a raw -Infinity threshold) ────────
+import { bucketBackfillMeta } from '../lib/backfill.mjs';
+
+test('bucketBackfillMeta: percent bucket — open-bottom leg gets the live path\'s synthetic finite floor', () => {
+  const m = {
+    title: 'UK GDP growth', end_date: '2026-12-31T00:00:00Z',
+    unitInfo: { divisor: 1, unit: '%' },
+    legs: [
+      { token_id: 'p0', lo: -Infinity, hi: 0 }, // "below 0%"
+      { token_id: 'p1', lo: 0, hi: 1 },
+      { token_id: 'p2', lo: 1, hi: 2 },
+      { token_id: 'p3', lo: 2, hi: Infinity },  // "2% or higher"
+    ],
+  };
+  const meta = bucketBackfillMeta(m, 'uk-gdp');
+  // synthetic floor = minFiniteLo (0) − medianWidth (1) = -1 — FINITE, hashable, mirrors core/fetch.js
+  assert.equal(meta.legs[0].lo, -1);
+  assert.ok(meta.legs.every((l) => Number.isFinite(l.lo)));
+  // percent config: no '$' prefix (the old inline version hardcoded '$')
+  assert.equal(meta.config.threshold.unit_prefix, '');
+  assert.equal(meta.config.threshold.unit_suffix, '%');
+  // rung rule keeps 0 (a "below 0%" leg sits underneath) — the old `v > 0` filter dropped it
+  assert.ok(meta.config.tracked_thresholds.length > 0);
+});
+
+test('bucketBackfillMeta: dollar bucket — boundaries + prefix byte-identical to the old shaping', () => {
+  const m = {
+    title: 'BTC weekly', end_date: null,
+    unitInfo: { divisor: 1e3, unit: 'K' },
+    legs: [
+      { token_id: 'b0', lo: 0, hi: 60_000 },      // "less than $60K" → dollar floor 0
+      { token_id: 'b1', lo: 60_000, hi: 62_000 },
+      { token_id: 'b2', lo: 62_000, hi: 64_000 },
+      { token_id: 'b3', lo: 64_000, hi: Infinity },
+    ],
+  };
+  const meta = bucketBackfillMeta(m, 'btc');
+  assert.deepEqual(meta.legs.map((l) => l.lo), [0, 60, 62, 64]);
+  assert.equal(meta.config.threshold.unit_prefix, '$');
+  // the rung rule drops the dollar 0 floor exactly like the old `v > 0` filter (nothing below it)
+  const ladderSize = meta.config.confidence.ladder_size;
+  assert.equal(ladderSize, 3); // rungs [60, 62, 64]
+});

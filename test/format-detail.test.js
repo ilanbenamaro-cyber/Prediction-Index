@@ -374,3 +374,32 @@ test('touchNarrative: explicit barrier-option framing with the expiry date (not 
   assert.match(s, /not a settlement forecast/);
   assert.doesNotMatch(s, /trading range/);
 });
+
+// ── percent-denominated display (UK GDP): no '$' prefix anywhere a % ladder reaches a label ──
+test('modeBucket: percent unit labels carry no "$" prefix', () => {
+  const markets = [
+    { threshold: 0, adjusted_prob: 0.9, prob: 0.9, bucket_prob: 0.3 },
+    { threshold: 1, adjusted_prob: 0.6, prob: 0.6, bucket_prob: 0.5 },
+    { threshold: 2, adjusted_prob: 0.1, prob: 0.1, bucket_prob: 0.1 },
+  ];
+  const mode = modeBucket(markets, '%');
+  assert.equal(mode.label, '1–2%'); // was "$1–2%"
+  const dollar = modeBucket(markets, 'T');
+  assert.equal(dollar.label, '$1–2T'); // dollar path unchanged
+});
+
+test('settlementZoneLabel: percent unit carries no "$" prefix', () => {
+  assert.equal(settlementZoneLabel({ lo: 0, hi: 1, kind: 'between' }, '%'), '0–1%');
+  assert.equal(settlementZoneLabel({ lo: -Infinity, hi: 0, kind: 'below' }, '%'), '< 0%');
+  assert.equal(settlementZoneLabel({ lo: 2, hi: Infinity, kind: 'above' }, '%'), '> 2%');
+  assert.equal(settlementZoneLabel({ lo: 2, hi: 2.2, kind: 'between' }, 'T'), '$2–2.2T'); // unchanged
+});
+
+test('detailNarrative: percent-unit deltas read "down 0.20%", never "down $0.20%"', () => {
+  const n = detailNarrative({ medianLabel: '1.04%', change30: -0.2, change7: 0.1, unit: '%' });
+  assert.ok(n.includes('down 0.20% over the past month'), n);
+  assert.ok(n.includes('up 0.10% this week'), n);
+  assert.ok(!n.includes('$'), `no $ in a percent narrative: ${n}`);
+  const d = detailNarrative({ medianLabel: '$2.10T', change30: -0.2, unit: 'T' });
+  assert.ok(d.includes('down $0.20T over the past month'), d); // dollar path unchanged
+});

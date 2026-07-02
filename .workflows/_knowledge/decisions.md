@@ -5,6 +5,24 @@ Newest at top. If you're about to change one of these, read the entry first.
 
 ---
 
+## Detail history reads use a LEAN server-side projection — efficiency ≠ data reduction
+**Decided (2026-07-02):** the detail Server Component's history read switched from `readHistory`
+(full `record` JSONB × up to 365 rows) to a new `readHistoryLean` that projects ONLY the two record
+sub-paths any surface consumes — `derived.markets` (Δ columns / movers / dual-chart lines) and
+`derived.iqr` (dispersion) — **in Postgres** (PostgREST `record->snapshot->derived->…` selection),
+reshaped by pure `leanHistoryRow` back into the row shape every derive fn already consumes (zero
+changes to the derive fns; equivalence locked by a full≡lean deep-equal test).
+**Measured (dev Supabase, p50 of 5):** SpaceX 180-day ladder **287ms / 1.6MB → 75ms / 323KB**;
+fed-rate-cut 189 rows **160ms / 791KB → 65ms / 91KB**. The dropped ~80% (raw_inputs, narrative,
+analytics, scenarios per historical record) was fetched and discarded — nothing read it.
+**The quant-fund framing (load-bearing):** efficiency here means *fetching only what is displayed*,
+NOT displaying less — every field any surface shows still flows to the client, which already
+received only lean series. **Constrains:** `readHistory` KEEPS its full-record contract —
+`scripts/verify-history.mjs` re-hashes `record.snapshot.raw_inputs` from its rows (the provenance
+gate), so its shape is load-bearing; display reads use `readHistoryLean`, provenance reads use
+`readHistory`. If a future derivation needs another record field, ADD it to the lean projection —
+never quietly widen back to `record`.
+
 ## Red-team of the confidence tuning constants — ledger + outcomes
 **Decided (2026-06-30):** A calibration red-team on every tuning constant introduced across the
 confidence-split epic — windowed volume ($50K/$5K, the $2K 24h floor), B's reliability (entropy 0.40,

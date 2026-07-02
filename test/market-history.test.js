@@ -373,3 +373,40 @@ test('deriveConfidenceTrend: rising / falling / steady / null from the confidenc
   assert.equal(deriveConfidenceTrend([row(0, 0.5)]), null); // <2 points
   assert.equal(deriveConfidenceTrend([]), null);
 });
+
+// ── lean read equivalence (perf, 2026-07-02): leanHistoryRow must reconstruct exactly the row
+//    shape every derive fn consumes, so full-read and lean-read derivations are IDENTICAL. ──────
+import { leanHistoryRow, deriveChartSeries as _dcs, deriveDeltas as _dd, deriveDispersion as _ddisp, deriveBiggestMoves as _dbm } from '../lib/market-history.mjs';
+
+test('leanHistoryRow: derive fns produce identical output on full-record vs lean-projected rows', () => {
+  const mk = (date, probs, median, iqr) => ({
+    snapshot_date: date, snapshot_hour: 0, kind: 'survival',
+    implied_median: median, implied_mean: median + 0.05,
+    confidence_tier: 'high', reliability_score: 0.9, liquidity_score: 0.8,
+    probability: null, touch_range_lo: null, touch_range_hi: null,
+    dominant_outcome: null, dominant_prob: null,
+    record: { snapshot: { derived: {
+      markets: probs.map(([t, p]) => ({ threshold: t, prob: p, label: `>$${t}T` })),
+      iqr,
+      raw_inputs: [{ noise: 'never read by derives' }], narrative: 'bulk the lean read drops',
+    } } },
+  });
+  const fullRows = [
+    mk('2026-06-01', [[1, 0.9], [2, 0.5], [3, 0.1]], 2.0, { p25: 1.5, p75: 2.5 }),
+    mk('2026-06-08', [[1, 0.92], [2, 0.55], [3, 0.12]], 2.1, { p25: 1.6, p75: 2.4 }),
+  ];
+  // The lean PROJECTION as PostgREST returns it: scalar cols + markets/iqr pulled to the top level.
+  const leanRaw = fullRows.map((r) => {
+    const { record, ...cols } = r;
+    return { ...cols, markets: record.snapshot.derived.markets, iqr: record.snapshot.derived.iqr };
+  });
+  const leanRows = leanRaw.map(leanHistoryRow);
+
+  assert.deepEqual(_dcs(leanRows), _dcs(fullRows));
+  assert.deepEqual(_dd(leanRows, [1, 2, 3]), _dd(fullRows, [1, 2, 3]));
+  assert.deepEqual(_ddisp(leanRows), _ddisp(fullRows));
+  assert.deepEqual(_dbm(leanRows, 30), _dbm(fullRows, 30));
+  // null markets (a categorical lean row) degrades to [] — never a throw
+  const cat = leanHistoryRow({ snapshot_date: '2026-06-01', kind: 'categorical', markets: null, iqr: null, dominant_prob: 0.6 });
+  assert.deepEqual(cat.record.snapshot.derived.markets, []);
+});

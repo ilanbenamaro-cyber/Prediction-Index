@@ -78,6 +78,13 @@ The **worst** of several signals (a single bad signal caps trust), each surfaced
 | Thin-liquidity breadth (share of books < $50K) | < 20% | 20–50% | > 50% |
 | Anomalies | none | stale / 1–2 closed / volume drop | > 2 closed |
 
+**Materiality threshold on monotonicity adjustments (`MATERIAL_ADJUSTMENT` = 0.5%):** an isotonic
+adjustment whose maximum magnitude is **below 0.5%** is treated as *immaterial* — the tier stays
+**high** with a "negligible monotonicity tweak(s)" reason, instead of dropping to medium. Rationale:
+a violation pooled to a sub-0.5% tweak is float-level quote noise, not a data-quality defect;
+penalizing it would make the tier oscillate on negligible price adjustments. Documented in
+`core/methodology.json` `metrics.confidence.material_adjustment` (methodology 1.7.1).
+
 **Anomalies**: `stale` (raw inputs identical to the prior snapshot), `closed` (markets closed / not
 accepting orders), `liquidity_drop` (total volume > 40% below the trailing-7-day median). Liquidity
 breadth is **not** assessed when volume is unknown (price-only history); those days are capped at

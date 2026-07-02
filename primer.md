@@ -8,6 +8,42 @@
 > There is **no `.workflows/_system/` dir, no `codebase.md`/`MEMORY.md`** — the global `/sync`
 > skill tolerates their absence (updated 2026-06-18); don't be alarmed when it skips them.
 
+## ⮕ DIRECTION (2026-07-02, later): PRE-DEMO POLISH PASS — 12 commits on `fix/predemo-polish-pass`, AWAITING OPERATOR MERGE
+- **Full-codebase audit (every file in core/lib/app/components/test) + fix pass + browser gate.** On
+  branch `fix/predemo-polish-pass` (NOT merged/pushed — operator reviews per convention). **370/370
+  (+19 over the 351 baseline); parity 4/4 byte-identical; tsc + build clean; Playwright: 0 console
+  errors on ALL 5 market types** (SpaceX survival, us-recession binary, fed-cuts categorical, UK-GDP
+  percent bucket, WTI touch), ghost flows 2/3 PASS, crosshairs PASS — screenshots reviewed.
+- **P1 fixed:** (a) percent-bucket BACKFILL was broken 3 ways (hardcoded `$` prefix; `v>0` boundary
+  filter dropping 0/negative rungs; open-bottom `lo=-Infinity` landing in hashed raw_inputs → JSON
+  null → broken canonical) — extracted pure `bucketBackfillMeta` mirroring the live path, dollar
+  ladders byte-identical; (b) verify-phase2a + verify-categorical still read the pre-split
+  `d.confidence.tier` → false fails, now assert both dimensions; (c) SIX display surfaces hardcoded
+  `$` next to the ladder unit (`$1–2%` style on UK GDP) — modeBucket/detailNarrative/
+  settlementZoneLabel/movers-label/HistoryChart-dual/TrendHistory-cards — all pfx-threaded +
+  live-verified ("1.03%", "1–2% range").
+- **P2 fixed:** rail remove surfaces failures; "Backfilling history…" gated on WATCHED (unwatched
+  search-navigated markets get plain Collecting); touch aria-label barrier wording; `app/(app)/
+  error.tsx` boundary; **perf: `readHistoryLean`** (detail history 287ms/1.6MB → 75ms/323KB p50,
+  same data — see [[decisions]] "lean server-side projection"; full `readHistory` KEPT for the
+  verify-history provenance re-hash).
+- **Tests:** +19 (percent backfill locks, percent formatter locks, full≡lean equivalence, and direct
+  coverage for quantileValuation/computeImpliedMean/marketShapeFromMarkets/statusFor/
+  freezePriorRecord (incl. the pre-reshape-prior 422 characterization)/scoreTouchConfidence/
+  jumpNarrative/score-trends — test/coverage-gaps.test.js).
+- **Docs: methodology 1.7.1** (MATERIAL_ADJUSTMENT 0.5%; the $2K 24h floor; the CORRECTED
+  book_depth dominant-leg selection superseding the 1.7.0 changelog's "max per-leg"; the categorical
+  placeholder filter) + METHODOLOGY.md note + 2 new gotchas + the perf decision.
+- **⚠ STILL RED (operator-owned): verify-phase2a C4** — the dev-seeded SpaceX row is the PRE-SPLIT
+  schema-1.3.0 record; the freeze path revalidates priors → 422. Fix: `node scripts/seed-spacex.mjs`
+  on dev (+ prod at standup). Same stale seed makes the resolved SpaceX detail's reliability/
+  liquidity badges read "—". See the new [[gotchas]] "breaking derived reshape … STORED FINAL records".
+- **HARD-STOP items listed, not touched** (see "Immediate open tasks"): the `($0)` windowed-volume
+  reason, buildPmfLadder's non-uniform-percent mean bias, the stored touch narrative wording, the
+  latest.json schema_version label.
+- **NEXT:** operator review + `--no-ff` merge of `fix/predemo-polish-pass`; re-seed SpaceX (dev+prod);
+  decide the 4 HARD-STOP items.
+
 ## ⮕ DIRECTION (2026-07-02): SEARCH/FRESHNESS/WATCHLIST UX + TOUCH-CHART OVERHAUL — MERGED + PUSHED
 - **MERGED to main** (`--no-ff` `6a55a95`; branch `feature/ux-pass-search-freshness-barrier`, 12 commits;
   **pushed, in sync**). A 4-item UX pass, all display/action-layer → **no `core/` or hash change; parity
@@ -1058,13 +1094,29 @@ core record. **Public Polymarket data only** — no grey-market/secondary data (
 - [x] **Full-history invariant sweep test** (181 days through production validators) + CSV constraint.
 
 ## Immediate open tasks
-- [ ] **Document the 0.5% confidence threshold** (`MATERIAL_ADJUSTMENT` in `core/confidence.js`) in
-  `core/methodology.json` — an isotonic tweak below 0.5% is treated as immaterial and keeps tier high;
-  that rule should be written down in the methodology, not just the code.
+- [x] **Document the 0.5% confidence threshold** (`MATERIAL_ADJUSTMENT` in `core/confidence.js`) in
+  `core/methodology.json` — [DONE — session 2026-07-02, methodology 1.7.1, which also documented the
+  $2K 24h floor, the CORRECTED book_depth dominant-leg selection, and the placeholder-leg filter].
 - [ ] **P2 backlog from the audit** (documented, deliberately deferred): scenarios.js pct Math.round
   asymmetric on negatives vs roundT (changing alters published Tier-2 values — needs its own
   methodology note); inline money() can render $-0.00T (unreachable today); quantileValuation
   CDF-touches-0.50-at-last-node returns null (definitional).
+- [ ] **OPERATOR: re-seed the stored SpaceX final on dev (+ prod at standup)** — `node
+  scripts/seed-spacex.mjs`. The dev row is the PRE-SPLIT (schema-1.3.0 single-tier) record, so any
+  freeze-path revalidation 422s ("Record invalid") — this is verify-phase2a C4's remaining red.
+  General rule (new [[gotchas]] entry): a breaking `derived` reshape must re-seed stored FINAL records.
+- [ ] **OPERATOR DECISION: `latest.json` says `schema_version: "1.3.0"` but carries the 2.0.0 split
+  confidence shape** (only the confidence sub-block was regenerated at Increment A). Bumping the label
+  edits the frozen artifact → operator's call (found 2026-07-02).
+- [ ] **HARD-STOP candidates from the 2026-07-02 audit, awaiting operator "proceed"** (all core/):
+  (a) `windowedVolumeSignal` can emit "moderate 24h volume ($0)" when the 7d leg qualified — name the
+  qualifying window; (b) `buildPmfLadder`'s `lo <= 0` bottom-bucket heuristic biases the PMF mean for
+  NON-UNIFORM percent ladders straddling 0 (no live market affected); (c) the STORED touch narrative
+  still says "implied 50% trading range" (display uses barrier language since INC 7).
+- [ ] **METHODOLOGY.md is pinned at 1.2.1** — broadly behind methodology.json (1.7.1); only the
+  MATERIAL_ADJUSTMENT note was added 2026-07-02. A full realignment pass is pending.
+- [ ] Carried: the INC-1 red-team calibration call is CLOSED (the $2K floor shipped + is now
+  documented); PROD-STANDUP still needs migrations 0001–0011 + CRON_SECRET + the 18:00 cron.
 
 ## Pointers
 - Why things are the way they are → `.workflows/_knowledge/decisions.md`

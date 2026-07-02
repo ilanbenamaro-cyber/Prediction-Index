@@ -37,8 +37,9 @@ export function SettlementConsensus({ markets, impliedMedian, unit }:
         <rect x={Math.max(0, bandL)} y={26} width={Math.max(2, bandR - bandL)} height={28} className="settle-band" />
         {medX != null && <line x1={medX} y1={18} x2={medX} y2={62} className="touch-mark" />}
         <text x={Math.max(0, bandL)} y={16} className="touch-axislabel" textAnchor="start">{label}</text>
-        <text x={0} y={74} className="touch-axisend" textAnchor="start">{`$${min}${unit}`}</text>
-        <text x={W} y={74} className="touch-axisend" textAnchor="end">{`$${max}${unit}`}</text>
+        {/* percent buckets carry no '$' prefix on the axis ends */}
+        <text x={0} y={74} className="touch-axisend" textAnchor="start">{`${unit === '%' ? '' : '$'}${min}${unit}`}</text>
+        <text x={W} y={74} className="touch-axisend" textAnchor="end">{`${unit === '%' ? '' : '$'}${max}${unit}`}</text>
       </svg>
       <p className="faint settle-note">
         This market has essentially converged — most rungs are pinned to 0/1 and the outcome is settling in the band above.
