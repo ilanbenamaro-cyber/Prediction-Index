@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 
 import { quantileValuation, computeImpliedMean } from '../core/metrics.js';
 import { marketShapeFromMarkets, kindFromMarkets } from '../core/fetch.js';
-import { scoreTouchConfidence } from '../core/touch-record.js';
+import { scoreTouchConfidence, buildTouchRecord } from '../core/touch-record.js';
 import { statusFor } from '../lib/serve-market.mjs';
 import { freezePriorRecord } from '../lib/compute.mjs';
 import { jumpNarrative } from '../lib/format-detail.mjs';
@@ -224,3 +224,19 @@ test('buildPmfLadder: dollar-ladder legs with POSITIVE lo are byte-identical (un
 // test/bucket.test.js "derived median + PMF mean are correct" for the concrete before/after
 // values (61200 -> 55400 on that fixture) and core/bucket.js's inline comment for the rationale
 // (a bounded lo=0 has a well-defined width just like any other bucket boundary).
+
+// ── buildTouchRecord stored narrative wording (Hard Stop 3, 2026-07-02) ────────────────────────
+test('buildTouchRecord: stored narrative says "implied barrier range", never "trading range"', () => {
+  const live = {
+    fetched_at: '2026-03-01T00:00:00.000Z', endpoints: [], raw_inputs: [], raw_sha256: 'x',
+    high_series: [{ level: 80, prob: 0.9 }, { level: 90, prob: 0.1 }],
+    low_series: [{ level: 60, prob: 0.1 }, { level: 70, prob: 0.9 }],
+    implied_range: { low: 68, high: 81, confidence: 0.5 },
+    unit: '', total_volume: 100_000,
+  };
+  const config = { id: 'wti', name: 'WTI', platform: 'polymarket', market_url: 'x', resolves: '2026-08-01' };
+  const rec = buildTouchRecord(live, '1.7.1', config, { state: 'OPEN' });
+  const narrative = rec.snapshot.derived.narrative;
+  assert.match(narrative, /implied barrier range/);
+  assert.doesNotMatch(narrative, /trading range/);
+});

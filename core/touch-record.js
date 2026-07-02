@@ -126,7 +126,7 @@ function boundLabel(value, series, kind, unit) {
 }
 
 function buildTouchNarrative(name, rangeLabelLow, rangeLabelHigh, confidence) {
-  return `Touch market: the implied 50% trading range for "${name}" is ${rangeLabelLow} to ${rangeLabelHigh} before expiry. This prices the probability of touching price levels, not a settlement value. Reliability is ${confidence.reliability.tier}; liquidity is ${confidence.liquidity.tier}.`;
+  return `Touch market: the implied barrier range for "${name}" is ${rangeLabelLow} to ${rangeLabelHigh} before expiry. This prices the probability of touching price levels, not a settlement value. Reliability is ${confidence.reliability.tier}; liquidity is ${confidence.liquidity.tier}.`;
 }
 
 /** Build the full canonical directional-touch record from a fetchTouchSnapshot result. */
