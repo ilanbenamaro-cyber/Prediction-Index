@@ -510,10 +510,11 @@ a:hover { text-decoration: underline; }
 .touch-band { fill: var(--accent-blue); fill-opacity: 0.18; stroke: var(--accent-blue); stroke-opacity: 0.5; stroke-width: 1; }
 /* Item 4: a band with an OPEN bound uses a gradient fill (faded toward the open edge) + no hard border */
 .touch-band-open { stroke: none; }
-.touch-mark { stroke: var(--accent-amber); stroke-width: 1.5; stroke-dasharray: 4 3; }
-/* an UNRESOLVED bound (anchored beyond the quoted strikes): same dashed-amber language, finer +
-   faded so it reads as "approximate/indeterminate" vs a finite bound's solid dashed marker. */
-.touch-mark-unresolved { stroke: var(--accent-amber); stroke-width: 1.5; stroke-dasharray: 2 3; opacity: 0.55; }
+/* RESOLVED bound marker: SOLID amber line at the boundary (e.g. the $1.70T upper bound). */
+.touch-mark { stroke: var(--accent-amber); stroke-width: 1.5; }
+/* UNRESOLVED bound marker: same amber, same position/weight, but DASHED — distinguishes an
+   anchored "beyond the quoted strikes" edge from a resolved one. Same treatment on both sides. */
+.touch-mark-unresolved { stroke: var(--accent-amber); stroke-width: 1.5; stroke-dasharray: 4 3; }
 .touch-range-note { font-size: var(--fs-micro); color: var(--text-faint); margin-top: var(--sp-2); max-width: 72ch; line-height: var(--lh-prose); }
 /* Item 4: bound labels sized for the padded 480×150 viewBox (were 26px in an 80-tall box → clipped);
    the axis baseline + ticks reuse the dist-tick/dist-grid tokens for visual parity with the CDF. */

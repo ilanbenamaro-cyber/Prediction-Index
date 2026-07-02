@@ -109,9 +109,8 @@ function RangeBar({ low, high, lowLabel, highLabel, levels, unit, highPts, lowPt
   if (unresolvedHigh) captions.push(`Upper bound unresolved — the market doesn't quote high enough strikes to price a 50% cap; it sits ${highLabel} (dashed edge).`);
   return (
     <>
-
-    // crosshair spans the band+axis region (plotTop below the bound labels) so its tooltip never
-    // collides with the hi/lo labels sitting in the padded top zone.
+    {/* crosshair spans the band+axis region (plotTop below the bound labels) so its tooltip
+        never collides with the hi/lo labels in the padded top zone. */}
     <ChartCrosshair vbW={RB_VB_W} vbH={RB_VB_H} plotLeft={RB_PLOT_L} plotRight={RB_PLOT_R} plotTop={RB_BAND_TOP} plotBottom={RB_AXIS_Y}
       mode="interpolate" interp={interp} tooltipAtCursor ariaLabel="Implied barrier range — hover for P(touch) at each price level">
     <svg className="touch-rangebar" viewBox={`0 0 ${RB_VB_W} ${RB_VB_H}`} preserveAspectRatio="none" role="img" aria-label="implied trading range" data-field="range-bar" data-narrow={narrow ? 'true' : 'false'}>
