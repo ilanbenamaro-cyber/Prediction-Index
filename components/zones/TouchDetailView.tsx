@@ -8,7 +8,7 @@
 // (confidence, freshness, provenance + hash-verify) is identical to every other detail.
 import { canonicalizeRawInputs } from '@/core/fetch.js';
 import { fmtEastern, displayTitle, pointChange, touchNarrative, daysToExpiryLabel, barrierPathUncertainty } from '@/lib/format-detail.mjs';
-import { rangeBarLayout, niceTicks, buildAxisSamples } from '@/lib/touch-rangebar.mjs';
+import { rangeBarLayout, niceTicks, buildAxisSamples, resolveBound } from '@/lib/touch-rangebar.mjs';
 import { ChartCrosshair, type InterpConfig, type InterpChannel } from './ChartCrosshair';
 import { interpSeriesAtLevel } from '@/lib/chart-hover.mjs';
 import { ConfidenceBadges, ConfidenceBasisGroup } from './ConfidenceBasis';
@@ -44,16 +44,24 @@ function RangeBar({ low, high, lowLabel, highLabel, levels, unit, highPts, lowPt
   unit: string; highPts: { level: number; prob: number }[]; lowPts: { level: number; prob: number }[];
 }) {
   const unionLevels = [...new Set(levels)].sort((a, b) => a - b);
+  // DIRECTION-AWARE bound resolution: a null bound is not always "extend to the plot edge". A LOW
+  // "> $max" (50% floor is ABOVE the top low strike — Anthropic) ANCHORS the band's lower edge at
+  // the ladder top and must NOT extend below it; only a "< $min" (floor below the bottom) extends
+  // to the edge. Symmetric for HIGH. The band edge and its "> $X"/"< $X" label now always agree.
+  const loRes = resolveBound(low, lowPts, 'low');
+  const hiRes = resolveBound(high, highPts, 'high');
+  const extendLow = loRes.extend, extendHigh = hiRes.extend;
+  const unresolvedLow = loRes.unresolved, unresolvedHigh = hiRes.unresolved;
+
   // Scope the axis to the IMPLIED RANGE plus a couple of context levels just beyond each bound, then
   // a 12% margin. "Will it ever hit $X" touch markets have heavy tails — deep strikes keep a few %
   // touch probability all the way out (Anthropic: P(touch≥$5T)=5.5%), so a probability threshold
   // never crops them and the real signal ($0.8–1.7T) gets squeezed into a sliver. Anchoring on the
-  // range + context crops the far dead tail (still shown in the probability table below) so the band
-  // is prominent. A wide-range market (range spans most of the ladder) keeps ~all levels: the
-  // context levels beyond the bounds ARE the ladder ends.
+  // range + context crops the far dead tail (still shown in the probability table below). The
+  // resolved bound VALUES (finite or anchored ladder boundary) drive the scope.
   const CONTEXT = 2; // quoted levels to keep beyond each range bound, for context
-  const rHi = high != null ? high : (unionLevels[unionLevels.length - 1] ?? 1);
-  const rLo = low != null ? low : (unionLevels[0] ?? 0);
+  const rHi = hiRes.value ?? (unionLevels[unionLevels.length - 1] ?? 1);
+  const rLo = loRes.value ?? (unionLevels[0] ?? 0);
   const above = unionLevels.filter((l) => l > rHi).slice(0, CONTEXT);
   const below = unionLevels.filter((l) => l < rLo).slice(-CONTEXT);
   const focusVals = [rLo, rHi, ...above, ...below];
@@ -61,7 +69,8 @@ function RangeBar({ low, high, lowLabel, highLabel, levels, unit, highPts, lowPt
   const margin = ((dMax - dMin) || Math.abs(dMax) || 1) * 0.12;
   dMin = Math.max(0, dMin - margin); dMax = dMax + margin;
 
-  const layout = rangeBarLayout(low, high, levels,
+  // Pass the RESOLVED edges: extend → null (fill to edge); finite/anchored → the value (band edge sits there).
+  const layout = rangeBarLayout(extendLow ? null : loRes.value, extendHigh ? null : hiRes.value, levels,
     { x0: RB_PLOT_L, W: RB_PLOT_W, yAbove: RB_LABEL_ABOVE_Y, yBelow: RB_LABEL_BELOW_Y, domain: [dMin, dMax] });
   if (!layout) return null;
   const { min, max, bandL, bandR, narrow, lo, hi } = layout;
@@ -83,20 +92,24 @@ function RangeBar({ low, high, lowLabel, highLabel, levels, unit, highPts, lowPt
     rows,
   };
   const ticks = niceTicks(min, max, 6);
-  // An OPEN bound ("> $X" / "< $X", i.e. the 50% crossover is outside the quoted ladder) makes the
-  // band fill FLUSH to that plot edge — no domain margin can add breathing room there (bandL/bandR
-  // = the edge by definition). Fade the band toward an open edge instead: it gives the missing
-  // breathing room AND honestly signals the range is unbounded on that side (a hard fill to a
-  // specific pixel would imply false precision). Finite-bound markets (WTI/silver/SpaceX) are
-  // untouched — both edges are hard markers with symmetric domain margin. The open-bound LABEL is
-  // nudged in from the edge so it sits on the solid part of the band, not the faded tip.
-  const openLow = low == null, openHigh = high == null;
-  const bandOpen = openLow || openHigh;
+  // Edge treatments:
+  //  • FINITE bound → solid position + the normal dashed marker.
+  //  • UNRESOLVED bound (anchored at the ladder boundary, "> $max"/"< $min") → a faded dashed marker
+  //    at that edge + an explicit caption below (the true floor/cap is beyond the quoted strikes).
+  //  • EXTEND bound ("< $min" low / "> $max" high — the range genuinely runs off the ladder that
+  //    way) → the band fades toward the plot edge to signal "continues beyond". Not exercised by any
+  //    live market today (proven by a fixture test), so it stays a simple, honest fade.
+  const bandFades = extendLow || extendHigh;
   const bandW = Math.max(2, bandR - bandL);
   const FADE_FRAC = 0.14;
-  const loLabelX = openLow ? Math.max(RB_PLOT_L, bandL) + FADE_FRAC * bandW : lo.x;
-  const hiLabelX = openHigh ? Math.min(RB_PLOT_R, bandR) - FADE_FRAC * bandW : hi.x;
+  const loLabelX = extendLow ? Math.max(RB_PLOT_L, bandL) + FADE_FRAC * bandW : lo.x;
+  const hiLabelX = extendHigh ? Math.min(RB_PLOT_R, bandR) - FADE_FRAC * bandW : hi.x;
+  const captions: string[] = [];
+  if (unresolvedLow) captions.push(`Lower bound unresolved — the market doesn't quote low enough strikes to price a 50% floor; it sits ${lowLabel} (dashed edge).`);
+  if (unresolvedHigh) captions.push(`Upper bound unresolved — the market doesn't quote high enough strikes to price a 50% cap; it sits ${highLabel} (dashed edge).`);
   return (
+    <>
+
     // crosshair spans the band+axis region (plotTop below the bound labels) so its tooltip never
     // collides with the hi/lo labels sitting in the padded top zone.
     <ChartCrosshair vbW={RB_VB_W} vbH={RB_VB_H} plotLeft={RB_PLOT_L} plotRight={RB_PLOT_R} plotTop={RB_BAND_TOP} plotBottom={RB_AXIS_Y}
@@ -116,31 +129,38 @@ function RangeBar({ low, high, lowLabel, highLabel, levels, unit, highPts, lowPt
         })}
         <line className="touch-axis" x1={RB_PLOT_L} x2={RB_PLOT_R} y1={RB_AXIS_Y} y2={RB_AXIS_Y} />
       </g>
-      {/* fade an OPEN band edge to transparent (breathing room + "unbounded" signal) */}
-      {bandOpen && (
+      {/* fade the band toward a plot edge only when the range genuinely EXTENDS off the ladder there */}
+      {bandFades && (
         <defs>
           <linearGradient id={RB_BAND_GRAD} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="var(--accent-blue)" stopOpacity={openLow ? 0 : 0.18} />
+            <stop offset="0%" stopColor="var(--accent-blue)" stopOpacity={extendLow ? 0 : 0.18} />
             <stop offset={`${FADE_FRAC * 100}%`} stopColor="var(--accent-blue)" stopOpacity={0.18} />
             <stop offset={`${(1 - FADE_FRAC) * 100}%`} stopColor="var(--accent-blue)" stopOpacity={0.18} />
-            <stop offset="100%" stopColor="var(--accent-blue)" stopOpacity={openHigh ? 0 : 0.18} />
+            <stop offset="100%" stopColor="var(--accent-blue)" stopOpacity={extendHigh ? 0 : 0.18} />
           </linearGradient>
         </defs>
       )}
       {/* full strike track */}
       <line x1={RB_PLOT_L} y1={RB_TRACK_Y} x2={RB_PLOT_R} y2={RB_TRACK_Y} className="touch-track" />
-      {/* implied band (gradient fill + no hard border when a bound is open) */}
+      {/* implied band (gradient fill + no hard border only when it fades off an edge) */}
       <rect x={Math.max(RB_PLOT_L, bandL)} y={RB_BAND_TOP} width={bandW} height={RB_BAND_H}
-        className={bandOpen ? 'touch-band-open' : 'touch-band'} fill={bandOpen ? `url(#${RB_BAND_GRAD})` : undefined} />
-      {/* bound markers — only for FINITE bounds (an open edge has no marker line) */}
+        className={bandFades ? 'touch-band-open' : 'touch-band'} fill={bandFades ? `url(#${RB_BAND_GRAD})` : undefined} />
+      {/* bound markers: FINITE → solid dashed; UNRESOLVED (anchored beyond the strikes) → faded
+          dashed; EXTEND → none (the band fades to the edge instead). */}
       {low != null && <line x1={bandL} y1={RB_MARK_TOP} x2={bandL} y2={RB_MARK_BOT} className="touch-mark" />}
       {high != null && <line x1={bandR} y1={RB_MARK_TOP} x2={bandR} y2={RB_MARK_BOT} className="touch-mark" />}
+      {unresolvedLow && <line x1={bandL} y1={RB_MARK_TOP} x2={bandL} y2={RB_MARK_BOT} className="touch-mark-unresolved" data-field="range-lo-unresolved" />}
+      {unresolvedHigh && <line x1={bandR} y1={RB_MARK_TOP} x2={bandR} y2={RB_MARK_BOT} className="touch-mark-unresolved" data-field="range-hi-unresolved" />}
       {/* bound labels — above-left/above-right when the band is wide; stacked hi-above/lo-below
-          (centred on the band) when narrow (Bug B). An OPEN bound's label is nudged in from the edge. */}
+          (centred on the band) when narrow (Bug B). An EXTEND bound's label is nudged in from the edge. */}
       <text x={loLabelX} y={lo.y} className="touch-axislabel" textAnchor={lo.anchor as 'start' | 'end' | 'middle'} data-field="range-lo-label">{lowLabel}</text>
       <text x={hiLabelX} y={hi.y} className="touch-axislabel" textAnchor={hi.anchor as 'start' | 'end' | 'middle'} data-field="range-hi-label">{highLabel}</text>
     </svg>
     </ChartCrosshair>
+    {captions.length > 0 && (
+      <p className="touch-range-note faint" data-field="range-unresolved-note">{captions.join(' ')}</p>
+    )}
+    </>
   );
 }
 

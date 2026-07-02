@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rangeBarLayout, RANGEBAR_W, NARROW_FRAC, niceTicks, buildAxisSamples } from '../lib/touch-rangebar.mjs';
+import { rangeBarLayout, RANGEBAR_W, NARROW_FRAC, niceTicks, buildAxisSamples, resolveBound } from '../lib/touch-rangebar.mjs';
 import { bracket, lerpAt } from '../lib/chart-hover.mjs';
 
 const LEVELS = [0, 50, 100, 150, 200]; // axis 0..200
@@ -66,6 +66,42 @@ test('geom params offset x + set label baselines (defaults reproduce the legacy 
   assert.equal(L.bandR, 16 + (160 / 200) * 448);
   assert.equal(L.lo.y, 40);   // yAbove
   assert.ok(L.bandL >= 16 && L.bandR <= 16 + 448, 'band stays within the plot box');
+});
+
+test('resolveBound: DIRECTION-AWARE null handling (both bounds, both cases)', () => {
+  // finite → passthrough
+  assert.deepEqual(resolveBound(1.7, [], 'high'), { value: 1.7, extend: false, unresolved: false });
+
+  // LOW, all probs < 0.5 ("> $max") — the Anthropic case: floor ABOVE the top low strike → ANCHOR, no extend
+  const lowUnres = resolveBound(null, [{ level: 0.6, prob: 0.045 }, { level: 0.7, prob: 0.075 }, { level: 0.8, prob: 0.10 }], 'low');
+  assert.deepEqual(lowUnres, { value: 0.8, extend: false, unresolved: true }, 'anchors at the ladder top ($0.8), does not extend');
+
+  // LOW, all probs ≥ 0.5 ("< $min") — NOT exercised by any live market → fixture proof: floor BELOW → EXTEND left
+  const lowExt = resolveBound(null, [{ level: 0.6, prob: 0.9 }, { level: 0.7, prob: 0.95 }, { level: 0.8, prob: 0.99 }], 'low');
+  assert.deepEqual(lowExt, { value: null, extend: true, unresolved: false }, 'extends to the left edge (as today)');
+
+  // HIGH, all probs ≥ 0.5 ("> $max") → cap above the top → EXTEND right
+  const highExt = resolveBound(null, [{ level: 2, prob: 0.9 }, { level: 3, prob: 0.8 }, { level: 5, prob: 0.6 }], 'high');
+  assert.deepEqual(highExt, { value: null, extend: true, unresolved: false }, 'extends to the right edge');
+
+  // HIGH, all probs < 0.5 ("< $min") → cap below the bottom high strike → ANCHOR at ladder bottom
+  const highUnres = resolveBound(null, [{ level: 2, prob: 0.3 }, { level: 3, prob: 0.1 }, { level: 5, prob: 0.02 }], 'high');
+  assert.deepEqual(highUnres, { value: 2, extend: false, unresolved: true }, 'anchors at the ladder bottom ($2), does not extend');
+
+  // no series → extend (nothing to anchor to)
+  assert.deepEqual(resolveBound(null, [], 'low'), { value: null, extend: true, unresolved: false });
+});
+
+test('resolveBound → rangeBarLayout: anchored bound sits INSIDE the plot, extend fills to the edge', () => {
+  const levels = [0.6, 0.7, 0.8, 1, 1.5, 2];
+  const geom = { x0: 16, W: 448 };
+  // Anthropic-shaped: low ">$max" anchors at 0.8 (inside), high finite 1.7
+  const lo = resolveBound(null, [{ level: 0.6, prob: 0.045 }, { level: 0.7, prob: 0.075 }, { level: 0.8, prob: 0.10 }], 'low');
+  const A = rangeBarLayout(lo.extend ? null : lo.value, 1.7, levels, { ...geom, domain: [0.43, 2.17] });
+  assert.ok(A.bandL > 16 + 1, 'anchored low edge is INSIDE the plot, not flush at x0=16');
+  // vs the extend case: band flush to the left edge
+  const B = rangeBarLayout(null, 1.7, levels, { ...geom, domain: [0.43, 2.17] });
+  assert.equal(B.bandL, 16, 'extend low → band flush at the plot left edge');
 });
 
 test('crosshair-to-axis ALIGNMENT: cursor at a tick pixel reports that tick value (not a clamped level)', () => {
