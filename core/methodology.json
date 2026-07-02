@@ -1,48 +1,64 @@
 {
-  "version": "1.7.0",
+  "version": "1.7.1",
   "asset": "spacex-ipo-market-cap",
   "summary": "Derived valuation metrics from Polymarket 'closing market cap above $X' YES prices. Each 'above $X' market is a separate order book, so raw midpoints are arbitrage-adjusted (volume-weighted isotonic regression) into a monotone CDF before any metric is computed. Raw values are preserved alongside the adjusted ones. Two output tiers are kept strictly separate: TIER 1 (derived.market) are pure market transforms with no assumptions; TIER 2 (derived.scenarios) require external inputs and each carries a sourced, dated, ranged assumption (see assumptions.json). A scenario with no usable assumption renders 'input_required', never a fabricated number.",
   "metrics": {
     "isotonic_adjustment": {
       "method": "Volume-weighted Pool Adjacent Violators (PAVA) enforces a non-increasing CDF across thresholds. On a violation (an earlier P(>X) below a later one), adjacent markets pool to their volume-weighted mean, pulling the estimate toward the more liquid quote. Each market stores raw_prob and adjusted_prob; all metrics use the adjusted curve.",
       "robust": true,
-      "assumptions": ["Weight = market volume (fallback 1 when volume is unavailable, e.g. price-only history)."],
+      "assumptions": [
+        "Weight = market volume (fallback 1 when volume is unavailable, e.g. price-only history)."
+      ],
       "sensitivity_note": "Removes negative-probability artifacts that arise because the markets are not jointly arbitrage-constrained. Per-snapshot monotonicity_violations and max_adjustment are published."
     },
     "implied_median": {
       "method": "Threshold where the adjusted CDF P(cap > X) crosses 0.50, by linear interpolation.",
       "robust": true,
-      "assumptions": ["Monotone adjusted survival curve (guaranteed by isotonic adjustment)."],
+      "assumptions": [
+        "Monotone adjusted survival curve (guaranteed by isotonic adjustment)."
+      ],
       "sensitivity_note": "Robust: depends only on the two thresholds straddling 50%."
     },
     "median_band": {
       "method": "Spread-implied uncertainty on the median (live only): the best_bid and best_ask curves are each isotonic-adjusted, each one's 0.50 crossing is taken, and the median is bounded by { low: min, high: max } of the two. null when no two-sided book exists (price-only history).",
       "robust": true,
-      "assumptions": ["Bid/ask quotes are present for enough thresholds to cross 0.50; missing quotes are excluded, never synthesized."],
+      "assumptions": [
+        "Bid/ask quotes are present for enough thresholds to cross 0.50; missing quotes are excluded, never synthesized."
+      ],
       "sensitivity_note": "Converts the point median into a defensible range; width reflects book tightness."
     },
     "implied_mean": {
       "method": "Bucket-weighted expected value over the adjusted distribution; tails use midpoint offsets (base case: lowest - 0.15, highest + 0.40).",
       "robust": false,
-      "assumptions": ["Below-lowest midpoint = lowest - 0.15 ($T).", "Above-highest midpoint = highest + 0.40 ($T).", "Within-bucket mass at the bucket midpoint."],
+      "assumptions": [
+        "Below-lowest midpoint = lowest - 0.15 ($T).",
+        "Above-highest midpoint = highest + 0.40 ($T).",
+        "Within-bucket mass at the bucket midpoint."
+      ],
       "sensitivity_note": "Assumption-sensitive; a sensitivity range is published (see mean_sensitivity)."
     },
     "mean_sensitivity": {
       "method": "implied_mean evaluated over a 3x3 grid of tail midpoints (below in {0.10,0.15,0.20}, above in {0.30,0.40,0.60}); reported as { central (base case), low (grid min), high (grid max) }.",
       "robust": true,
-      "assumptions": ["The grid spans plausible tail placements."],
+      "assumptions": [
+        "The grid spans plausible tail placements."
+      ],
       "sensitivity_note": "A tight band proves the mean is robust to tail assumptions; a wide band discloses fragility."
     },
     "iqr": {
       "method": "p25/p75 valuations = adjusted CDF crossings at 0.75 and 0.25 (the 50% confidence band).",
       "robust": true,
-      "assumptions": ["Monotone adjusted survival curve."],
+      "assumptions": [
+        "Monotone adjusted survival curve."
+      ],
       "sensitivity_note": "Robust interpolation; null when a bound lies outside the quoted range."
     },
     "bucket_prob": {
       "method": "adjusted P(> this) - adjusted P(> next); top bucket = adjusted P(> top); a '< lowest' bucket = 1 - adjusted P(> lowest) completes the distribution.",
       "robust": true,
-      "assumptions": ["Computed from the adjusted (monotone) curve, so every bucket is >= 0 and all buckets sum to 1.0 (asserted at build)."],
+      "assumptions": [
+        "Computed from the adjusted (monotone) curve, so every bucket is >= 0 and all buckets sum to 1.0 (asserted at build)."
+      ],
       "sensitivity_note": "No modelling assumptions beyond the isotonic adjustment."
     },
     "confidence": {
@@ -53,70 +69,117 @@
         "medium: 8-11 thresholds, OR <=2 adjustments, OR spread 0.04-0.08, OR 20-50% thin, OR price-only, OR a flagged anomaly.",
         "low: <8 thresholds, OR >2 adjustments, OR spread > 0.08, OR >50% thin, OR multiple closed markets."
       ],
-      "sensitivity_note": "Liquidity breadth is not assessed when volume is unknown (price-only history)."
+      "sensitivity_note": "Liquidity breadth is not assessed when volume is unknown (price-only history).",
+      "material_adjustment": {
+        "threshold": 0.005,
+        "rule": "An isotonic (monotonicity) adjustment whose maximum magnitude is below 0.5% (MATERIAL_ADJUSTMENT = 0.005) is treated as IMMATERIAL: the reliability tier stays 'high' with a 'negligible monotonicity tweak(s)' reason instead of dropping to 'medium'.",
+        "rationale": "A violation pooled to a sub-0.5% tweak is float-level quote noise, not a data-quality defect; penalizing it would over-penalize and make the tier oscillate on negligible price adjustments. Larger adjustments still tier down by count (<=2 -> medium, >2 -> low). Near settlement the carve-out applies instead (pinned rungs manufacture large apparent violations structurally).",
+        "reference": "core/confidence.js scoreConfidence R2 (MATERIAL_ADJUSTMENT constant)"
+      },
+      "windowed_volume_floor": {
+        "threshold_usd_24h": 2000,
+        "rule": "The 7-day-volume path to a HIGH liquidity tier (7d >= $200K) additionally requires 24h volume >= $2K (VOL24_HIGH_FLOOR). Absent 24h data counts as 0.",
+        "rationale": "Without the floor, a STALE one-week-old volume spike on a now-dormant market (24h ~ dead) read HIGH on activity that no longer exists — the red-team F1 finding of the 2026-06-30 calibration pass.",
+        "reference": "core/confidence.js windowedVolumeSignal (VOL24_HIGH_FLOOR)"
+      },
+      "book_depth_selection": {
+        "rule": "derived.liquidity.book_depth is the DOMINANT-outcome leg's resting-order depth — the leg the headline number rests on, proxied by the most-traded leg (highest all-time volume) — with a max-across-legs fallback only when the leader leg has no book data.",
+        "rationale": "The initial Increment-C selection (MAX per-leg, as described in the 1.7.0 changelog entry below) over-credited a market whose deepest book sat on an obscure low-volume longshot rather than the headline: the wrong direction for a trust signal. Corrected by red-team finding F1 (2026-06-30); this entry supersedes the 1.7.0 changelog's 'max per-leg' wording.",
+        "reference": "core/fetch.js aggregateLiquidity (leader-leg selection)"
+      }
     },
     "raw_sha256": {
       "method": "sha256 over the canonical JSON serialization of raw_inputs (fixed key order: token_id, threshold, midpoint, best_bid, best_ask, volume; ascending by threshold; literal API string values). Unchanged from 1.0.0 so archived snapshots remain verifiable.",
       "robust": true,
-      "assumptions": ["Consumers re-serialize the stored raw_inputs identically to reproduce the hash."],
+      "assumptions": [
+        "Consumers re-serialize the stored raw_inputs identically to reproduce the hash."
+      ],
       "sensitivity_note": "Provenance check: proves derived numbers came from the stored, unaltered inputs. Status flags (closed/active) are deliberately excluded from the hashed inputs."
     },
     "categorical": {
       "method": "A categorical event (named mutually-exclusive outcomes, e.g. 'How many Fed rate cuts in 2026?') is N Yes/No legs whose YES midpoints form a PMF. Each outcome's displayed probability is the leg's YES midpoint NORMALIZED so the distribution sums to 1 (de-vig: the market-maker overround is removed). Consensus = normalized Shannon entropy over the outcomes (0 = one outcome certain, 1 = uniform). Dominant outcome = the largest normalized probability.",
       "robust": true,
-      "assumptions": ["Legs are mutually exclusive and collectively exhaustive (a valid PMF)."],
-      "sensitivity_note": "HASH RECIPE (same as every kind): raw_sha256 is over the RAW observed YES midpoints in raw_inputs (synthetic threshold = leg index for a stable canonical sort), NOT the normalized probabilities. Normalization is a display transform only — the hash is over truth, not presentation."
+      "assumptions": [
+        "Legs are mutually exclusive and collectively exhaustive (a valid PMF)."
+      ],
+      "sensitivity_note": "HASH RECIPE (same as every kind): raw_sha256 is over the RAW observed YES midpoints in raw_inputs (synthetic threshold = leg index for a stable canonical sort), NOT the normalized probabilities. Normalization is a display transform only — the hash is over truth, not presentation.",
+      "placeholder_filter": {
+        "rule": "Before de-vig normalization, PLACEHOLDER legs are removed: a leg is an artifact only when it has ZERO all-time volume AND (a generic '<word> <letter>' label such as 'Candidate C', OR a midpoint still pinned within 0.02 of the 0.5 untraded listing default). Any traded leg (volume > 0) is always kept; a zero-volume leg with a genuinely divergent quote (a real long-shot) is kept too. If filtering would remove every leg, the original set is used unchanged.",
+        "rationale": "Polymarket seeds categorical events with 25+ untraded generic legs at ~0.5 each; including them in the de-vig denominator collapses the real leader (a true ~97% leader read 7%). The filter applies to the DERIVED display PMF only — every observed leg still lands in raw_inputs and the hash.",
+        "reference": "core/categorical.js isPlaceholderLeg / realCategoricalLegs (Bug Zero, 2026-06-26)"
+      }
     },
     "narrative": {
       "method": "Deterministic, template-based reading composed only from stored fields (median vs 7d/30d-ago, divergence, dominant bucket, shape, dispersion trend, confidence caveat). No language model in the data path; reproducible from narrative_components. Trend claims are suppressed on low-confidence days.",
       "robust": true,
-      "assumptions": ["Every clause maps to a field in narrative_components; nothing is asserted that is not stored."],
+      "assumptions": [
+        "Every clause maps to a field in narrative_components; nothing is asserted that is not stored."
+      ],
       "sensitivity_note": "Same inputs always produce the same sentence."
     },
     "analytics_shape": {
       "method": "Distribution shape from the adjusted CDF: Bowley quartile skewness ((p75-med)-(med-p25))/(p75-p25); a robust fat-tail ratio (10th-90th percentile valuation spread) / IQR vs a normal's 1.90; normalized Shannon entropy and Gini over the density buckets (consensus vs dispersion); dominant bucket.",
       "robust": true,
-      "assumptions": ["Quantile- and probability-based only; no tail-midpoint assumptions."],
+      "assumptions": [
+        "Quantile- and probability-based only; no tail-midpoint assumptions."
+      ],
       "sensitivity_note": "Bowley skew and the tail ratio use only interpolated quantiles, so they inherit none of the mean's tail sensitivity."
     },
     "analytics_dispersion": {
       "method": "The 25-75% band width (p75-p25) tracked over time; trend = converging when the width is shrinking (growing certainty), diverging when widening.",
       "robust": true,
-      "assumptions": ["Reads stored historical IQR; no assumptions."],
+      "assumptions": [
+        "Reads stored historical IQR; no assumptions."
+      ],
       "sensitivity_note": "A genuine signal: a tightening band means the market is concentrating its view."
     },
     "analytics_velocity": {
       "method": "Rate of change of the implied median: 24h/7d/30d changes (the single source for displayed median deltas), 7d/30d annualized drift, and acceleration from the sign of the second difference.",
       "robust": true,
-      "assumptions": ["Reads stored historical medians; no assumptions."],
+      "assumptions": [
+        "Reads stored historical medians; no assumptions."
+      ],
       "sensitivity_note": "All surfaces display the same stored delta values through one rounding helper."
     },
     "calibration": {
       "method": "Structural scaffold only. The market resolves once, at IPO close (2027-12-31), so a true calibration / Brier score is impossible before resolution. The standing forecast is recorded so it can be scored later; NO score is computed now.",
       "robust": true,
-      "assumptions": ["None — explicitly pending resolution."],
+      "assumptions": [
+        "None — explicitly pending resolution."
+      ],
       "sensitivity_note": "Deliberately not faked. status = 'pending_resolution'."
     },
     "scenarios": {
       "method": "TIER 2. Implied share price = market_cap / shares_outstanding, reported as {central, low, high} from the shares range; round-over-round = implied IPO-close median vs the last reported valuation. Each scenario carries its sourced, dated assumption from assumptions.json; with no usable input it renders 'input_required'.",
       "robust": false,
-      "assumptions": ["shares_outstanding and last_round_valuation are external, press-estimated, low-confidence inputs (SpaceX is private). See assumptions.json and the embedded per-scenario assumptions."],
+      "assumptions": [
+        "shares_outstanding and last_round_valuation are external, press-estimated, low-confidence inputs (SpaceX is private). See assumptions.json and the embedded per-scenario assumptions."
+      ],
       "sensitivity_note": "Quarantined from Tier 1 and validated: no scenario number exists without a sourced+dated assumption; no assumption leaks into derived.market. The published feed uses the registry value; the dashboard lets a user explore their own without mutating the feed."
     },
     "source_of_record": {
       "method": "The canonical price is the CLOB /midpoints value = (best_bid + best_ask) / 2 of the live order book. raw_inputs.midpoint (hence every raw_prob and all derived metrics) is this CLOB midpoint. Gamma outcomePrices is a platform-surfaced display price that can lag the book; it is used ONLY for metadata (token ids, volume, threshold) and as a cross-check, never as an input. On disagreement the CLOB midpoint is authoritative and the divergence is reported.",
       "robust": true,
-      "assumptions": ["None — both inputs are public, auth-free Polymarket endpoints."],
+      "assumptions": [
+        "None — both inputs are public, auth-free Polymarket endpoints."
+      ],
       "sensitivity_note": "Accuracy is independently proven by scripts/verify-accuracy.js: dual-source fetch twice, cross-source agreement (±1pt), drift quantification, published-vs-live reconciliation (±2pt + drift) with a separate freshness verdict, and isotonic-validity of the live curve. Report-only; tolerances documented, not tuned to pass."
     },
     "freshness": {
       "method": "TIER 1. derived.freshness is a pure function of the snapshot's own fetched_at plus one documented constant (no external input): { as_of, staleness_threshold_hours, stale_after = as_of + threshold, expected_cadence, policy }. The published record carries POLICY ONLY — no frozen age/stale flag, since age is a read-time quantity. Consumers (the dashboard and note) evaluate staleness with a single comparison, now > stale_after, and display an as-of age + stale badge. core/freshness.js is the single source of the policy.",
       "robust": true,
-      "assumptions": ["None — derived solely from the snapshot's own timestamp."],
+      "assumptions": [
+        "None — derived solely from the snapshot's own timestamp."
+      ],
       "sensitivity_note": "Threshold = 17h, DERIVED from the snapshot schedule rather than chosen as a literal: the cron (update.yml, '0 0,12,14,16,18,20,22 * * *') runs every 2h 12:00-22:00 UTC plus 00:00, daily incl. weekends, so the largest scheduled gap is the 12h overnight pause (00:00->12:00 UTC). Threshold = 12h max gap + 2h one fully-missed run + 3h Actions queue jitter. A normal overnight pause never flags; anything past 17h is a genuine pipeline failure. core/freshness.js exports the SCHEDULE facts and computes the threshold from them; test/schedule-coupling.test.js re-derives the gaps from the workflow cron so schedule and threshold cannot silently desync. The weekday-only crons are the email runs, not the snapshot."
     }
   },
   "changelog": [
+    {
+      "version": "1.7.1",
+      "date": "2026-07-02",
+      "change": "DOCUMENTATION ONLY — no formula, threshold, or schema change. Wrote down four rules that existed only in code: (1) the 0.5% MATERIAL_ADJUSTMENT immateriality threshold on isotonic tweaks (metrics.confidence.material_adjustment); (2) the $2K 24h floor on the 7d-volume HIGH path (metrics.confidence.windowed_volume_floor); (3) the CORRECTED book_depth selection — dominant-outcome leg, max-fallback — superseding the 1.7.0 entry's 'max per-leg' wording (red-team F1) (metrics.confidence.book_depth_selection); (4) the categorical placeholder-leg filter applied before de-vig (metrics.categorical.placeholder_filter)."
+    },
     {
       "version": "1.7.0",
       "date": "2026-06-30",
