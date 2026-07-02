@@ -85,6 +85,9 @@ export function WatchlistRows({ rows, orgs = [] }: { rows: ScanRow[]; orgs?: Arr
   const router = useRouter();
   const selected = useSearchParams().get('m');
   const [removing, startRemove] = useTransition();
+  // A failed remove (expired session, RLS denial) must be visible — silently doing nothing
+  // teaches the user the × is broken. Cleared on the next attempt.
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   // Item 3: Personal/Org toggle. Pure client-side filter over the union rows we already have
   // (each row carries `personal` + `org_ids`). Default is Personal; the toggle is hidden when the
@@ -146,7 +149,11 @@ export function WatchlistRows({ rows, orgs = [] }: { rows: ScanRow[]; orgs?: Arr
     // Remove from the CURRENTLY-VIEWED scope: Personal view → the personal entry; an org view →
     // that org's entry. (A market on both lists is removed only from the list you're looking at.)
     const orgId = view.mode === 'personal' ? null : view.orgId;
-    startRemove(async () => { await removeMarket(r.market_id, orgId); });
+    setRemoveError(null);
+    startRemove(async () => {
+      const res = await removeMarket(r.market_id, orgId);
+      if (!res.ok) setRemoveError(res.error ?? 'could not remove from watchlist');
+    });
   }
 
   const orgName = (id: string | null) => orgs.find((o) => o.id === id)?.name ?? 'Org';
@@ -183,6 +190,9 @@ export function WatchlistRows({ rows, orgs = [] }: { rows: ScanRow[]; orgs?: Arr
             </select>
           )}
         </div>
+      )}
+      {removeError && (
+        <div className="wl-error faint" role="alert" data-field="remove-error">✗ {removeError}</div>
       )}
       {filtered.length === 0 ? (
         <div className="empty" data-zone="rail-empty-scope">
