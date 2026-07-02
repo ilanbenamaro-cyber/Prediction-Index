@@ -49,7 +49,10 @@ console.log(`C1: OPEN market (${OPEN_MARKET}) returns a verified record`);
     ok(rec.snapshot.source.raw_sha256 === hashRawInputs(rec.snapshot.raw_inputs), 'raw_sha256 re-hash matches (provenance intact)');
     ok(monotone(d.markets), 'adjusted CDF monotone non-increasing');
     ok(bucketsSumToOne(d.markets), 'bucket probabilities sum to 1.0');
-    ok(['high', 'medium', 'low'].includes(d.confidence.tier), `confidence computed (${d.confidence.tier})`);
+    // Split confidence (schema 2.0.0): { reliability, liquidity }, each { tier, score, reasons }.
+    const tiers = ['high', 'medium', 'low'];
+    ok(tiers.includes(d.confidence?.reliability?.tier) && tiers.includes(d.confidence?.liquidity?.tier),
+      `confidence computed (reliability ${d.confidence?.reliability?.tier} · liquidity ${d.confidence?.liquidity?.tier})`);
     ok(body.lifecycle_state === 'OPEN', `lifecycle OPEN (got ${body.lifecycle_state})`);
     ok(d.scenarios === undefined, 'no Tier-2 scenarios on a generic market');
   }

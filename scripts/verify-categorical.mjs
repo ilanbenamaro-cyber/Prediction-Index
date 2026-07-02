@@ -23,7 +23,10 @@ try {
   ok(Math.abs(sum - 1) < 1e-6, `outcome probabilities sum to 1.0 (got ${sum.toFixed(6)})`);
   ok(d.dominant_outcome != null && d.dominant_prob > 0, `dominant: "${d.dominant_outcome}" @ ${(d.dominant_prob * 100).toFixed(1)}%`);
   ok(d.entropy >= 0 && d.entropy <= 1, `entropy in [0,1] (${d.entropy?.toFixed(3)}) → ${d.consensus_strength}`);
-  ok(['high', 'medium', 'low'].includes(d.confidence?.tier), `confidence computed (${d.confidence?.tier})`);
+  // Split confidence (schema 2.0.0): { reliability, liquidity }, each { tier, score, reasons }.
+  const tiers = ['high', 'medium', 'low'];
+  ok(tiers.includes(d.confidence?.reliability?.tier) && tiers.includes(d.confidence?.liquidity?.tier),
+    `confidence computed (reliability ${d.confidence?.reliability?.tier} · liquidity ${d.confidence?.liquidity?.tier})`);
   ok(record.snapshot.source.raw_sha256 === hashRawInputs(record.snapshot.raw_inputs), 'raw_sha256 re-hash matches (provenance intact)');
   ok(record.snapshot.raw_inputs.every((r) => r.midpoint != null), 'every stored leg has an observed (un-normalized) midpoint');
   console.log(`\n  lifecycle: ${lifecycle.state} · top outcome distribution:`);
