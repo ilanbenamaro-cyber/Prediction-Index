@@ -16,6 +16,8 @@ import { DEPS } from '@/lib/market-deps.mjs';
 import { readCache, writeRecord } from '@/lib/cache.mjs';
 import { computeMarketRecord } from '@/lib/compute.mjs';
 import { addPersonal, addOrg, removePersonal, removeOrg, MarketNotInCatalogError } from '@/lib/watchlist.mjs';
+import { readBackfillStatus, needsBackfill } from '@/lib/market-history.mjs';
+import { triggerBackfill } from '@/lib/trigger-backfill.mjs';
 
 export interface ActionResult {
   ok: boolean;
@@ -61,52 +63,23 @@ export async function addMarket(slug: string, orgId: string | null): Promise<Act
   // flushes (the user already sees the market). The dedicated /api/backfill route ACKs 202 and
   // owns the (minutes-long) rebuild in its own budget, so this trigger returns fast.
   //
-  // Capture the request host/proto NOW (request scope), not inside the after() callback: Next 15
-  // does allow headers() inside after() for a Server Function, but reading request data before the
-  // deferred callback is the documented-robust pattern (and lets triggerBackfill be unit-tested
-  // without a request context). See https://nextjs.org/docs/app/api-reference/functions/after.
-  const h = await headers();
-  const host = h.get('host');
-  const proto = h.get('x-forwarded-proto') ?? (host?.startsWith('localhost') ? 'http' : 'https');
-  after(() => triggerBackfill(id, host, proto));
+  // UPGRADE PATH (browse → Add): since the browse-history change, viewing a market already
+  // triggers its backfill, so a browsed-then-added market is usually already 'done'/'pending' by
+  // the time it's added. Gate on needsBackfill so we DON'T re-fetch (and don't duplicate rows) in
+  // that case — the browse data is reused as-is. A FRESH market never viewed (status null) still
+  // triggers here, so "add a fresh market" is unchanged; a 'failed' status re-fires (self-heal).
+  const bfStatus = await readBackfillStatus(id).catch(() => null);
+  if (needsBackfill(bfStatus)) {
+    // Capture the request host/proto NOW (request scope), not inside the after() callback: Next 15
+    // does allow headers() inside after() for a Server Function, but reading request data before the
+    // deferred callback is the documented-robust pattern (and lets triggerBackfill be unit-tested
+    // without a request context). See https://nextjs.org/docs/app/api-reference/functions/after.
+    const h = await headers();
+    const host = h.get('host');
+    const proto = h.get('x-forwarded-proto') ?? (host?.startsWith('localhost') ? 'http' : 'https');
+    after(() => triggerBackfill(id, host, proto));
+  }
   return { ok: true, slug: id };
-}
-
-/** Kick the backfill route for a freshly added market. Fire-and-forget: gated by CRON_SECRET
- *  (skips when unset — fails closed, never runs the job open), and any failure here NEVER affects
- *  the add (history simply backfills later, or via the cron retry of a 'failed' status). */
-async function triggerBackfill(id: string, host: string | null, proto: string): Promise<void> {
-  // Audit F2 + observability pass: every skip/failure here used to be SILENT, so a market added
-  // before CRON_SECRET was set (or any trigger failure) left market_history empty with NO trace.
-  // Now EVERY call emits a structured `attempt` line followed by exactly one outcome — `skipped`
-  // (with reason), `success`, or `failure` — so a missed backfill is observable in Vercel logs
-  // (and the cron retries markets left at backfill_status null/'failed'). All lines share the
-  // `[backfill-trigger]` tag + an `event` field for grep/alerting.
-  const log = (level: 'log' | 'warn', event: string, extra: Record<string, unknown> = {}) =>
-    console[level]('[backfill-trigger]', JSON.stringify({ id, event, ...extra }));
-
-  log('log', 'attempt');
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    log('warn', 'skipped', { reason: 'CRON_SECRET unset' }); // fail-closed: never run the job open
-    return;
-  }
-  if (!host) {
-    log('warn', 'skipped', { reason: 'no host header' });
-    return;
-  }
-  try {
-    const res = await fetch(`${proto}://${host}/api/backfill?id=${encodeURIComponent(id)}`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${secret}` },
-      cache: 'no-store',
-    });
-    if (res.ok) log('log', 'success', { route_status: res.status });
-    else log('warn', 'failure', { route_status: res.status });
-  } catch (e) {
-    // fire-and-forget: a trigger failure NEVER affects the add — but log it (the cron retries later).
-    log('warn', 'failure', { error: (e as Error).message });
-  }
 }
 
 /** Remove a market from the rail. orgId null = personal; otherwise the org's shared list. */

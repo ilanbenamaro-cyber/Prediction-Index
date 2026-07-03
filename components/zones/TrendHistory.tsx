@@ -20,13 +20,12 @@ export interface DispersionResult { status: string; direction?: string; change_p
 // US peak) or 'off-peak' (02:00 UTC), surfaced as a data-quality note. null = backfill/legacy.
 // `synthesis` (Increment 5): the closing cross-signal sentence appended to the narrative (or null).
 // `backfillStatus` (backfill-observability pass): the market's history-backfill state
-// ('pending'|'done'|'failed'|null). null/'pending' on a still-thin market → the chart shows
-// "Backfilling history…" instead of the bare "Collecting" state; it clears once rows accrue.
-// `watched`: is the market on ANY of the viewer's lists? A never-watchlisted market (opened via
-// search-navigate) also reads status null, but NO backfill will ever run for it (only addMarket
-// triggers one; the cron retries watched ids only) — so a null status only means "backfilling"
-// when the market is actually watched. 'pending' always means an in-flight reconstruction.
-export interface HistoryUI { velocity: VelocityResult; dispersion: DispersionResult; points: HistoryPoint[]; kind: string; series?: ChartSeries | null; snapshotWindow?: 'us-hours' | 'off-peak' | null; synthesis?: string | null; backfillStatus?: string | null; watched?: boolean; }
+// ('pending'|'done'|'failed'|null). null/'pending' → the chart shows "Backfilling history…"
+// instead of the bare "Collecting" state; it clears once rows accrue. Since the browse-history
+// change (2026-07-03), ANY viewed market — watchlisted or not — triggers a backfill on first view
+// (DetailData fires the same trigger addMarket uses), so a null status now always means "a backfill
+// is (about to be) in flight" regardless of watch status. The old `watched` gate is therefore gone.
+export interface HistoryUI { velocity: VelocityResult; dispersion: DispersionResult; points: HistoryPoint[]; kind: string; series?: ChartSeries | null; snapshotWindow?: 'us-hours' | 'off-peak' | null; synthesis?: string | null; backfillStatus?: string | null; }
 
 /** Velocity card: rate/direction of the headline value over the last 7 days, or an explicit
  *  "Collecting" state below the minimum. */
@@ -90,12 +89,13 @@ function DispersionCard({ d, unit }: { d: DispersionResult; unit: string }) {
 
 /** Velocity + dispersion cards above the historical trends chart. */
 export function TrendHistorySection({ hist, unit, label }: { hist: HistoryUI; unit: string; label: string }) {
-  // A freshly-added market whose CLOB reconstruction hasn't completed (status null/'pending')
-  // is actively backfilling, not merely waiting for daily snapshots — surface that distinction.
-  // A NULL status only implies a coming backfill when the market is WATCHED (add-time trigger or
-  // the cron retry); a search-navigated, never-added market would show a false "populates
-  // automatically" promise — it degrades to the plain Collecting state instead.
-  const backfilling = hist.backfillStatus === 'pending' || (hist.backfillStatus == null && hist.watched === true);
+  // A market whose CLOB reconstruction hasn't completed (status null/'pending') is actively
+  // backfilling, not merely waiting for daily snapshots — surface that distinction. Since the
+  // browse-history change, EVERY viewed market triggers a backfill on first view (DetailData),
+  // so a null status honestly means "backfill (about to be) in flight" for browse + watched alike
+  // — no watch-status gate. ('failed' → neither null nor 'pending' → the plain Collecting state;
+  // it self-heals on the next view, when needsBackfill re-fires the trigger.)
+  const backfilling = hist.backfillStatus === 'pending' || hist.backfillStatus == null;
   return (
     <section className="detail-section" data-field="trend-history">
       <h2 className="detail-h2">Trend &amp; history <span className="tier1-tag">Tier 1 · market-derived</span></h2>
