@@ -16,6 +16,7 @@ import { DEPS } from '@/lib/market-deps.mjs';
 import { readCache, writeRecord } from '@/lib/cache.mjs';
 import { computeMarketRecord } from '@/lib/compute.mjs';
 import { addPersonal, addOrg, removePersonal, removeOrg, MarketNotInCatalogError } from '@/lib/watchlist.mjs';
+import { readBackfillStatus, needsBackfill } from '@/lib/market-history.mjs';
 import { triggerBackfill } from '@/lib/trigger-backfill';
 
 export interface ActionResult {
@@ -62,14 +63,22 @@ export async function addMarket(slug: string, orgId: string | null): Promise<Act
   // flushes (the user already sees the market). The dedicated /api/backfill route ACKs 202 and
   // owns the (minutes-long) rebuild in its own budget, so this trigger returns fast.
   //
-  // Capture the request host/proto NOW (request scope), not inside the after() callback: Next 15
-  // does allow headers() inside after() for a Server Function, but reading request data before the
-  // deferred callback is the documented-robust pattern (and lets triggerBackfill be unit-tested
-  // without a request context). See https://nextjs.org/docs/app/api-reference/functions/after.
-  const h = await headers();
-  const host = h.get('host');
-  const proto = h.get('x-forwarded-proto') ?? (host?.startsWith('localhost') ? 'http' : 'https');
-  after(() => triggerBackfill(id, host, proto));
+  // UPGRADE PATH (browse → Add): since the browse-history change, viewing a market already
+  // triggers its backfill, so a browsed-then-added market is usually already 'done'/'pending' by
+  // the time it's added. Gate on needsBackfill so we DON'T re-fetch (and don't duplicate rows) in
+  // that case — the browse data is reused as-is. A FRESH market never viewed (status null) still
+  // triggers here, so "add a fresh market" is unchanged; a 'failed' status re-fires (self-heal).
+  const bfStatus = await readBackfillStatus(id).catch(() => null);
+  if (needsBackfill(bfStatus)) {
+    // Capture the request host/proto NOW (request scope), not inside the after() callback: Next 15
+    // does allow headers() inside after() for a Server Function, but reading request data before the
+    // deferred callback is the documented-robust pattern (and lets triggerBackfill be unit-tested
+    // without a request context). See https://nextjs.org/docs/app/api-reference/functions/after.
+    const h = await headers();
+    const host = h.get('host');
+    const proto = h.get('x-forwarded-proto') ?? (host?.startsWith('localhost') ? 'http' : 'https');
+    after(() => triggerBackfill(id, host, proto));
+  }
   return { ok: true, slug: id };
 }
 
