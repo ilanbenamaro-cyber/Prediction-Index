@@ -87,10 +87,19 @@ export function windowedVolumeSignal(liquidity) {
   const v24 = liquidity.volume_24hr, v7 = liquidity.volume_1wk;
   if (v24 == null && v7 == null) return null;
   const v24n = v24 ?? 0, v7n = v7 ?? 0;
-  const usd = `$${Math.round(v24 ?? v7 ?? 0).toLocaleString('en-US')}`;
-  const window = v24 != null ? '24h' : '7d';
   if (v24n >= VOL24_HIGH || (v7n >= VOL1WK_HIGH && v24n >= VOL24_HIGH_FLOOR)) return { tier: 'high', reason: null };
-  if (v24n >= VOL24_MEDIUM || v7n >= VOL1WK_MEDIUM) return { tier: 'medium', reason: `moderate ${window} volume (${usd})` };
+  if (v24n >= VOL24_MEDIUM || v7n >= VOL1WK_MEDIUM) {
+    // Name whichever window ACTUALLY crossed the medium threshold — not just whichever field is
+    // present. Prefer 24h when both crossed (mirrors the HIGH path's 24h-first precedence); fall
+    // back to 7d only when 24h didn't qualify (else a below-threshold, possibly-zero 24h figure
+    // could be reported as the reason for a tier the 7d window actually earned).
+    const via24 = v24n >= VOL24_MEDIUM;
+    const window = via24 ? '24h' : '7d';
+    const usd = `$${Math.round(via24 ? v24n : v7n).toLocaleString('en-US')}`;
+    return { tier: 'medium', reason: `moderate ${window} volume (${usd})` };
+  }
+  const window = v24 != null ? '24h' : '7d';
+  const usd = `$${Math.round(v24 ?? v7 ?? 0).toLocaleString('en-US')}`;
   return { tier: 'low', reason: `thin ${window} volume (${usd})` };
 }
 

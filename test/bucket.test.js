@@ -95,8 +95,15 @@ test('buildPmfLadder: derived median + PMF mean are correct (no outlier blowup)'
     { lo: 62000, hi: Infinity, prob: 0.3 },
   ];
   const { markets, mean } = buildPmfLadder(legs);
-  // median: CDF crosses 0.5 between (60000,0.8) and (62000,0.3) → 61200
+  // median: CDF crosses 0.5 between (60000,0.8) and (62000,0.3) → 61200 (unaffected — depends only
+  // on markets[], not the mean's midpoint formula below)
   assert.equal(Math.round(computeImpliedMedian(markets)), 61200);
-  // mean = 0.2·59000 + 0.5·61000 + 0.3·63000 = 61200 (tail offset = half the 2000 width)
-  assert.equal(Math.round(mean), 61200);
+  // Hard Stop 2 (2026-07-02): the leg's lo=0 leg previously took the open-bottom-floor formula
+  // (hi - offset = 60000 - 1000 = 59000) under the old `lo <= 0` gate. That gate now requires a
+  // TRULY open (non-finite) lo — a bounded lo of exactly 0 is a well-defined domain floor with its
+  // own [0,hi) midpoint like any other bucket, so it takes (lo+hi)/2 = 30000 instead. See
+  // core/bucket.js's inline comment + test/coverage-gaps.test.js for the fix's rationale (fixing a
+  // real bias on bounded-negative percent rungs) and its disclosed side effect on this dollar case.
+  // mean = 0.2·30000 + 0.5·61000 + 0.3·63000 = 55400 (tail offset unchanged: half the 2000 width)
+  assert.equal(Math.round(mean), 55400);
 });
