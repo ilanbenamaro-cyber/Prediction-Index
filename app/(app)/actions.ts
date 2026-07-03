@@ -17,7 +17,7 @@ import { readCache, writeRecord } from '@/lib/cache.mjs';
 import { computeMarketRecord } from '@/lib/compute.mjs';
 import { addPersonal, addOrg, removePersonal, removeOrg, MarketNotInCatalogError } from '@/lib/watchlist.mjs';
 import { readBackfillStatus, needsBackfill } from '@/lib/market-history.mjs';
-import { triggerBackfill } from '@/lib/trigger-backfill';
+import { triggerBackfill } from '@/lib/trigger-backfill.mjs';
 
 export interface ActionResult {
   ok: boolean;

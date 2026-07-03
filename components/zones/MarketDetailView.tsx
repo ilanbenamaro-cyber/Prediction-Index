@@ -17,7 +17,7 @@ import { canonicalizeRawInputs } from '@/core/fetch.js';
 import { after } from 'next/server';
 import { headers } from 'next/headers';
 import { readHistoryLean, headlineValue, deriveVelocity, deriveDispersion, deriveDeltas, deriveBiggestMoves, deriveChartSeries, headlineChange, latestSnapshotWindow, deriveReliabilityTrend, readBackfillStatus, needsBackfill } from '@/lib/market-history.mjs';
-import { triggerBackfill } from '@/lib/trigger-backfill';
+import { triggerBackfill } from '@/lib/trigger-backfill.mjs';
 import { unitFromLadder, fmtMoney, fmtRange, fmtEastern, impliedMedianLabel, displayTitle, fmtDeltaPp, deltaSign, meanRobustnessLabel, modeBucket, detailNarrative, daysToExpiryLabel, synthesizeSignals } from '@/lib/format-detail.mjs';
 import { DistributionSVG } from './DistributionSVG';
 import { SettlementConsensus } from './SettlementConsensus';
