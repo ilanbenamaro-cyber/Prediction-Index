@@ -170,9 +170,9 @@ export async function DetailData({ id }: { id: string }) {
     // → the Add button reappears. (React's "reset state when a prop changes" via key.)
     const membershipKey = `${id}|${membership.personal ? 'p' : '-'}|${[...membership.orgIds].sort().join(',')}`;
     addControl = <AddToWatchlist key={membershipKey} slug={id} orgs={orgs} initial={membership} />;
-    // "Backfilling history…" is only honest for a WATCHED market (add-time trigger / cron retry);
-    // a search-navigated, never-added market with status null gets the plain Collecting state.
-    hist.watched = membership.personal || membership.orgIds.length > 0;
+    // (No `hist.watched` gate anymore: since the browse-history change, EVERY viewed market triggers
+    // a backfill on first view, so a null/'pending' status shows "Backfilling…" regardless of watch
+    // status. The membership fetch above still feeds AddToWatchlist.)
   } catch (e) {
     console.error('[detail] add-to-watchlist membership read failed:', e);
   }
