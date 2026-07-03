@@ -14,7 +14,10 @@ import { createClient } from '@/lib/supabase/server';
 import { listVisible } from '@/lib/watchlist.mjs';
 import { AddToWatchlist, type Membership } from './AddToWatchlist';
 import { canonicalizeRawInputs } from '@/core/fetch.js';
-import { readHistoryLean, headlineValue, deriveVelocity, deriveDispersion, deriveDeltas, deriveBiggestMoves, deriveChartSeries, headlineChange, latestSnapshotWindow, deriveReliabilityTrend, readBackfillStatus } from '@/lib/market-history.mjs';
+import { after } from 'next/server';
+import { headers } from 'next/headers';
+import { readHistoryLean, headlineValue, deriveVelocity, deriveDispersion, deriveDeltas, deriveBiggestMoves, deriveChartSeries, headlineChange, latestSnapshotWindow, deriveReliabilityTrend, readBackfillStatus, needsBackfill } from '@/lib/market-history.mjs';
+import { triggerBackfill } from '@/lib/trigger-backfill';
 import { unitFromLadder, fmtMoney, fmtRange, fmtEastern, impliedMedianLabel, displayTitle, fmtDeltaPp, deltaSign, meanRobustnessLabel, modeBucket, detailNarrative, daysToExpiryLabel, synthesizeSignals } from '@/lib/format-detail.mjs';
 import { DistributionSVG } from './DistributionSVG';
 import { SettlementConsensus } from './SettlementConsensus';
@@ -86,6 +89,22 @@ export async function DetailData({ id }: { id: string }) {
   // A read failure degrades to null → the neutral collecting state, never breaks the serve.
   let backfillStatus: string | null = null;
   try { backfillStatus = (await readBackfillStatus(id)) as string | null; } catch { backfillStatus = null; }
+  // BROWSE HISTORY (2026-07-03): any VIEWED market loads its full history, not just watchlisted
+  // ones. The serve above already created the markets row (writeRecord), so if this market has
+  // never been backfilled (status null) or previously failed, kick the reconstruction now — the
+  // SAME fire-and-forget /api/backfill trigger addMarket uses. Gated on needsBackfill so a
+  // done/pending market is a no-op (no re-fetch), and it self-heals a 'failed' status on re-view.
+  // Watched markets are unaffected (they're already 'done', or the cron retries them). This does
+  // NOT add the market to any watchlist/rail and does NOT enter the cron scope (allWatchedMarketIds
+  // reads the watchlist tables, not markets). Runs in after() → its own function budget; the first
+  // render already shows "Backfilling history…". A resolved market (e.g. SpaceX) is already 'done'
+  // → skips; backfill only ever writes market_history, never the frozen record.
+  if (needsBackfill(backfillStatus)) {
+    const h = await headers();
+    const host = h.get('host');
+    const proto = h.get('x-forwarded-proto') ?? (host?.startsWith('localhost') ? 'http' : 'https');
+    after(() => triggerBackfill(id, host, proto));
+  }
   const hist: HistoryUI = {
     velocity: deriveVelocity(rows) as VelocityResult,
     dispersion: deriveDispersion(rows) as DispersionResult,
