@@ -66,6 +66,25 @@ export function hashRawInputs(rawInputs) {
 
 const numOrNull = (x) => (x != null && Number.isFinite(Number(x)) ? Number(x) : null);
 
+/**
+ * Parse a gamma market leg's `clobTokenIds` (a JSON string OR an already-parsed array) into a
+ * NON-EMPTY token-id array, or NULL when it's absent/empty/malformed. A leg with no clobTokenIds has
+ * no order book — an untraded/placeholder rung Polymarket lists but that isn't tradeable yet (e.g.
+ * the "hit (HIGH) $5,000" leg on the gold-touch market) — so it cannot be priced. Callers SKIP such a
+ * leg (filter it out) instead of crashing on `ids[0]` (the old inline `JSON.parse(...) : m.clobTokenIds`
+ * left `ids` undefined for a missing field → `ids[0]` → an unhandled TypeError → HTTP 500).
+ */
+export function parseClobTokenIds(m) {
+  const raw = m?.clobTokenIds;
+  if (raw == null) return null;
+  try {
+    const ids = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return Array.isArray(ids) && ids.length > 0 ? ids : null;
+  } catch {
+    return null; // malformed JSON → treat as no token (skip the leg), never throw here
+  }
+}
+
 /** Per-leg supplementary liquidity fields from a gamma market leg: windowed volume (24h / 7d) AND
  *  (Increment C) order-book depth `m.liquidity` (resting-order $ value; `liquidityClob` is the same
  *  number). All SUPPLEMENTARY — recorded outside raw_inputs, never hashed. */
@@ -180,10 +199,8 @@ export async function fetchMarketMeta(config = null) {
       const match = m.question.match(re);
       if (!match) throw new Error(`Cannot parse threshold: ${m.question}`);
       const threshold = parseFloat(match[1]);
-      const ids =
-        typeof m.clobTokenIds === 'string'
-          ? JSON.parse(m.clobTokenIds)
-          : m.clobTokenIds;
+      const ids = parseClobTokenIds(m);
+      if (!ids) return null; // untraded/placeholder rung (no order book) — skip, don't crash on ids[0]
       return {
         threshold,
         label: labelOf(threshold),
@@ -199,6 +216,7 @@ export async function fetchMarketMeta(config = null) {
         outcome_prices: m.outcomePrices ?? null,
       };
     })
+    .filter(Boolean) // drop skipped (no-token) legs; SpaceX legs all have tokens → identity → byte-identical
     .sort((a, b) => a.threshold - b.threshold);
 }
 
@@ -398,7 +416,14 @@ export async function fetchBinaryMeta(config = null) {
   const ev = events[0];
   const m = (ev.markets || [])[0];
   if (!m) throw new Error('Gamma binary event contained no market');
-  const ids = typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : m.clobTokenIds;
+  const ids = parseClobTokenIds(m);
+  if (!ids) {
+    // A binary has ONE leg — a missing order book can't be skipped, so surface a clean 404-class
+    // error (integer code → statusFor maps it to 404) instead of crashing on ids[0] (a 500).
+    const e = new Error(`Binary market "${config?.event_slug ?? m.question}" has no tradeable order book`);
+    e.code = 404;
+    throw e;
+  }
   return {
     title: ev.title ?? m.question ?? config?.event_slug,
     question: m.question,
@@ -525,7 +550,8 @@ export async function fetchBucketMeta(config) {
   const legs = all.map((m) => {
     const interval = parseBucketLeg(m.question);
     if (!interval) return null; // categorical leg (no $ amount) — excluded from the PMF
-    const ids = typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : m.clobTokenIds;
+    const ids = parseClobTokenIds(m);
+    if (!ids) return null; // untraded/placeholder rung (no order book) — skip, don't crash on ids[0]
     return {
       lo: interval.lo, hi: interval.hi, unit: interval.unit, token_id: ids[0],
       volume: m.volume != null ? Number(m.volume) : null,
@@ -660,7 +686,8 @@ export async function fetchTouchMeta(config) {
   const legs = all.map((m) => {
     const t = parseTouchLeg(m.question);
     if (!t) return null;
-    const ids = typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : m.clobTokenIds;
+    const ids = parseClobTokenIds(m);
+    if (!ids) return null; // untraded/placeholder rung (e.g. gold "hit (HIGH) $5,000") — skip, don't crash
     return {
       side: t.side, level: t.level, token_id: ids[0],
       volume: m.volume != null ? Number(m.volume) : null,
@@ -765,7 +792,8 @@ export async function fetchCategoricalMeta(config) {
   const all = Array.isArray(ev.markets) ? ev.markets : [];
   if (all.length < 2) throw new Error(`Categorical event ${config.event_slug} has <2 outcomes`);
   const legs = all.map((m) => {
-    const ids = typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : m.clobTokenIds;
+    const ids = parseClobTokenIds(m);
+    if (!ids) return null; // untraded/placeholder outcome (no order book) — skip, don't crash on ids[0]
     return {
       label: (m.groupItemTitle != null && String(m.groupItemTitle).trim()) || m.question,
       token_id: ids[0], // YES
@@ -774,7 +802,7 @@ export async function fetchCategoricalMeta(config) {
       closed: m.closed === true, active: m.active !== false, accepting_orders: m.acceptingOrders !== false,
       uma_resolution_status: m.umaResolutionStatus ?? null, outcomes: m.outcomes ?? null, outcome_prices: m.outcomePrices ?? null,
     };
-  });
+  }).filter(Boolean);
   return { title: ev.title ?? config.event_slug, end_date: ev.endDate ?? null, legs };
 }
 
