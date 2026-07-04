@@ -5,6 +5,41 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## A gamma leg with no `clobTokenIds` crashes `ids[0]` — an untraded/placeholder rung, not a broken market
+**Symptom (bit prod, 2026-07-03):** searching `what-will-gold-gc-hit-by-end-of-december` 500'd with
+`Cannot read properties of undefined (reading '0')` at `core/fetch.js` `fetchTouchMeta`. The market
+is a perfectly valid directional_touch (7 "(HIGH) hit $X" legs); but leg 0 (`hit (HIGH) $5,000`) is an
+UNTRADED PLACEHOLDER — gamma lists it with **no `clobTokenIds`** (null / field absent). It parsed fine
+as a touch leg (has "(HIGH)" + "$"), so it wasn't filtered; then the inline
+`typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : m.clobTokenIds` left `ids`
+**undefined**, and `token_id: ids[0]` threw a bare `TypeError` (no `.code`) → `statusFor` → **HTTP 500**.
+**Reality:** the SAME unguarded `ids[0]` lived in ALL 5 meta parsers (`fetchMarketMeta`/`Binary`/
+`Bucket`/`Touch`/`Categorical`). A leg with no clobTokenIds has no order book → it can't be priced,
+so it must be DROPPED, not crashed on. **Lesson:** never index a gamma leg's tokens without guarding a
+missing list. Fixed via shared `parseClobTokenIds(m)` (returns null for absent/empty/malformed, never
+throws); the 4 multi-leg parsers `.filter(Boolean)` out no-token legs (market loads from its tradeable
+legs); the single-leg binary can't skip → throws a clean **integer-`code`-404** (NOT
+`MarketNotInCatalogError`, whose `.code` is the STRING `'23503'` → `statusFor` would map it to 500,
+not 404 — check `Number.isInteger(err.code)` when picking an error to surface). SpaceX byte-identical
+(all its legs have tokens → the filter is identity → parity GATE 2 green). Merged main `4b02cc2`.
+
+## `supabase.auth.getSession()` trusts the cookie UNVERIFIED — use `getUser()` for any server-side trust decision
+**Symptom (Vercel warning, 2026-07-03):** "Using the user object as returned from
+`supabase.auth.getSession()` could be insecure. Use `supabase.auth.getUser()` instead." Real: the only
+remaining `getSession()` call was `lib/watchlist.mjs` `currentUid` — it read `data.session.user.id`
+(which fires the warning) and used that uid BOTH to gate auth (NotAuthenticatedError) AND as the
+`user_id`/`added_by` on the write. `getSession()` only READS the cookie and trusts it without
+verification; `getUser()` makes a live call that cryptographically verifies the JWT with the auth
+server. **Reality:** `middleware.ts` + `app/(app)/layout.tsx` already used `getUser()` correctly — the
+watchlist helper was the straggler. The DB-level guard (RLS `with check (… = auth.uid())`) would have
+rejected a forged uid anyway, but the pre-RLS identity + the auth gate must still be honest.
+**Lesson:** on the SERVER (middleware, Server Components, Server Actions, Route Handlers) use
+`getUser()` whenever the return identifies/guards a user; keep `getSession()` only for a client-side
+component or when you need JUST the `access_token` for a downstream call (no trust decision). New
+shape: `const { data:{ user }, error } = await sb.auth.getUser(); if (error || !user) …` — fail CLOSED.
+`getUser()` costs a network round-trip (~50-100ms) — fine at an auth boundary, never per-row/in a loop.
+Merged main `67a1b89`.
+
 ## A breaking `derived` reshape also invalidates STORED FINAL records — the freeze path revalidates them
 **Symptom (verify-phase2a C4, found 2026-07-02):** the C4 cache-poison check (claim SpaceX OPEN →
 the serve must probe, catch resolution, and re-freeze) returned `lifecycle_state: undefined` — the

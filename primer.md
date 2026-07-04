@@ -8,7 +8,36 @@
 > There is **no `.workflows/_system/` dir, no `codebase.md`/`MEMORY.md`** — the global `/sync`
 > skill tolerates their absence (updated 2026-06-18); don't be alarmed when it skips them.
 
-## ⮕ DIRECTION (2026-07-02, latest): 4 approved HARD-STOP core/ fixes — 4 more commits on `fix/predemo-polish-pass`
+## ⮕ DIRECTION (2026-07-03/04, latest): BROWSE-HISTORY + 2 bug fixes — ALL MERGED to main + PUSHED (`main` @ `4b02cc2`)
+- **`main` is at `4b02cc2`, in sync with `origin/main`.** Everything below the predemo/HARD-STOP entries
+  (which were merged as `fe84e7e`) is now ALSO on main + pushed. **387/387; parity 4/4 byte-identical
+  (`c1be52e4…b89003`); tsc + next build clean.** Three independent pieces, each branch merged `--no-ff`:
+- **BROWSE-HISTORY (`0d9b035`):** any VIEWED market (search/⌘K/direct `?m=`) now loads its full
+  history/trend data — no longer watchlist-only. Rail stays watchlist-only; **cron never snapshots
+  browse markets** (the hard invariant — `allWatchedMarketIds` reads the watchlist tables, not
+  `markets`; verified browse ids stay out). DERIVED model, **no schema change** (browse =
+  served-but-not-watchlisted; `writeRecord` already creates the FK row). `DetailData` fires the shared
+  `lib/trigger-backfill.mjs` (extracted from `addMarket`) via `after()` in the RSC (works — 222 rows on
+  a browse); `TrendHistory` "watched" gate dropped; `addMarket` trigger now `needsBackfill`-gated so
+  browse→Add reuses the data (no re-fetch). See [[decisions]] "Browse markets load history via a DERIVED
+  model". Full acceptance browser-verified (Backfilling display, rail absence, upgrade path, cron scope).
+- **AUTH FIX (`67a1b89`):** `lib/watchlist.mjs currentUid` was the last `getSession()` (trusts the
+  cookie unverified — Vercel warning + a real pre-RLS gap) → now `getUser()` (verifies the JWT), fails
+  closed. middleware + layout already used getUser. See [[gotchas]] "getSession trusts the cookie
+  UNVERIFIED".
+- **GOLD TOUCH-TOKEN GUARD (`4b02cc2`):** `what-will-gold-gc-hit-by-end-of-december` 500'd — an untraded
+  "(HIGH) $5,000" leg with no `clobTokenIds` crashed `ids[0]` in `fetchTouchMeta`. New shared
+  `parseClobTokenIds` (null for absent/empty/malformed); all 5 meta parsers now SKIP a no-token leg
+  (market loads from its tradeable legs; binary single-leg → clean coded-404). SpaceX byte-identical.
+  See [[gotchas]] "A gamma leg with no clobTokenIds crashes ids[0]".
+- **⚠ STILL OPEN (operator-owned, carried):** verify-phase2a **C4** stays red — the dev-seeded SpaceX
+  row is the PRE-SPLIT schema-1.3.0 record; the freeze path revalidates priors → 422. Fix:
+  `node scripts/seed-spacex.mjs` on dev (+ prod at standup). Unrelated to any of the above. Also open:
+  METHODOLOGY.md realignment (pinned 1.2.1, behind methodology.json 1.7.1); the browse-history GC
+  (bounded-growth of browse rows); `feat/browse-history` local branch is fully merged and can be `-d`'d.
+- **NEXT:** nothing pending on these three — all shipped. Resume from the operator's next ask.
+
+## ⮕ DIRECTION (2026-07-02): 4 approved HARD-STOP core/ fixes — 4 more commits on `fix/predemo-polish-pass`
 - **Operator pre-approved and specified all 4 HARD-STOP items** from the pass below; implemented as
   4 separate commits (16→17 total on the branch). **377/377 (+7 over the 370 from the prior pass);
   parity 4/4 byte-identical; tsc clean.** `fix/predemo-polish-pass` had already been merged into

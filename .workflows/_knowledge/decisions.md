@@ -5,6 +5,33 @@ Newest at top. If you're about to change one of these, read the entry first.
 
 ---
 
+## Browse markets load history via a DERIVED model — no `scope` column, no migration
+**Decided (2026-07-03):** any VIEWED market (search/⌘K/direct `?m=` URL) now reconstructs its full
+CLOB history, not just watchlisted ones — while the rail stays watchlist-only and the cron never
+snapshots browse markets. The framing assumed this needed a `markets.scope` column (browse/personal/
+org, migration 0012); it does NOT. "Browse" = **served-but-not-watchlisted**, entirely derived:
+- **The FK target already exists on browse.** `lib/cache.mjs writeRecord` upserts the `markets` row
+  (`onConflict:'id'`) on EVERY serve, so `market_history.market_id → markets.id` is satisfied without
+  any special creation path.
+- **Cron scope is watchlist-governed, not markets-governed.** `allWatchedMarketIds()` reads
+  `personal_watchlist ∪ org_watchlist` (NOT `markets`), and `marketsNeedingBackfill(ids)` is bounded
+  by that set — so a browse market can never enter the snapshot batch (verified: browsed ids return
+  `false` from `allWatchedMarketIds`, count unchanged). This is the hard bounded-growth invariant.
+- **Rail is watchlist-governed** (`readScan ← listVisible ← my_visible_watchlist`) → browse markets
+  never appear. **No view over `markets`** → no view refresh needed even if a column were added.
+**What actually changed (all display/orchestration, no schema, no `core/`):** `DetailData`
+(MarketDetailView) fires the SAME fire-and-forget backfill trigger `addMarket` uses, gated on
+`needsBackfill(status)` (null/'failed'), via `after(() => triggerBackfill(...))` — **`after()` in a
+Server Component works** (verified: 222 rows written on a browse). The trigger was extracted to a
+shared `lib/trigger-backfill.mjs` (used by both the add + browse paths). The `TrendHistory` "watched"
+gate on the "Backfilling…" display was REMOVED (obsolete — every viewed market now backfills).
+`addMarket`'s trigger is now gated on `needsBackfill` too, so browse→Add reuses the browse data (no
+re-fetch, no duplicate rows; `writeBackfillRow` ignores `(market_id,snapshot_date)` conflicts as a
+2nd guard). **Constrains:** never make cron scope read `markets` instead of the watchlist tables
+(that's what keeps browse out of the cron). A browse market's one-time backfill is bounded per-market,
+but the COUNT of browse markets grows unbounded — a future GC finds them via a LEFT JOIN vs the
+watchlist tables + `markets.last_checked_at` (deferred). Merged to main `0d9b035`, pushed.
+
 ### latest.json schema_version label — preserved as historical record
 DATE: 2026-07-02
 STATUS: ACTIVE — INTENTIONALLY LEFT AS-IS
