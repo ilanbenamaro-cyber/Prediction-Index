@@ -467,6 +467,69 @@ test('collapseDaily: two cron captures on one date → the nearer-US-peak (18:00
   assert.equal(out[0].snapshot_hour, 18);
 });
 
+// ── deriveCategoricalSeries (multi-series pass, 2026-07-06): top-4 outcome lines. ──────────────
+import { deriveCategoricalSeries } from '../lib/market-history.mjs';
+
+/** A categorical history row: per-outcome de-vigged probs live in the record JSONB. */
+function catRow(dayIdx, outcomes, { confidenceTier = 'medium' } = {}) {
+  return {
+    snapshot_date: dateAt(dayIdx), kind: 'categorical', confidence_tier: confidenceTier,
+    record: { snapshot: { derived: { outcomes } } },
+  };
+}
+
+test('deriveCategoricalSeries: top-4 by CURRENT probability, tracked by label across days', () => {
+  const day = (a, b, c, d, e) => [
+    { label: '0 cuts', probability: a }, { label: '1 cut', probability: b },
+    { label: '2 cuts', probability: c }, { label: '3 cuts', probability: d },
+    { label: '4+ cuts', probability: e },
+  ];
+  const rows = [catRow(0, day(0.10, 0.30, 0.25, 0.20, 0.15)), catRow(1, day(0.05, 0.35, 0.30, 0.20, 0.10))];
+  const s = deriveCategoricalSeries(rows);
+  assert.equal(s.dual, false);
+  assert.equal(s.probLines.length, 4);
+  // ranked by the LATEST day's probabilities → '0 cuts' (0.05) is the one dropped
+  assert.deepEqual(s.probLines.map((l) => l.label), ['1 cut', '2 cuts', '3 cuts', '4+ cuts']);
+  assert.deepEqual(s.probLines[0].points.map((p) => p.value), [0.30, 0.35]); // tracked by label
+  assert.deepEqual(s.valueLines, []);
+});
+
+test('deriveCategoricalSeries: fewer than 4 outcomes → that many lines; missing days skip points', () => {
+  const rows = [
+    catRow(0, [{ label: 'A', probability: 0.6 }, { label: 'B', probability: 0.4 }]),
+    catRow(1, [{ label: 'A', probability: 0.7 }]), // B absent this day
+    catRow(2, [{ label: 'A', probability: 0.65 }, { label: 'B', probability: 0.35 }], { confidenceTier: 'low' }),
+  ];
+  const s = deriveCategoricalSeries(rows);
+  assert.equal(s.probLines.length, 2);
+  const b = s.probLines.find((l) => l.label === 'B');
+  assert.deepEqual(b.points.map((p) => p.date), [dateAt(0), dateAt(2)]);
+  assert.deepEqual(s.lowDays, [dateAt(2)]);
+});
+
+test('deriveCategoricalSeries: null for non-categorical rows, <2 days, or no outcomes', () => {
+  assert.equal(deriveCategoricalSeries([catRow(0, [{ label: 'A', probability: 0.6 }])]), null);
+  assert.equal(deriveCategoricalSeries([mkRow(0, { kind: 'binary' }), mkRow(1, { kind: 'binary' })]), null);
+  assert.equal(deriveCategoricalSeries([catRow(0, []), catRow(1, [])]), null);
+});
+
+// ── deriveChartSeries IQR band (multi-series pass, 2026-07-06) ─────────────────────────────────
+test('deriveChartSeries: P25–P75 band from object iqr; absent for width-only/missing iqr', () => {
+  const mk = (i, iqr) => ({
+    snapshot_date: dateAt(i), kind: 'survival', implied_median: 2.0 + i * 0.01, implied_mean: null,
+    confidence_tier: 'high',
+    record: { snapshot: { derived: { markets: [{ threshold: 2.0, prob: 0.5 }], iqr } } },
+  });
+  const withBand = deriveChartSeries([mk(0, { p25: 1.9, p75: 2.4 }), mk(1, { p25: 1.95, p75: 2.35 })]);
+  assert.deepEqual(withBand.band, [
+    { date: dateAt(0), lo: 1.9, hi: 2.4 },
+    { date: dateAt(1), lo: 1.95, hi: 2.35 },
+  ]);
+  // a legacy NUMERIC iqr (width only) or a missing one → no band, never a throw
+  assert.equal(deriveChartSeries([mk(0, 0.5), mk(1, 0.4)]).band, null);
+  assert.equal(deriveChartSeries([mk(0, null), mk(1, { p25: 1.9, p75: 2.4 })]).band, null); // 1 day < 2
+});
+
 // ── deriveTouchSeries (Bug 3, 2026-07-06): the touch chart plots P(touch), not the barrier
 //    price. One line per quoted side at the representative (nearest-50%) level. ────────────────
 import { deriveTouchSeries } from '../lib/market-history.mjs';

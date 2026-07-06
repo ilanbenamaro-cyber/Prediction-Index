@@ -49,6 +49,7 @@
   --c-flat: var(--text-muted);
   --accent-blue: #5b9bd5; /* links, interactive, lifecycle OPEN */
   --accent-amber: #c47f3a;/* primary highlight */
+  --accent-violet: #9d8cd6; /* 4th data-series colour (multi-series charts only) */
   --tier1: #2dd4bf;       /* Tier-1 analytics tag */
 
   /* semantic aliases */
@@ -398,6 +399,8 @@ a:hover { text-decoration: underline; }
 .hist-line-median { stroke: var(--tier1); stroke-width: 2.6; }
 .hist-line-mean { stroke: var(--tier1); stroke-width: 1.2; opacity: 0.4; stroke-dasharray: 5 4; }
 .hist-line.is-low { stroke-dasharray: 4 3; opacity: 0.45; }
+.hist-band { fill: var(--tier1); opacity: 0.10; stroke: none; } /* P25–P75 IQR region behind the median */
+.hist-swatch-band { border-top-color: var(--tier1); opacity: 0.35; }
 .hist-axis-r { fill: var(--text-faint); font-family: var(--font-mono); font-size: 9px; }
 .hist-legend { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); margin-top: var(--sp-2);
   font-size: var(--fs-tiny); color: var(--text-muted); }

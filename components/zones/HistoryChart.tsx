@@ -25,7 +25,9 @@ import { niceTicks } from '@/lib/touch-rangebar.mjs';
 
 export interface HistoryPoint { date: string; value: number }
 export interface ChartLine { key: string; label?: string; threshold?: number; points: HistoryPoint[]; faint?: boolean; dashed?: boolean }
-export interface ChartSeries { dual: boolean; probLines: ChartLine[]; valueLines: ChartLine[]; lowDays: string[] }
+/** One day of the P25–P75 IQR band (ladder value axis) — a shaded dispersion region. */
+export interface BandPoint { date: string; lo: number; hi: number }
+export interface ChartSeries { dual: boolean; probLines: ChartLine[]; valueLines: ChartLine[]; lowDays: string[]; band?: BandPoint[] | null }
 
 const VB_W = 480;
 const VB_H = 190;
@@ -40,7 +42,7 @@ const PROB_CLASSES = ['hist-line-p0', 'hist-line-p1', 'hist-line-p2']; // up to 
 // Multi-prob series colours: touch sides are FIXED (HIGH = warm amber, LOW = cool blue — the
 // direction must read at a glance); other keys take the palette by index. CSS variables only.
 const KEY_COLORS: Record<string, string> = { high: 'var(--accent-amber)', low: 'var(--accent-blue)' };
-const SERIES_PALETTE = ['var(--accent-amber)', 'var(--accent-blue)', 'var(--tier1)', 'var(--text-muted)'];
+const SERIES_PALETTE = ['var(--accent-amber)', 'var(--accent-blue)', 'var(--tier1)', 'var(--accent-violet)'];
 const lineColor = (l: ChartLine, i: number) => KEY_COLORS[l.key] ?? SERIES_PALETTE[i % SERIES_PALETTE.length];
 
 const ms = (date: string) => Date.parse(`${date}T00:00:00Z`);
@@ -75,6 +77,11 @@ export function HistoryChart({ points, kind, unit = '', label = 'Value', series 
     };
     const probLines = series.probLines.map((l) => ({ ...l, points: filt(l.points) }));
     const valueLines = series.valueLines.map((l) => ({ ...l, points: filt(l.points) }));
+    // The IQR band filters by the same window (its dates are the median line's dates).
+    const bandAll = series.band ?? null;
+    const band = bandAll && days != null
+      ? bandAll.filter((b) => ms(b.date) >= (bandAll.length ? ms(bandAll[bandAll.length - 1].date) : 0) - days * DAY_MS)
+      : bandAll;
     const primary = valueLines.find((l) => l.key === 'median') ?? valueLines[0] ?? probLines[0];
     const enough = primary && primary.points.length >= 2;
     return (
@@ -83,10 +90,10 @@ export function HistoryChart({ points, kind, unit = '', label = 'Value', series 
         {!enough
           ? <Collecting range={range} backfilling={backfilling} />
           : series.dual
-            ? <DualPlot probLines={probLines} valueLines={valueLines} lowDays={series.lowDays} unit={unit} />
+            ? <DualPlot probLines={probLines} valueLines={valueLines} lowDays={series.lowDays} unit={unit} band={band && band.length >= 2 ? band : null} />
             : <MultiProbPlot lines={probLines} lowDays={series.lowDays} />}
         {enough && (series.dual
-          ? <DualLegend probLines={probLines} valueLines={valueLines} unit={unit} />
+          ? <DualLegend probLines={probLines} valueLines={valueLines} unit={unit} hasBand={!!(band && band.length >= 2)} />
           : <MultiProbLegend lines={probLines} />)}
       </div>
     );
@@ -203,8 +210,8 @@ function Plot({ points, kind, unit, label }: { points: HistoryPoint[]; kind: str
 /** v1 ITEM 7: the dual-axis multi-line plot. Probability lines read off the LEFT axis (0–100%),
  *  value lines (median/mean) off the RIGHT axis. Each line is drawn segment-by-segment so a
  *  low-confidence day can dash/fade just its adjacent segments (the v1 segment styling). */
-function DualPlot({ probLines, valueLines, lowDays, unit }:
-  { probLines: ChartLine[]; valueLines: ChartLine[]; lowDays: string[]; unit: string }) {
+function DualPlot({ probLines, valueLines, lowDays, unit, band = null }:
+  { probLines: ChartLine[]; valueLines: ChartLine[]; lowDays: string[]; unit: string; band?: BandPoint[] | null }) {
   const P = PAD_DUAL;
   const low = new Set(lowDays);
   // X domain across every visible point on every line.
@@ -213,10 +220,14 @@ function DualPlot({ probLines, valueLines, lowDays, unit }:
   const xScale = (msVal: number) => xHi === xLo ? P.l : P.l + ((msVal - xLo) / (xHi - xLo)) * (VB_W - P.l - P.r);
 
   // LEFT axis: probability, FITTED to the filtered window (Bug 1 — was fixed 0–100%, which never
-  // re-domained on a tab switch). RIGHT axis: value range across the value lines, padded.
+  // re-domained on a tab switch). RIGHT axis: value range across the value lines AND the IQR band
+  // (the band must never bleed past the plot), padded.
   const pDom = probDomain(probLines.flatMap((l) => l.points.map((p) => p.value)));
   const yP = (v: number) => (VB_H - P.b) - ((v - pDom.lo) / (pDom.hi - pDom.lo)) * (VB_H - P.t - P.b);
-  const vVals = valueLines.flatMap((l) => l.points.map((p) => p.value));
+  const vVals = [
+    ...valueLines.flatMap((l) => l.points.map((p) => p.value)),
+    ...(band ?? []).flatMap((b) => [b.lo, b.hi]),
+  ];
   const vMin = vVals.length ? Math.min(...vVals) : 0;
   const vMax = vVals.length ? Math.max(...vVals) : 1;
   const vPad = (vMax - vMin) * 0.1 || Math.abs(vMax) * 0.05 || 1;
@@ -246,6 +257,7 @@ function DualPlot({ probLines, valueLines, lowDays, unit }:
   const swatchColor = (cls: string): string =>
     ({ 'hist-line-p0': 'var(--accent-amber)', 'hist-line-p1': 'var(--accent-blue)', 'hist-line-p2': 'var(--text-muted)',
        'hist-line-median': 'var(--tier1)', 'hist-line-mean': 'var(--tier1)' } as Record<string, string>)[cls] ?? 'var(--text-muted)';
+  const bandByDate = new Map((band ?? []).map((b) => [b.date, b]));
   const allDateStrs = [...new Set([...probLines, ...valueLines].flatMap((l) => l.points.map((p) => p.date)))].sort();
   const anchors: SnapAnchor[] = allDateStrs.map((date) => {
     const rows: TooltipRow[] = [];
@@ -264,8 +276,19 @@ function DualPlot({ probLines, valueLines, lowDays, unit }:
       rows.push({ label: l.label ?? l.key, swatch: color, value: `${unitPfx(unit)}${pt.value.toFixed(2)}${unit}` });
       dots.push({ y: yV(pt.value), color });
     });
+    const b = bandByDate.get(date);
+    if (b) rows.push({ label: 'IQR (P25–P75)', swatch: 'var(--tier1)', value: `${unitPfx(unit)}${b.lo.toFixed(2)}–${unitPfx(unit)}${b.hi.toFixed(2)}${unit}` });
     return { x: xScale(ms(date)), payload: { title: date, rows }, dots };
   });
+
+  // The IQR band as one closed polygon: the P75 edge left→right, then the P25 edge back.
+  const bandPath = band && band.length >= 2
+    ? [
+        ...band.map((b, i) => `${i === 0 ? 'M' : 'L'}${xScale(ms(b.date)).toFixed(1)},${yV(b.hi).toFixed(1)}`),
+        ...[...band].reverse().map((b) => `L${xScale(ms(b.date)).toFixed(1)},${yV(b.lo).toFixed(1)}`),
+        'Z',
+      ].join(' ')
+    : null;
 
   return (
     <ChartCrosshair vbW={VB_W} vbH={VB_H} plotLeft={P.l} plotRight={VB_W - P.r} plotTop={P.t} plotBottom={VB_H - P.b}
@@ -282,6 +305,8 @@ function DualPlot({ probLines, valueLines, lowDays, unit }:
       {valueLines.length > 0 && valTicks.map((v, i) => (
         <text key={`v${i}`} className="hist-axis-r" x={VB_W - P.r + 5} y={yV(v) + 3} textAnchor="start">{`${unitPfx(unit)}${v.toFixed(2)}${unit}`}</text>
       ))}
+      {/* P25–P75 IQR band (value axis) BEHIND every line — dispersion of the settlement distribution */}
+      {bandPath && <path className="hist-band" d={bandPath} data-field="hist-iqr-band" />}
       {/* probability lines (left axis) */}
       {probLines.map((l, i) => segments(l, yP, PROB_CLASSES[i] ?? 'hist-line-p2'))}
       {/* value lines (right axis): median solid bright, mean faint dashed */}
@@ -298,7 +323,7 @@ function DualPlot({ probLines, valueLines, lowDays, unit }:
 }
 
 /** Legend chips for the dual chart — names each line so the colour hierarchy is legible. */
-function DualLegend({ probLines, valueLines, unit }: { probLines: ChartLine[]; valueLines: ChartLine[]; unit: string }) {
+function DualLegend({ probLines, valueLines, unit, hasBand = false }: { probLines: ChartLine[]; valueLines: ChartLine[]; unit: string; hasBand?: boolean }) {
   const swatch = (cls: string) => {
     const map: Record<string, string> = {
       'hist-line-p0': 'var(--accent-amber)', 'hist-line-p1': 'var(--accent-blue)', 'hist-line-p2': 'var(--text-muted)',
@@ -321,6 +346,12 @@ function DualLegend({ probLines, valueLines, unit }: { probLines: ChartLine[]; v
             {l.label ?? l.key}
           </span>
         ))}
+        {hasBand && (
+          <span className="hist-leg">
+            <span className="hist-swatch hist-swatch-band" />
+            {'P25–P75 band'}
+          </span>
+        )}
       </div>
       <p className="hist-note">Probabilities read off the left axis; valuation off the right. Dashed/faded segments are low-confidence days.</p>
     </>
