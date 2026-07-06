@@ -356,7 +356,7 @@ a:hover { text-decoration: underline; }
 .dist-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
 .dist-panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--sp-3); }
 .dist-svg { width: 100%; height: auto; margin-top: var(--sp-2); }
-.dist-grid { stroke: var(--border); stroke-width: 1; }
+.dist-grid { stroke: var(--text); stroke-opacity: 0.15; stroke-width: 1; } /* thin gridlines, 0.15 per design spec */
 .dist-ref { stroke: var(--text-faint); stroke-width: 1; stroke-dasharray: 5 4; }
 .dist-cdf-line { stroke: var(--accent-blue); stroke-width: 1.5; }
 .dist-cdf-dot { fill: var(--accent-blue); }
@@ -386,13 +386,14 @@ a:hover { text-decoration: underline; }
   font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 600; padding: 2px 7px;
   border-radius: var(--radius); cursor: pointer; letter-spacing: var(--track-label); }
 .hist-range-btn:hover { color: var(--accent-blue); border-color: var(--border-strong); }
-.hist-range-btn.is-active { color: var(--accent-amber); border-color: var(--accent-amber); }
+.hist-range-btn.is-active { color: var(--accent-amber); border-color: var(--accent-amber);
+  background: color-mix(in srgb, var(--accent-amber) 14%, transparent); } /* clear active-tab fill, not just text */
 /* Increment 1: rail 24h volume chip (primary liquidity signal). */
 .wl-vol24 { font-size: var(--fs-micro); font-variant-numeric: tabular-nums; }
 /* v1 ITEM 7: multi-line dual-axis trend chart — per-threshold P(>X) lines (left % axis) +
    implied median/mean (right value axis). Deliberate hierarchy: median brightest/thickest,
    threshold probs supporting, mean a faint dashed reference. Low-confidence days are dashed. */
-.hist-line { fill: none; stroke-width: 1.4; }
+.hist-line { fill: none; stroke-width: 2; } /* 2px series strokes per design spec */
 .hist-line-p0 { stroke: var(--accent-amber); }
 .hist-line-p1 { stroke: var(--accent-blue); }
 .hist-line-p2 { stroke: var(--text-muted); }
@@ -402,8 +403,8 @@ a:hover { text-decoration: underline; }
 .hist-band { fill: var(--tier1); opacity: 0.10; stroke: none; } /* P25–P75 IQR region behind the median */
 .hist-swatch-band { border-top-color: var(--tier1); opacity: 0.35; }
 .hist-axis-r { fill: var(--text-faint); font-family: var(--font-mono); font-size: 9px; }
-.hist-legend { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); margin-top: var(--sp-2);
-  font-size: var(--fs-tiny); color: var(--text-muted); }
+.hist-legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-1) var(--sp-3);
+  margin-bottom: var(--sp-1); font-size: var(--fs-tiny); color: var(--text-muted); } /* compact, top-right of the chart area */
 .hist-leg { display: inline-flex; align-items: center; gap: 5px; }
 .hist-swatch { width: 14px; height: 0; border-top-width: 2px; border-top-style: solid; display: inline-block; }
 .hist-note { margin-top: var(--sp-1); font-size: var(--fs-micro); color: var(--text-faint); }

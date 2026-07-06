@@ -20,7 +20,7 @@
 
 import { useState } from 'react';
 import { ChartCrosshair, type SnapAnchor, type TooltipRow } from './ChartCrosshair';
-import { pickTicks, probDomain } from '@/lib/chart-hover.mjs';
+import { pickTicks, probDomain, fmtDateShort } from '@/lib/chart-hover.mjs';
 import { niceTicks } from '@/lib/touch-rangebar.mjs';
 
 export interface HistoryPoint { date: string; value: number }
@@ -84,17 +84,21 @@ export function HistoryChart({ points, kind, unit = '', label = 'Value', series 
       : bandAll;
     const primary = valueLines.find((l) => l.key === 'median') ?? valueLines[0] ?? probLines[0];
     const enough = primary && primary.points.length >= 2;
+    // Legend sits TOP-RIGHT of the chart area (above the plot, right-aligned via CSS) so series
+    // identification comes before reading; the explanatory note stays below the plot.
     return (
       <div className="hist-chart" data-field="history-chart">
         <ChartHead label={label} range={range} setRange={setRange} />
+        {enough && (series.dual
+          ? <DualLegend probLines={probLines} valueLines={valueLines} unit={unit} hasBand={!!(band && band.length >= 2)} />
+          : <MultiProbLegend lines={probLines} />)}
         {!enough
           ? <Collecting range={range} backfilling={backfilling} />
           : series.dual
             ? <DualPlot probLines={probLines} valueLines={valueLines} lowDays={series.lowDays} unit={unit} band={band && band.length >= 2 ? band : null} />
             : <MultiProbPlot lines={probLines} lowDays={series.lowDays} />}
-        {enough && (series.dual
-          ? <DualLegend probLines={probLines} valueLines={valueLines} unit={unit} hasBand={!!(band && band.length >= 2)} />
-          : <MultiProbLegend lines={probLines} />)}
+        {enough && series.dual &&
+          <p className="hist-note">Probabilities read off the left axis; valuation off the right. Dashed/faded segments are low-confidence days.</p>}
       </div>
     );
   }
@@ -176,7 +180,7 @@ function Plot({ points, kind, unit, label }: { points: HistoryPoint[]; kind: str
   // Hover (snap): the headline value on that date.
   const anchors: SnapAnchor[] = points.map((p, i) => ({
     x: xScale(xs[i]),
-    payload: { title: p.date, rows: [{ label, swatch: 'var(--accent-blue)', value: fmtVal(p.value, kind, unit) }] },
+    payload: { title: fmtDateShort(p.date, { year: true }), rows: [{ label, swatch: 'var(--accent-blue)', value: fmtVal(p.value, kind, unit) }] },
     dots: [{ y: yScale(p.value), color: 'var(--accent-blue)' }],
   }));
 
@@ -193,13 +197,13 @@ function Plot({ points, kind, unit, label }: { points: HistoryPoint[]; kind: str
       <polyline className="dist-cdf-line" points={line} fill="none" />
       {points.map((p, i) => (
         <circle key={i} className="dist-cdf-dot" cx={xScale(xs[i])} cy={yScale(p.value)} r={2.2}>
-          <title>{`${p.date} · ${fmtVal(p.value, kind, unit)}`}</title>
+          <title>{`${fmtDateShort(p.date, { year: true })} · ${fmtVal(p.value, kind, unit)}`}</title>
         </circle>
       ))}
       <g data-field="hist-x-labels">
         {pickTicks(points, X_TICKS).map(({ item, i }) => {
           const x = xScale(xs[i]);
-          return <text key={i} className="dist-tick" transform={`rotate(-45 ${x.toFixed(1)} ${xTickY})`} x={x.toFixed(1)} y={xTickY} textAnchor="end">{item.date.slice(5)}</text>;
+          return <text key={i} className="dist-tick" transform={`rotate(-45 ${x.toFixed(1)} ${xTickY})`} x={x.toFixed(1)} y={xTickY} textAnchor="end">{fmtDateShort(item.date)}</text>;
         })}
       </g>
     </svg>
@@ -278,7 +282,7 @@ function DualPlot({ probLines, valueLines, lowDays, unit, band = null }:
     });
     const b = bandByDate.get(date);
     if (b) rows.push({ label: 'IQR (P25–P75)', swatch: 'var(--tier1)', value: `${unitPfx(unit)}${b.lo.toFixed(2)}–${unitPfx(unit)}${b.hi.toFixed(2)}${unit}` });
-    return { x: xScale(ms(date)), payload: { title: date, rows }, dots };
+    return { x: xScale(ms(date)), payload: { title: fmtDateShort(date, { year: true }), rows }, dots };
   });
 
   // The IQR band as one closed polygon: the P75 edge left→right, then the P25 edge back.
@@ -314,7 +318,7 @@ function DualPlot({ probLines, valueLines, lowDays, unit, band = null }:
       <g data-field="hist-x-labels">
         {pickTicks(allDateStrs, X_TICKS).map(({ item, i }) => {
           const x = xScale(ms(item));
-          return <text key={i} className="dist-tick" transform={`rotate(-45 ${x.toFixed(1)} ${xTickY})`} x={x.toFixed(1)} y={xTickY} textAnchor="end">{item.slice(5)}</text>;
+          return <text key={i} className="dist-tick" transform={`rotate(-45 ${x.toFixed(1)} ${xTickY})`} x={x.toFixed(1)} y={xTickY} textAnchor="end">{fmtDateShort(item)}</text>;
         })}
       </g>
     </svg>
@@ -353,7 +357,6 @@ function DualLegend({ probLines, valueLines, unit, hasBand = false }: { probLine
           </span>
         )}
       </div>
-      <p className="hist-note">Probabilities read off the left axis; valuation off the right. Dashed/faded segments are low-confidence days.</p>
     </>
   );
 }
@@ -386,7 +389,7 @@ function MultiProbPlot({ lines, lowDays }: { lines: ChartLine[]; lowDays: string
       rows.push({ label: l.label ?? l.key, swatch: color, value: `${(pt.value * 100).toFixed(1)}%` });
       dots.push({ y: yP(pt.value), color });
     });
-    return { x: xScale(ms(date)), payload: { title: date, rows }, dots };
+    return { x: xScale(ms(date)), payload: { title: fmtDateShort(date, { year: true }), rows }, dots };
   });
 
   return (
@@ -416,7 +419,7 @@ function MultiProbPlot({ lines, lowDays }: { lines: ChartLine[]; lowDays: string
       <g data-field="hist-x-labels">
         {pickTicks(allDateStrs, X_TICKS).map(({ item, i }) => {
           const x = xScale(ms(item));
-          return <text key={i} className="dist-tick" transform={`rotate(-45 ${x.toFixed(1)} ${xTickY})`} x={x.toFixed(1)} y={xTickY} textAnchor="end">{item.slice(5)}</text>;
+          return <text key={i} className="dist-tick" transform={`rotate(-45 ${x.toFixed(1)} ${xTickY})`} x={x.toFixed(1)} y={xTickY} textAnchor="end">{fmtDateShort(item)}</text>;
         })}
       </g>
     </svg>

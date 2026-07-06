@@ -97,3 +97,18 @@ test('probDomain: empty/invalid input → the full 0–100% axis; custom minSpan
   const wide = probDomain([0.5], { minSpan: 0.3 });
   assert.ok(wide.hi - wide.lo >= 0.3 - 1e-12);
 });
+
+// ── fmtDateShort (design polish, 2026-07-06): "Jun 15" axis dates, hydration-safe (no Date). ───
+import { fmtDateShort } from '../lib/chart-hover.mjs';
+
+test('fmtDateShort: "Jun 15" ticks and "Jun 15, 2026" tooltip titles', () => {
+  assert.equal(fmtDateShort('2026-06-15'), 'Jun 15');
+  assert.equal(fmtDateShort('2026-01-05'), 'Jan 5'); // no leading zero on the day
+  assert.equal(fmtDateShort('2026-12-31', { year: true }), 'Dec 31, 2026');
+});
+
+test('fmtDateShort: unparseable input returns as-is, never throws', () => {
+  assert.equal(fmtDateShort('not-a-date'), 'not-a-date');
+  assert.equal(fmtDateShort(''), '');
+  assert.equal(fmtDateShort(null), '');
+});
