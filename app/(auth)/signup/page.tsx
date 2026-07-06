@@ -56,7 +56,7 @@ export default function SignupPage() {
     <main className="login-wrap">
       <form className="login-card" onSubmit={onSubmit}>
         <div className="login-brand">
-          <span className="num">POLYMARKET</span> TERMINAL
+          <span className="num">PREDICTION INDEX</span>
         </div>
         <div className="login-sub label">Accept your invite · invite-only access</div>
 

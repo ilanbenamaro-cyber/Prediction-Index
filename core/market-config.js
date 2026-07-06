@@ -81,7 +81,7 @@ export function defaultConfigForLadder(thresholds, meta = {}) {
   return {
     id: meta.id ?? meta.event_slug ?? 'market',
     name: meta.name ?? meta.id ?? 'market',
-    platform: meta.platform ?? 'polymarket',
+    platform: meta.platform ?? 'prediction index',
     market_url: meta.market_url ?? null,
     resolves: meta.resolves ?? null,
     event_slug: meta.event_slug ?? null,
