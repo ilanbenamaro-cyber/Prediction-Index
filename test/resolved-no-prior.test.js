@@ -1,14 +1,17 @@
-// test/resolved-no-prior.test.js — a RESOLVED market with NO cached prior must build a valid
-// minimal frozen record from gamma's settled outcomePrices, not throw a 409.
+// test/resolved-no-prior.test.js — a RESOLVED BINARY market with NO cached prior must build a
+// valid minimal frozen record from gamma's settled outcomePrices, not throw a 409.
 //
 // Context: browsing a resolved market the product never captured while OPEN used to 409
 // ("no prior record to freeze") from lib/compute.mjs. Gamma DOES serve resolved markets
 // (closed:true + umaResolutionStatus:"resolved" + outcomePrices), so buildMinimalResolvedRecord
-// reconstructs a valid kind:'binary' record from those settled prices (the FINAL prices are real
+// (now a shape-dispatching function — call as `buildMinimalResolvedRecord(shape, meta, id,
+// lifecycle?)`) reconstructs a valid record from those settled prices (the FINAL prices are real
 // observed data), with a real re-verifiable raw_sha256 over the UNCHANGED canonicalizeRawInputs
-// recipe. These lock: (1) the builder is valid + honest across YES/NO winners and a malformed
-// shape; (2) computeMarketRecord returns 200 on RESOLVED + prior=null; (3) the RESOLVED + prior
-// path is unchanged (still freezes the prior — the builder is not used).
+// recipe. This file covers the BINARY shape only; the other 4 shapes (survival/bucket_pmf/
+// directional_touch/categorical) are covered by test/resolved-no-prior-shapes.test.js. These lock:
+// (1) the builder is valid + honest across YES/NO winners and a malformed shape; (2)
+// computeMarketRecord returns 200 on RESOLVED + prior=null; (3) the RESOLVED + prior path is
+// unchanged (still freezes the prior — the builder is not used).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -32,7 +35,7 @@ function resolvedMeta({ outcomes = ['Yes', 'No'], outcomePrices = ['1', '0'], um
 
 // ── buildMinimalResolvedRecord (pure) ─────────────────────────────────────────
 test('buildMinimalResolvedRecord: outcomePrices ["1","0"] → valid RESOLVED record, YES won', () => {
-  const { record, lifecycle, config } = buildMinimalResolvedRecord(resolvedMeta(), 'x');
+  const { record, lifecycle, config } = buildMinimalResolvedRecord('binary', resolvedMeta(), 'x');
   validateRecord(record); // throws if invalid — the load-bearing assertion
   const d = record.snapshot.derived;
   assert.equal(record.snapshot.lifecycle.state, 'RESOLVED');
@@ -53,7 +56,7 @@ test('buildMinimalResolvedRecord: outcomePrices ["1","0"] → valid RESOLVED rec
 });
 
 test('buildMinimalResolvedRecord: outcomePrices ["0","1"] → NO won (second outcome)', () => {
-  const { record } = buildMinimalResolvedRecord(resolvedMeta({ outcomePrices: ['0', '1'] }), 'x');
+  const { record } = buildMinimalResolvedRecord('binary', resolvedMeta({ outcomePrices: ['0', '1'] }), 'x');
   validateRecord(record);
   const d = record.snapshot.derived;
   assert.equal(d.probability, 0);
@@ -63,14 +66,14 @@ test('buildMinimalResolvedRecord: outcomePrices ["0","1"] → NO won (second out
 });
 
 test('buildMinimalResolvedRecord: raw_sha256 differs by settled prices (real, content-dependent hash)', () => {
-  const a = buildMinimalResolvedRecord(resolvedMeta({ outcomePrices: ['1', '0'] }), 'x').record.snapshot.source.raw_sha256;
-  const b = buildMinimalResolvedRecord(resolvedMeta({ outcomePrices: ['0', '1'] }), 'x').record.snapshot.source.raw_sha256;
+  const a = buildMinimalResolvedRecord('binary', resolvedMeta({ outcomePrices: ['1', '0'] }), 'x').record.snapshot.source.raw_sha256;
+  const b = buildMinimalResolvedRecord('binary', resolvedMeta({ outcomePrices: ['0', '1'] }), 'x').record.snapshot.source.raw_sha256;
   assert.notEqual(a, b);
 });
 
 test('buildMinimalResolvedRecord: malformed gamma shape (missing outcomePrices) never throws, stays valid', () => {
   const meta = resolvedMeta({ outcomes: null, outcomePrices: null });
-  const { record } = buildMinimalResolvedRecord(meta, 'x'); // must not throw
+  const { record } = buildMinimalResolvedRecord('binary', meta, 'x'); // must not throw
   validateRecord(record); // still schema-valid
   assert.equal(record.snapshot.derived.kind, 'binary');
   assert.equal(record.snapshot.derived.probability, null); // no price → null (schema allows), never NaN
