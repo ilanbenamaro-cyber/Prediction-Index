@@ -411,6 +411,33 @@ test('leanHistoryRow: derive fns produce identical output on full-record vs lean
   assert.deepEqual(cat.record.snapshot.derived.markets, []);
 });
 
+test('leanHistoryRow: shape-specific paths (outcomes, high/low series) reconstruct under derived', () => {
+  // categorical projection carries `outcomes`; touch carries `high_series`/`low_series` —
+  // each must land back at record.snapshot.derived.<path> exactly where the full read has it.
+  const catRaw = {
+    snapshot_date: '2026-07-01', kind: 'categorical', dominant_outcome: 'December Meeting', dominant_prob: 0.44,
+    outcomes: [{ label: 'December Meeting', probability: 0.44, raw_probability: 0.19, volume: 215856 }],
+  };
+  const cat = leanHistoryRow(catRaw);
+  assert.deepEqual(cat.record.snapshot.derived.outcomes, catRaw.outcomes);
+  assert.deepEqual(cat.record.snapshot.derived.markets, []); // ladder defaults still present
+  assert.equal(cat.record.snapshot.derived.iqr, null);
+  assert.equal(cat.outcomes, undefined); // moved under record, not duplicated at the top level
+
+  const touchRaw = {
+    snapshot_date: '2026-07-01', kind: 'directional_touch', touch_range_lo: 62.01, touch_range_hi: 75.65,
+    high_series: [{ level: 80, prob: 0.115, volume: null }],
+    low_series: [{ level: 30, prob: 0.0035, volume: null }],
+  };
+  const touch = leanHistoryRow(touchRaw);
+  assert.deepEqual(touch.record.snapshot.derived.high_series, touchRaw.high_series);
+  assert.deepEqual(touch.record.snapshot.derived.low_series, touchRaw.low_series);
+  assert.equal(touch.high_series, undefined);
+  // a binary lean row (no paths at all) still reconstructs the derived skeleton
+  const bin = leanHistoryRow({ snapshot_date: '2026-07-01', kind: 'binary', probability: 0.12 });
+  assert.deepEqual(bin.record.snapshot.derived, { markets: [], iqr: null });
+});
+
 // ── collapseDaily (Bug 2, 2026-07-06): one row per UTC date — a date can carry an hour-0
 //    backfill row PLUS cron rows (unique key is date+hour since 0009); the chart must never
 //    render two dots at the same x. Nearest-US-peak wins → cron beats backfill. ────────────────

@@ -82,8 +82,10 @@ export async function DetailData({ id }: { id: string }) {
   // LEAN read (perf, 2026-07-02): the derivations consume ONLY derived.markets + derived.iqr from
   // each record, so the projection happens in Postgres — full-JSONB 365-row reads measured 1.6MB /
   // 287ms p50 vs 323KB / 75ms lean on a 180-day ladder. Every displayed field still flows.
+  // Shape-aware lean read: each shape projects only the record sub-paths its chart consumes
+  // (ladder: markets+iqr; touch: high/low series; categorical: outcomes; binary: scalars).
   let rows: HistoryRow[] = [];
-  try { rows = (await readHistoryLean(id, 365)) as HistoryRow[]; } catch { rows = []; }
+  try { rows = (await readHistoryLean(id, 365, chartKind)) as HistoryRow[]; } catch { rows = []; }
   // Backfill provenance: a freshly-added market whose CLOB reconstruction hasn't finished
   // (status null/'pending') shows "Backfilling history…" instead of the bare "Collecting" state.
   // A read failure degrades to null → the neutral collecting state, never breaks the serve.
