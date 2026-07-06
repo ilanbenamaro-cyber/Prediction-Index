@@ -1,4 +1,4 @@
-# polymarket-tracker
+# Prediction Index
 
 Tracks the Polymarket **"SpaceX IPO closing market cap above ___?"** prediction
 market. It runs two ways:
