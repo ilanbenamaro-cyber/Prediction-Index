@@ -410,3 +410,43 @@ test('leanHistoryRow: derive fns produce identical output on full-record vs lean
   const cat = leanHistoryRow({ snapshot_date: '2026-06-01', kind: 'categorical', markets: null, iqr: null, dominant_prob: 0.6 });
   assert.deepEqual(cat.record.snapshot.derived.markets, []);
 });
+
+// ── collapseDaily (Bug 2, 2026-07-06): one row per UTC date — a date can carry an hour-0
+//    backfill row PLUS cron rows (unique key is date+hour since 0009); the chart must never
+//    render two dots at the same x. Nearest-US-peak wins → cron beats backfill. ────────────────
+import { collapseDaily } from '../lib/market-history.mjs';
+
+test('collapseDaily: cron row (h15/h19) beats the hour-0 backfill row for the same date', () => {
+  const rows = [
+    { snapshot_date: '2026-06-29', snapshot_hour: 0, source: 'backfill', probability: 0.10 },
+    { snapshot_date: '2026-06-29', snapshot_hour: 19, source: 'cron', probability: 0.12 },
+    { snapshot_date: '2026-06-30', snapshot_hour: 0, source: 'backfill', probability: 0.11 },
+  ];
+  const out = collapseDaily(rows);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].snapshot_date, '2026-06-29');
+  assert.equal(out[0].source, 'cron'); // the live capture wins over the reconstruction
+  assert.equal(out[0].probability, 0.12);
+  assert.equal(out[1].source, 'backfill'); // sole row for its date passes through
+});
+
+test('collapseDaily: two cron captures on one date → the nearer-US-peak (18:00) hour wins', () => {
+  const rows = [
+    { snapshot_date: '2026-07-01', snapshot_hour: 2, source: 'cron', probability: 0.20 },
+    { snapshot_date: '2026-07-01', snapshot_hour: 18, source: 'cron', probability: 0.25 },
+  ];
+  const out = collapseDaily(rows);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].snapshot_hour, 18);
+});
+
+test('collapseDaily: already-unique dates pass through unchanged, ascending by date', () => {
+  const rows = [
+    { snapshot_date: '2026-07-02', snapshot_hour: 15, source: 'cron' },
+    { snapshot_date: '2026-07-01', snapshot_hour: 0, source: 'backfill' },
+  ];
+  const out = collapseDaily(rows);
+  assert.deepEqual(out.map((r) => r.snapshot_date), ['2026-07-01', '2026-07-02']);
+  assert.deepEqual(collapseDaily([]), []);
+  assert.deepEqual(collapseDaily(null), []);
+});
