@@ -243,6 +243,16 @@ test('buildMinimalResolvedRecord(directional_touch): one-sided (HIGH-only legs) 
   assert.equal(record.snapshot.derived.implied_range.low, null); // no LOW data → null, never fabricated
 });
 
+test('buildMinimalResolvedRecord(directional_touch): %-unit level reads "HIGH 80%", never "HIGH $80%"', () => {
+  const meta = touchMeta({ highPrices: ['1', '0'], lowPrices: ['0'] });
+  meta.unitInfo = { divisor: 1, unit: '%' };
+  const { record } = buildMinimalResolvedRecord('directional_touch', meta, 'touch-pct');
+  validateRecord(record);
+  const d = record.snapshot.derived;
+  assert.match(d.narrative, /touched HIGH 80%/);
+  assert.doesNotMatch(d.narrative, /\$/, 'a %-unit settlement label must carry no $ prefix');
+});
+
 test('buildMinimalResolvedRecord(directional_touch): a malformed leg is dropped, not fabricated', () => {
   const meta = touchMeta();
   meta.legs[1] = { ...meta.legs[1], outcomes: null, outcome_prices: null };
