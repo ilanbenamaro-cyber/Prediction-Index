@@ -8,69 +8,47 @@
 > There is **no `.workflows/_system/` dir, no `codebase.md`/`MEMORY.md`** — the global `/sync`
 > skill tolerates their absence (updated 2026-06-18); don't be alarmed when it skips them.
 
-## ⮕ DIRECTION (2026-07-06, latest): HISTORYCHART REWORK — 3 bug fixes + multi-series, on `feature/history-chart-multiseries`, AWAITING OPERATOR MERGE
-- **Branch `feature/history-chart-multiseries` (6 commits, `6ad69ab..032a92f`), NOT merged/pushed** (operator
-  reviews per convention). **405/405 (+18 over the 387 baseline); parity 4/4 byte-identical
-  (`c1be52e4…b89003`); tsc + next build clean; browser-verified all 5 shapes, 0 app console errors**
-  (only the pre-existing favicon 404). Screenshots `multiseries-verify-{touch-wti,categorical-fed,
-  survival-spacex,binary-recession}.png`.
-- **BUG 2 dedup (`6ad69ab`):** a `(market_id, snapshot_date)` can carry an hour-0 backfill row PLUS cron
-  rows (unique key is date+hour since 0009; 4 live dup dates on dev) → duplicate chart dots. New pure
-  `collapseDaily` (cron beats backfill via `prefersCapture`); `readHistoryLean` returns collapsed rows;
-  `readHistory` (provenance) untouched. Live-verified dup-free on silver (185 unique dates).
-- **SHAPE-AWARE LEAN READ (`515b910`):** `readHistoryLean(id, days, shape)` projects per-shape JSONB
-  sub-paths — ladder `markets`+`iqr` (as before); touch `high_series`/`low_series`; categorical
-  `outcomes`; binary scalar-only. Never the full record. `leanHistoryRow` reconstructs them under
-  `record.snapshot.derived`.
-- **BUG 3 touch chart (`ae23aa8`):** the touch headline scalar is the barrier-range midpoint — a PRICE —
-  so the chart Y-axis read "$6.02K"-style. New `deriveTouchSeries`: P(touch ≥/≤ L) lines at the
-  representative (nearest-50%) level per side, HIGH amber / LOW blue, one line for one-sided markets.
-  `headlineValue` untouched (still feeds velocity/key-metric cards, correctly $-labelled).
-- **BUG 1 axis (`90e53be`):** probability axes were HARD-FIXED 0–100% (`isPctKind` + the dual left axis)
-  → never re-domained on the 7D/30D/90D/ALL switch. New pure `probDomain` (fit + pad the FILTERED
-  window, **10pp min-span guard** — operator picked fit-with-guard over fixed-0–100 and over exact-fit —
-  clamp [0,1]); all Y ticks via `niceTicks`. Verified: recession binary ALL 10–50% → 7D 8–16%.
-- **MULTI-SERIES (`15f165b`):** categorical = top-4 outcomes by CURRENT de-vigged prob as lines (tracked
-  by label; 4 colours incl. new `--accent-violet`); ladder dual chart gains the **P25–P75 IQR band**
-  (from object `iqr`; attaches to the shared survival+bucket path — see the new [[gotchas]] `fineKind`
-  entry) + tooltip row + legend chip. `ChartCrosshair` needed NO change (multi-row snap anchors already
-  supported); binary stays single-line by design.
-- **DESIGN (`032a92f`):** `fmtDateShort` "Jun 15" ticks / "Jun 15, 2026" tooltip titles (pure, no Date →
-  hydration-safe); gridlines `var(--text)` @ stroke-opacity 0.15; 2px series strokes; legend compact
-  top-right ABOVE the plot with current values; active range tab gets a color-mix amber fill.
-- **⚠ FOUND, pre-existing, operator-owned:** (a) `si-hit-jun-2026` detail 422s — its stored frozen record
-  is PRE-SPLIT schema (same family as the SpaceX C4 stale-seed; fix = re-seed/recompute those rows);
-  (b) live cron rows carry snapshot_hour **15/19**, not the documented 2/18 (vercel.json vs docs —
-  `prefersCapture` is hour-agnostic, nothing breaks); (c) gold (`what-will-gold-…-december`) is not on
-  dev — touch verified on WTI/Anthropic/silver-history instead; gold confirms after deploy.
-- **NEXT:** operator review + `--no-ff` merge; optional follow-ups — velocity-of-P(touch) for touch
-  cards, a 4th survival threshold line, re-seed the pre-split frozen rows (si-hit + SpaceX C4).
-
-## ⮕ DIRECTION (2026-07-06): RESOLVED-MARKET DISPLAY — 2 fixes on `fix/resolved-market-display`, AWAITING OPERATOR MERGE
-- **Branch `fix/resolved-market-display` (2 commits, off `main` @ `d94b4df`), NOT merged/pushed.**
-  **387/387 (baseline, no code tests needed — Fix 1 is a client-component display change, Fix 2 is a
-  no-code diagnosis); parity 4/4 byte-identical; tsc + next build clean; browser-verified.**
-  ⚠ Independent of the ALSO-UNMERGED `feature/history-chart-multiseries` (2026-07-06 chart rework) —
-  both branch off `main`; both prepend to this primer + touch `app/globals.css`, so expect a trivial
-  merge conflict (keep both). Merge order doesn't matter.
-- **FIX 1 — RESOLVED badge, not STALE (`2775bec`):** a watchlisted market with lifecycle=RESOLVED showed
-  a STALE pill ("needs refresh" — meaningless for a frozen record). `WatchlistRows.Freshness` now renders
-  a neutral/muted **RESOLVED** badge (`var(--text-muted)` + subtle border, distinct from amber/red STALE)
-  and excludes resolved markets from the stale calc, with `lifecycle_state === 'RESOLVED'` taking priority
-  over `stale_after` (defence if it and `is_final` ever diverge). `lifecycle_state`/`is_final` were already
-  on the scan row (assembleScanRows) → no data-layer change. Browser-verified: SpaceX reads "resolved",
-  genuinely-stale OPEN markets keep "stale".
-- **FIX 2 — resolved browse (`182aa60`, DIAGNOSIS ONLY, no serve change):** **Case A, gamma limitation.**
-  gamma `public-search` returns only active markets (verified `?q=spacex` omits resolved SpaceX), so
-  resolved markets are unsearchable — our route/client don't filter them, nothing to fix. A cached resolved
-  market DOES load by direct `?m=` URL regardless of watchlist (`serveMarket` has no watchlist dependency →
-  SERVE_FINAL; SpaceX verified: RESOLVED cards + settlement + "final", 0 console errors). A never-cached
-  resolved market → clean **409** ("no prior record to freeze"), not a 500 (verified via
-  `computeMarketRecord` prior=null) — honest, since resolved markets expose no live CLOB prices. Full write-up
-  in [[decisions]] "Resolved markets are NOT searchable…".
-- **NEXT:** operator review + merge (this branch + the chart branch, either order). Optional deferred:
-  resolved-market discovery would need a non-gamma index + backfill-from-history reconstruction (not a
-  serve-path change).
+## ⮕ DIRECTION (2026-07-06, latest): HISTORYCHART REWORK + RESOLVED-MARKET DISPLAY — BOTH MERGED to main + PUSHED (`main` @ `79f7e0d`)
+- **`main` is at `79f7e0d`, in sync with `origin/main`.** Two independent branches, each merged `--no-ff`:
+  `feature/history-chart-multiseries` (`e0320e1`, 6 commits `6ad69ab..032a92f`) then
+  `fix/resolved-market-display` (`79f7e0d`, 2 commits `2775bec..182aa60`). **Post-merge gates: 405/405
+  (+18 over the 387 pre-epic baseline); parity 4/4 byte-identical (`c1be52e4…b89003`, hash re-verified
+  against `test/fixtures/spacex-reference-latest.json`); tsc + next build clean.**
+- **Conflict (expected, trivial):** both branches prepended a DIRECTION entry to this file and touched
+  `app/globals.css`. `globals.css` auto-merged clean (both branches' new rules present — `--accent-violet`,
+  `.wl-resolved-pill`, `.hist-band`, the 0.15 gridline opacity). `primer.md` conflicted on the prepended
+  entries — resolved by **keeping both** (chart entry first, resolved-display entry second, this same
+  ordering now collapsed below into one summary).
+- **HISTORYCHART REWORK (3 bug fixes + multi-series):** **BUG 2 dedup** — a `(market_id, snapshot_date)`
+  could carry an hour-0 backfill row PLUS cron rows (unique key is date+hour since 0009) → duplicate chart
+  dots; new pure `collapseDaily` (cron beats backfill) applied in `readHistoryLean`. **BUG 3 touch chart**
+  — the touch headline scalar is the barrier-range midpoint (a PRICE), so the chart Y-axis read
+  "$6.02K"-style; new `deriveTouchSeries` plots P(touch ≥/≤ L) probability lines instead (HIGH amber / LOW
+  blue). **BUG 1 axis** — probability axes were hard-fixed 0–100% and never re-domained on the 7D/30D/90D/
+  ALL switch; new pure `probDomain` fits the filtered window (10pp min-span guard, clamp [0,1]).
+  **Shape-aware lean read** — `readHistoryLean(id, days, shape)` now projects per-shape JSONB sub-paths
+  (ladder markets+iqr; touch high/low series; categorical outcomes; binary scalars) instead of one fixed
+  projection. **Multi-series** — categorical charts top-4 outcome lines; the ladder dual chart gained a
+  P25–P75 IQR band. **Design polish** — "Jun 15" date ticks, 0.15 gridline opacity, top-right legend.
+  Browser-verified all 5 shapes, 0 app console errors (only the pre-existing favicon 404).
+- **RESOLVED-MARKET DISPLAY (2 fixes):** **Fix 1** — a watchlisted RESOLVED market showed a STALE pill
+  ("needs refresh", meaningless for a frozen record); `WatchlistRows.Freshness` now renders a neutral/muted
+  RESOLVED badge, with `lifecycle_state === 'RESOLVED'` taking priority over `stale_after`. **Fix 2**
+  (diagnosis only, no serve change) — viewing a RESOLVED market not in the watchlist: **Case A, a gamma
+  limitation** — `public-search` returns only active markets, so resolved markets are unsearchable at the
+  API layer (nothing in our code to fix); a CACHED resolved market loads fine by direct `?m=` URL regardless
+  of watchlist (`serveMarket` has no watchlist dependency); a NEVER-cached resolved market returns a clean
+  409 ("no prior record to freeze"), not a 500 — honest, since resolved markets expose no live CLOB prices.
+  Full write-up in [[decisions]] "Resolved markets are NOT searchable…".
+- **⚠ STILL OPEN, pre-existing, operator-owned (carried from the chart branch, unrelated to either fix
+  above):** (a) `si-hit-jun-2026` detail 422s — its stored frozen record is PRE-SPLIT schema (same family
+  as the SpaceX C4 stale-seed; fix = re-seed/recompute those rows); (b) live cron rows carry snapshot_hour
+  **15/19**, not the documented 2/18 (vercel.json vs docs — `prefersCapture` is hour-agnostic, nothing
+  breaks); (c) gold (`what-will-gold-…-december`) is not on dev — touch verified on WTI/Anthropic/silver
+  instead, gold confirms after deploy.
+- **NEXT:** `git branch -d feature/history-chart-multiseries fix/resolved-market-display` (both fully
+  merged). Optional follow-ups — velocity-of-P(touch) for touch cards, a 4th survival threshold line,
+  re-seed the pre-split frozen rows (si-hit + SpaceX C4), resolved-market discovery via a non-gamma index.
 
 ## ⮕ DIRECTION (2026-07-03/04): BROWSE-HISTORY + 2 bug fixes — ALL MERGED to main + PUSHED (`main` @ `4b02cc2`)
 - **`main` is at `4b02cc2`, in sync with `origin/main`.** Everything below the predemo/HARD-STOP entries
