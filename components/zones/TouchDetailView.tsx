@@ -316,8 +316,11 @@ export function TouchDetailView({ record, envelope, hist, addControl }: { record
         </section>
       )}
 
-      {/* TREND & HISTORY — implied-range midpoint over time (Phase 1) */}
-      {hist && <TrendHistorySection hist={hist} unit={unit} label="Range midpoint" />}
+      {/* TREND & HISTORY — P(touch) probability lines when the series is available (Bug 3: the
+          chart plots touch probabilities, not the barrier price); the velocity/dispersion cards
+          above it still track the range-midpoint headline scalar. Falls back to the midpoint
+          single line (labelled as such) when the series can't be derived. */}
+      {hist && <TrendHistorySection hist={hist} unit={unit} label={hist.series ? 'Touch probability' : 'Range midpoint'} />}
 
       <details className="detail-method">
         <summary>How these numbers are computed (methodology v{record.methodology_version ?? '—'})</summary>

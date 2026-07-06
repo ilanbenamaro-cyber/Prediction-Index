@@ -191,8 +191,9 @@ export function CategoricalDetailView({ record, envelope, hist, addControl }: { 
         </section>
       )}
 
-      {/* TREND & HISTORY — dominant-outcome probability over time (Phase 1) */}
-      {hist && <TrendHistorySection hist={hist} unit="" label="Dominant-outcome probability" />}
+      {/* TREND & HISTORY — top-4 outcome probability lines when the series is available (multi-
+          series pass); falls back to the dominant-outcome single line otherwise. */}
+      {hist && <TrendHistorySection hist={hist} unit="" label={hist.series ? 'Outcome probabilities' : 'Dominant-outcome probability'} />}
 
       <details className="detail-method">
         <summary>How these numbers are computed (methodology v{record.methodology_version ?? '—'})</summary>

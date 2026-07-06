@@ -410,3 +410,197 @@ test('leanHistoryRow: derive fns produce identical output on full-record vs lean
   const cat = leanHistoryRow({ snapshot_date: '2026-06-01', kind: 'categorical', markets: null, iqr: null, dominant_prob: 0.6 });
   assert.deepEqual(cat.record.snapshot.derived.markets, []);
 });
+
+test('leanHistoryRow: shape-specific paths (outcomes, high/low series) reconstruct under derived', () => {
+  // categorical projection carries `outcomes`; touch carries `high_series`/`low_series` —
+  // each must land back at record.snapshot.derived.<path> exactly where the full read has it.
+  const catRaw = {
+    snapshot_date: '2026-07-01', kind: 'categorical', dominant_outcome: 'December Meeting', dominant_prob: 0.44,
+    outcomes: [{ label: 'December Meeting', probability: 0.44, raw_probability: 0.19, volume: 215856 }],
+  };
+  const cat = leanHistoryRow(catRaw);
+  assert.deepEqual(cat.record.snapshot.derived.outcomes, catRaw.outcomes);
+  assert.deepEqual(cat.record.snapshot.derived.markets, []); // ladder defaults still present
+  assert.equal(cat.record.snapshot.derived.iqr, null);
+  assert.equal(cat.outcomes, undefined); // moved under record, not duplicated at the top level
+
+  const touchRaw = {
+    snapshot_date: '2026-07-01', kind: 'directional_touch', touch_range_lo: 62.01, touch_range_hi: 75.65,
+    high_series: [{ level: 80, prob: 0.115, volume: null }],
+    low_series: [{ level: 30, prob: 0.0035, volume: null }],
+  };
+  const touch = leanHistoryRow(touchRaw);
+  assert.deepEqual(touch.record.snapshot.derived.high_series, touchRaw.high_series);
+  assert.deepEqual(touch.record.snapshot.derived.low_series, touchRaw.low_series);
+  assert.equal(touch.high_series, undefined);
+  // a binary lean row (no paths at all) still reconstructs the derived skeleton
+  const bin = leanHistoryRow({ snapshot_date: '2026-07-01', kind: 'binary', probability: 0.12 });
+  assert.deepEqual(bin.record.snapshot.derived, { markets: [], iqr: null });
+});
+
+// ── collapseDaily (Bug 2, 2026-07-06): one row per UTC date — a date can carry an hour-0
+//    backfill row PLUS cron rows (unique key is date+hour since 0009); the chart must never
+//    render two dots at the same x. Nearest-US-peak wins → cron beats backfill. ────────────────
+import { collapseDaily } from '../lib/market-history.mjs';
+
+test('collapseDaily: cron row (h15/h19) beats the hour-0 backfill row for the same date', () => {
+  const rows = [
+    { snapshot_date: '2026-06-29', snapshot_hour: 0, source: 'backfill', probability: 0.10 },
+    { snapshot_date: '2026-06-29', snapshot_hour: 19, source: 'cron', probability: 0.12 },
+    { snapshot_date: '2026-06-30', snapshot_hour: 0, source: 'backfill', probability: 0.11 },
+  ];
+  const out = collapseDaily(rows);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].snapshot_date, '2026-06-29');
+  assert.equal(out[0].source, 'cron'); // the live capture wins over the reconstruction
+  assert.equal(out[0].probability, 0.12);
+  assert.equal(out[1].source, 'backfill'); // sole row for its date passes through
+});
+
+test('collapseDaily: two cron captures on one date → the nearer-US-peak (18:00) hour wins', () => {
+  const rows = [
+    { snapshot_date: '2026-07-01', snapshot_hour: 2, source: 'cron', probability: 0.20 },
+    { snapshot_date: '2026-07-01', snapshot_hour: 18, source: 'cron', probability: 0.25 },
+  ];
+  const out = collapseDaily(rows);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].snapshot_hour, 18);
+});
+
+// ── deriveCategoricalSeries (multi-series pass, 2026-07-06): top-4 outcome lines. ──────────────
+import { deriveCategoricalSeries } from '../lib/market-history.mjs';
+
+/** A categorical history row: per-outcome de-vigged probs live in the record JSONB. */
+function catRow(dayIdx, outcomes, { confidenceTier = 'medium' } = {}) {
+  return {
+    snapshot_date: dateAt(dayIdx), kind: 'categorical', confidence_tier: confidenceTier,
+    record: { snapshot: { derived: { outcomes } } },
+  };
+}
+
+test('deriveCategoricalSeries: top-4 by CURRENT probability, tracked by label across days', () => {
+  const day = (a, b, c, d, e) => [
+    { label: '0 cuts', probability: a }, { label: '1 cut', probability: b },
+    { label: '2 cuts', probability: c }, { label: '3 cuts', probability: d },
+    { label: '4+ cuts', probability: e },
+  ];
+  const rows = [catRow(0, day(0.10, 0.30, 0.25, 0.20, 0.15)), catRow(1, day(0.05, 0.35, 0.30, 0.20, 0.10))];
+  const s = deriveCategoricalSeries(rows);
+  assert.equal(s.dual, false);
+  assert.equal(s.probLines.length, 4);
+  // ranked by the LATEST day's probabilities → '0 cuts' (0.05) is the one dropped
+  assert.deepEqual(s.probLines.map((l) => l.label), ['1 cut', '2 cuts', '3 cuts', '4+ cuts']);
+  assert.deepEqual(s.probLines[0].points.map((p) => p.value), [0.30, 0.35]); // tracked by label
+  assert.deepEqual(s.valueLines, []);
+});
+
+test('deriveCategoricalSeries: fewer than 4 outcomes → that many lines; missing days skip points', () => {
+  const rows = [
+    catRow(0, [{ label: 'A', probability: 0.6 }, { label: 'B', probability: 0.4 }]),
+    catRow(1, [{ label: 'A', probability: 0.7 }]), // B absent this day
+    catRow(2, [{ label: 'A', probability: 0.65 }, { label: 'B', probability: 0.35 }], { confidenceTier: 'low' }),
+  ];
+  const s = deriveCategoricalSeries(rows);
+  assert.equal(s.probLines.length, 2);
+  const b = s.probLines.find((l) => l.label === 'B');
+  assert.deepEqual(b.points.map((p) => p.date), [dateAt(0), dateAt(2)]);
+  assert.deepEqual(s.lowDays, [dateAt(2)]);
+});
+
+test('deriveCategoricalSeries: null for non-categorical rows, <2 days, or no outcomes', () => {
+  assert.equal(deriveCategoricalSeries([catRow(0, [{ label: 'A', probability: 0.6 }])]), null);
+  assert.equal(deriveCategoricalSeries([mkRow(0, { kind: 'binary' }), mkRow(1, { kind: 'binary' })]), null);
+  assert.equal(deriveCategoricalSeries([catRow(0, []), catRow(1, [])]), null);
+});
+
+// ── deriveChartSeries IQR band (multi-series pass, 2026-07-06) ─────────────────────────────────
+test('deriveChartSeries: P25–P75 band from object iqr; absent for width-only/missing iqr', () => {
+  const mk = (i, iqr) => ({
+    snapshot_date: dateAt(i), kind: 'survival', implied_median: 2.0 + i * 0.01, implied_mean: null,
+    confidence_tier: 'high',
+    record: { snapshot: { derived: { markets: [{ threshold: 2.0, prob: 0.5 }], iqr } } },
+  });
+  const withBand = deriveChartSeries([mk(0, { p25: 1.9, p75: 2.4 }), mk(1, { p25: 1.95, p75: 2.35 })]);
+  assert.deepEqual(withBand.band, [
+    { date: dateAt(0), lo: 1.9, hi: 2.4 },
+    { date: dateAt(1), lo: 1.95, hi: 2.35 },
+  ]);
+  // a legacy NUMERIC iqr (width only) or a missing one → no band, never a throw
+  assert.equal(deriveChartSeries([mk(0, 0.5), mk(1, 0.4)]).band, null);
+  assert.equal(deriveChartSeries([mk(0, null), mk(1, { p25: 1.9, p75: 2.4 })]).band, null); // 1 day < 2
+});
+
+// ── deriveTouchSeries (Bug 3, 2026-07-06): the touch chart plots P(touch), not the barrier
+//    price. One line per quoted side at the representative (nearest-50%) level. ────────────────
+import { deriveTouchSeries } from '../lib/market-history.mjs';
+
+/** A touch history row: per-level P(touch) series live in the record JSONB. */
+function touchRow(dayIdx, { high = null, low = null, confidenceTier = 'medium' } = {}) {
+  const derived = {};
+  if (high) derived.high_series = high;
+  if (low) derived.low_series = low;
+  return {
+    snapshot_date: dateAt(dayIdx), kind: 'directional_touch', confidence_tier: confidenceTier,
+    record: { snapshot: { derived } },
+  };
+}
+
+test('deriveTouchSeries: two-sided — picks the nearest-50% level per side and tracks it', () => {
+  const rows = [
+    touchRow(0, { high: [{ level: 70, prob: 0.999 }, { level: 80, prob: 0.20 }], low: [{ level: 30, prob: 0.01 }, { level: 60, prob: 0.35 }] }),
+    touchRow(1, { high: [{ level: 70, prob: 0.999 }, { level: 80, prob: 0.15 }], low: [{ level: 30, prob: 0.01 }, { level: 60, prob: 0.40 }] }),
+  ];
+  const s = deriveTouchSeries(rows, { unit: '' });
+  assert.equal(s.dual, false);
+  assert.equal(s.probLines.length, 2);
+  const hi = s.probLines.find((l) => l.key === 'high');
+  const lo = s.probLines.find((l) => l.key === 'low');
+  assert.equal(hi.threshold, 80); // |0.15−0.5| < |0.999−0.5| in the LATEST row
+  assert.equal(hi.label, 'P(touch ≥ $80)');
+  assert.deepEqual(hi.points.map((p) => p.value), [0.20, 0.15]);
+  assert.equal(lo.threshold, 60);
+  assert.equal(lo.label, 'P(touch ≤ $60)');
+  assert.deepEqual(lo.points.map((p) => p.value), [0.35, 0.40]);
+  assert.deepEqual(s.valueLines, []);
+});
+
+test('deriveTouchSeries: HIGH-only market → one clearly-labelled line; unit threads', () => {
+  const rows = [
+    touchRow(0, { high: [{ level: 1.25, prob: 0.60 }] }),
+    touchRow(1, { high: [{ level: 1.25, prob: 0.55 }] }),
+  ];
+  const s = deriveTouchSeries(rows, { unit: 'T' });
+  assert.equal(s.probLines.length, 1);
+  assert.equal(s.probLines[0].key, 'high');
+  assert.equal(s.probLines[0].label, 'P(touch ≥ $1.25T)');
+});
+
+test('deriveTouchSeries: a day missing the tracked level skips that point; low-conf days flagged', () => {
+  const rows = [
+    touchRow(0, { high: [{ level: 80, prob: 0.30 }] }),
+    touchRow(1, { high: [{ level: 85, prob: 0.25 }] }, /* level 80 absent this day */),
+    touchRow(2, { high: [{ level: 80, prob: 0.45 }], low: null, confidenceTier: 'low' }),
+  ];
+  const s = deriveTouchSeries(rows);
+  const hi = s.probLines[0];
+  assert.equal(hi.threshold, 80); // picked from the LATEST row
+  assert.deepEqual(hi.points.map((p) => p.date), [dateAt(0), dateAt(2)]); // day 1 skipped
+  assert.deepEqual(s.lowDays, [dateAt(2)]);
+});
+
+test('deriveTouchSeries: null for non-touch rows, <2 days, or no pickable level', () => {
+  assert.equal(deriveTouchSeries([touchRow(0, { high: [{ level: 80, prob: 0.3 }] })]), null); // 1 day
+  assert.equal(deriveTouchSeries([mkRow(0, { kind: 'binary' }), mkRow(1, { kind: 'binary' })]), null);
+  assert.equal(deriveTouchSeries([touchRow(0, {}), touchRow(1, {})]), null); // no sides at all
+});
+
+test('collapseDaily: already-unique dates pass through unchanged, ascending by date', () => {
+  const rows = [
+    { snapshot_date: '2026-07-02', snapshot_hour: 15, source: 'cron' },
+    { snapshot_date: '2026-07-01', snapshot_hour: 0, source: 'backfill' },
+  ];
+  const out = collapseDaily(rows);
+  assert.deepEqual(out.map((r) => r.snapshot_date), ['2026-07-01', '2026-07-02']);
+  assert.deepEqual(collapseDaily([]), []);
+  assert.deepEqual(collapseDaily(null), []);
+});

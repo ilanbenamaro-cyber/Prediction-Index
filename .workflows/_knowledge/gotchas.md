@@ -5,6 +5,20 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## History rows can't distinguish bucket_pmf from survival — `fineKind` falls back to 'survival'
+**Symptom (caught during the 2026-07-06 multi-series design, not a bite):** the plan called for a
+bucket-only IQR band on the history chart, but a Bitcoin bucket market's `market_history.kind` reads
+**'survival'**. `fineKind(record)` (lib/market-history.mjs) returns `derived.market_shape ?? 'survival'`,
+and `market_shape` is only set on SOME records (it was added omit-when-absent for parity — see "Adding
+a field to derived[] breaks the frozen SpaceX parity gate"); backfill-reconstructed rows in particular
+don't carry it. So any HISTORY-side branch keyed on bucket-vs-survival silently routes bucket markets
+down the survival path.
+**Lesson:** treat survival+bucket as ONE shape ('ladder') anywhere that reads history rows; branch on
+the SERVED record's `derived` (which the detail view has) when the distinction truly matters. The IQR
+band was attached to the shared ladder path for exactly this reason (it's meaningful for both). If a
+future feature genuinely needs the split in history, fix `writeHistory` to stamp the shape first and
+accept that old rows stay ambiguous.
+
 ## A gamma leg with no `clobTokenIds` crashes `ids[0]` — an untraded/placeholder rung, not a broken market
 **Symptom (bit prod, 2026-07-03):** searching `what-will-gold-gc-hit-by-end-of-december` 500'd with
 `Cannot read properties of undefined (reading '0')` at `core/fetch.js` `fetchTouchMeta`. The market

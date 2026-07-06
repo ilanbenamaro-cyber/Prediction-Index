@@ -8,7 +8,45 @@
 > There is **no `.workflows/_system/` dir, no `codebase.md`/`MEMORY.md`** — the global `/sync`
 > skill tolerates their absence (updated 2026-06-18); don't be alarmed when it skips them.
 
-## ⮕ DIRECTION (2026-07-03/04, latest): BROWSE-HISTORY + 2 bug fixes — ALL MERGED to main + PUSHED (`main` @ `4b02cc2`)
+## ⮕ DIRECTION (2026-07-06, latest): HISTORYCHART REWORK — 3 bug fixes + multi-series, on `feature/history-chart-multiseries`, AWAITING OPERATOR MERGE
+- **Branch `feature/history-chart-multiseries` (6 commits, `6ad69ab..032a92f`), NOT merged/pushed** (operator
+  reviews per convention). **405/405 (+18 over the 387 baseline); parity 4/4 byte-identical
+  (`c1be52e4…b89003`); tsc + next build clean; browser-verified all 5 shapes, 0 app console errors**
+  (only the pre-existing favicon 404). Screenshots `multiseries-verify-{touch-wti,categorical-fed,
+  survival-spacex,binary-recession}.png`.
+- **BUG 2 dedup (`6ad69ab`):** a `(market_id, snapshot_date)` can carry an hour-0 backfill row PLUS cron
+  rows (unique key is date+hour since 0009; 4 live dup dates on dev) → duplicate chart dots. New pure
+  `collapseDaily` (cron beats backfill via `prefersCapture`); `readHistoryLean` returns collapsed rows;
+  `readHistory` (provenance) untouched. Live-verified dup-free on silver (185 unique dates).
+- **SHAPE-AWARE LEAN READ (`515b910`):** `readHistoryLean(id, days, shape)` projects per-shape JSONB
+  sub-paths — ladder `markets`+`iqr` (as before); touch `high_series`/`low_series`; categorical
+  `outcomes`; binary scalar-only. Never the full record. `leanHistoryRow` reconstructs them under
+  `record.snapshot.derived`.
+- **BUG 3 touch chart (`ae23aa8`):** the touch headline scalar is the barrier-range midpoint — a PRICE —
+  so the chart Y-axis read "$6.02K"-style. New `deriveTouchSeries`: P(touch ≥/≤ L) lines at the
+  representative (nearest-50%) level per side, HIGH amber / LOW blue, one line for one-sided markets.
+  `headlineValue` untouched (still feeds velocity/key-metric cards, correctly $-labelled).
+- **BUG 1 axis (`90e53be`):** probability axes were HARD-FIXED 0–100% (`isPctKind` + the dual left axis)
+  → never re-domained on the 7D/30D/90D/ALL switch. New pure `probDomain` (fit + pad the FILTERED
+  window, **10pp min-span guard** — operator picked fit-with-guard over fixed-0–100 and over exact-fit —
+  clamp [0,1]); all Y ticks via `niceTicks`. Verified: recession binary ALL 10–50% → 7D 8–16%.
+- **MULTI-SERIES (`15f165b`):** categorical = top-4 outcomes by CURRENT de-vigged prob as lines (tracked
+  by label; 4 colours incl. new `--accent-violet`); ladder dual chart gains the **P25–P75 IQR band**
+  (from object `iqr`; attaches to the shared survival+bucket path — see the new [[gotchas]] `fineKind`
+  entry) + tooltip row + legend chip. `ChartCrosshair` needed NO change (multi-row snap anchors already
+  supported); binary stays single-line by design.
+- **DESIGN (`032a92f`):** `fmtDateShort` "Jun 15" ticks / "Jun 15, 2026" tooltip titles (pure, no Date →
+  hydration-safe); gridlines `var(--text)` @ stroke-opacity 0.15; 2px series strokes; legend compact
+  top-right ABOVE the plot with current values; active range tab gets a color-mix amber fill.
+- **⚠ FOUND, pre-existing, operator-owned:** (a) `si-hit-jun-2026` detail 422s — its stored frozen record
+  is PRE-SPLIT schema (same family as the SpaceX C4 stale-seed; fix = re-seed/recompute those rows);
+  (b) live cron rows carry snapshot_hour **15/19**, not the documented 2/18 (vercel.json vs docs —
+  `prefersCapture` is hour-agnostic, nothing breaks); (c) gold (`what-will-gold-…-december`) is not on
+  dev — touch verified on WTI/Anthropic/silver-history instead; gold confirms after deploy.
+- **NEXT:** operator review + `--no-ff` merge; optional follow-ups — velocity-of-P(touch) for touch
+  cards, a 4th survival threshold line, re-seed the pre-split frozen rows (si-hit + SpaceX C4).
+
+## ⮕ DIRECTION (2026-07-03/04): BROWSE-HISTORY + 2 bug fixes — ALL MERGED to main + PUSHED (`main` @ `4b02cc2`)
 - **`main` is at `4b02cc2`, in sync with `origin/main`.** Everything below the predemo/HARD-STOP entries
   (which were merged as `fe84e7e`) is now ALSO on main + pushed. **387/387; parity 4/4 byte-identical
   (`c1be52e4…b89003`); tsc + next build clean.** Three independent pieces, each branch merged `--no-ff`:
