@@ -64,3 +64,36 @@ test('interpSeriesAtLevel: linear interpolation clamped to the series ends', () 
   assert.equal(interpSeriesAtLevel(pts, 80), 0.1);  // above range → last
   assert.equal(interpSeriesAtLevel([], 55), 0);     // empty → 0
 });
+
+// ── probDomain (Bug 1, 2026-07-06): probability axes fit the FILTERED window instead of a
+//    fixed 0–100% that flattened every sub-extreme series and ignored the tab switch. ──────────
+import { probDomain } from '../lib/chart-hover.mjs';
+
+test('probDomain: fits the data with padding, inside [0,1]', () => {
+  const { lo, hi } = probDomain([0.30, 0.40, 0.60]);
+  assert.ok(lo < 0.30 && lo > 0); // padded below the min, not to 0
+  assert.ok(hi > 0.60 && hi < 1); // padded above the max, not to 1
+});
+
+test('probDomain: min-span guard — near-flat data never collapses below 10pp', () => {
+  const { lo, hi } = probDomain([0.500, 0.502, 0.501]);
+  assert.ok(hi - lo >= 0.10 - 1e-12);
+  assert.ok(lo < 0.5 && hi > 0.5); // centred on the data
+});
+
+test('probDomain: clamps at the edges preserving the span', () => {
+  const nearZero = probDomain([0.01, 0.02]);
+  assert.equal(nearZero.lo, 0); // shifted up, not cut
+  assert.ok(nearZero.hi >= 0.10 - 1e-12);
+  const nearOne = probDomain([0.98, 0.99]);
+  assert.equal(nearOne.hi, 1);
+  assert.ok(nearOne.lo <= 0.90 + 1e-12);
+});
+
+test('probDomain: empty/invalid input → the full 0–100% axis; custom minSpan honoured', () => {
+  assert.deepEqual(probDomain([]), { lo: 0, hi: 1 });
+  assert.deepEqual(probDomain(null), { lo: 0, hi: 1 });
+  assert.deepEqual(probDomain([NaN, null]), { lo: 0, hi: 1 });
+  const wide = probDomain([0.5], { minSpan: 0.3 });
+  assert.ok(wide.hi - wide.lo >= 0.3 - 1e-12);
+});

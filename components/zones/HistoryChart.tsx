@@ -20,7 +20,8 @@
 
 import { useState } from 'react';
 import { ChartCrosshair, type SnapAnchor, type TooltipRow } from './ChartCrosshair';
-import { pickTicks } from '@/lib/chart-hover.mjs';
+import { pickTicks, probDomain } from '@/lib/chart-hover.mjs';
+import { niceTicks } from '@/lib/touch-rangebar.mjs';
 
 export interface HistoryPoint { date: string; value: number }
 export interface ChartLine { key: string; label?: string; threshold?: number; points: HistoryPoint[]; faint?: boolean; dashed?: boolean }
@@ -147,9 +148,12 @@ function Plot({ points, kind, unit, label }: { points: HistoryPoint[]; kind: str
   const xs = points.map((p) => ms(p.date));
   const xLo = xs[0], xHi = xs[xs.length - 1];
   const ys = points.map((p) => p.value);
-  // Probability kinds use a fixed 0–100% axis; value kinds use a padded data range.
+  // Both axis families FIT THE FILTERED WINDOW (Bug 1): probability kinds via probDomain (padded
+  // + min-span guarded + clamped to [0,1] — never a fixed 0–100% that flattens the series); value
+  // kinds via the padded data range. `points` is already the tab-filtered set, so every 7D/30D/
+  // 90D/ALL switch re-domains the Y axis.
   let yLo: number, yHi: number;
-  if (isPctKind(kind)) { yLo = 0; yHi = 1; }
+  if (isPctKind(kind)) { ({ lo: yLo, hi: yHi } = probDomain(ys)); }
   else {
     const min = Math.min(...ys), max = Math.max(...ys);
     const pad = (max - min) * 0.1 || Math.abs(max) * 0.05 || 1;
@@ -159,7 +163,7 @@ function Plot({ points, kind, unit, label }: { points: HistoryPoint[]; kind: str
   const yScale = (v: number) => yHi === yLo ? VB_H - PAD.b : VB_H - PAD.b - ((v - yLo) / (yHi - yLo)) * (VB_H - PAD.t - PAD.b);
   const line = points.map((p, i) => `${xScale(xs[i]).toFixed(1)},${yScale(p.value).toFixed(1)}`).join(' ');
 
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => yLo + f * (yHi - yLo));
+  const yTicks = niceTicks(yLo, yHi, 5); // round tick values within the domain, consistent labels
   const xTickY = VB_H - PAD.b + 10;
 
   // Hover (snap): the headline value on that date.
@@ -208,8 +212,10 @@ function DualPlot({ probLines, valueLines, lowDays, unit }:
   const xLo = Math.min(...allDates), xHi = Math.max(...allDates);
   const xScale = (msVal: number) => xHi === xLo ? P.l : P.l + ((msVal - xLo) / (xHi - xLo)) * (VB_W - P.l - P.r);
 
-  // LEFT axis: probability 0–100%. RIGHT axis: value range across the value lines, padded.
-  const yP = (v: number) => (VB_H - P.b) - v * (VB_H - P.t - P.b); // v in 0..1
+  // LEFT axis: probability, FITTED to the filtered window (Bug 1 — was fixed 0–100%, which never
+  // re-domained on a tab switch). RIGHT axis: value range across the value lines, padded.
+  const pDom = probDomain(probLines.flatMap((l) => l.points.map((p) => p.value)));
+  const yP = (v: number) => (VB_H - P.b) - ((v - pDom.lo) / (pDom.hi - pDom.lo)) * (VB_H - P.t - P.b);
   const vVals = valueLines.flatMap((l) => l.points.map((p) => p.value));
   const vMin = vVals.length ? Math.min(...vVals) : 0;
   const vMax = vVals.length ? Math.max(...vVals) : 1;
@@ -231,8 +237,8 @@ function DualPlot({ probLines, valueLines, lowDays, unit }:
       );
     });
 
-  const probTicks = [0, 0.25, 0.5, 0.75, 1];
-  const valTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => vLo + f * (vHi - vLo));
+  const probTicks = niceTicks(pDom.lo, pDom.hi, 5);
+  const valTicks = niceTicks(vLo, vHi, 5);
   const xTickY = VB_H - P.b + 10;
 
   // Hover (snap): ONE tooltip showing every plotted series' value on that date (all P(>X) lines +
@@ -330,9 +336,11 @@ function MultiProbPlot({ lines, lowDays }: { lines: ChartLine[]; lowDays: string
   const allDates = lines.flatMap((l) => l.points.map((p) => ms(p.date)));
   const xLo = Math.min(...allDates), xHi = Math.max(...allDates);
   const xScale = (msVal: number) => xHi === xLo ? P.l : P.l + ((msVal - xLo) / (xHi - xLo)) * (VB_W - P.l - P.r);
-  const yP = (v: number) => (VB_H - P.b) - v * (VB_H - P.t - P.b); // v in 0..1
+  // Probability axis FITTED to the filtered window (Bug 1) — padded, min-span guarded, [0,1]-clamped.
+  const dom = probDomain(lines.flatMap((l) => l.points.map((p) => p.value)));
+  const yP = (v: number) => (VB_H - P.b) - ((v - dom.lo) / (dom.hi - dom.lo)) * (VB_H - P.t - P.b);
 
-  const probTicks = [0, 0.25, 0.5, 0.75, 1];
+  const probTicks = niceTicks(dom.lo, dom.hi, 5);
   const xTickY = VB_H - P.b + 10;
 
   // Hover (snap): every line's value at the hovered date in one tooltip, colours matching the legend.
