@@ -677,13 +677,36 @@ export async function fetchBucketPmfSnapshot(config) {
 // (+level for HIGH, −level for LOW, mantissa units) so canonicalizeRawInputs stays UNCHANGED
 // and deterministic (mirrors binary's 1=YES/0=NO trick). See MARKET-TYPES-PLAN.md.
 
+/** Dedup same-(side, level) touch legs to the CURRENT board. A touch leg settles Yes EARLY the
+ *  moment it touches (closedTime = the touch date), and Polymarket re-lists a FRESH strike at the
+ *  same level measuring from its re-listing — so one gamma event can carry duplicate strikes with
+ *  CONTRADICTORY settlements (observed live on si-hit-jun-2026: "hit (HIGH) $110" both Yes-in-January
+ *  and No-at-window-end). Ingesting both yields a self-contradictory record, so keep the leg that IS
+ *  the current board: a still-tradeable leg wins; among closed legs the latest closedTime wins (it
+ *  observed the most recent window — what Polymarket's own UI reports as the market's final state). */
+export function dedupTouchLegs(legs) {
+  const byStrike = new Map();
+  for (const leg of legs) {
+    const key = `${leg.side}:${leg.level}`;
+    const prev = byStrike.get(key);
+    if (!prev) { byStrike.set(key, leg); continue; }
+    const prevOpen = !prev.closed && prev.accepting_orders;
+    const legOpen = !leg.closed && leg.accepting_orders;
+    if (prevOpen !== legOpen) { if (legOpen) byStrike.set(key, leg); continue; }
+    const prevT = prev.closed_time ? Date.parse(prev.closed_time) : -Infinity;
+    const legT = leg.closed_time ? Date.parse(leg.closed_time) : -Infinity;
+    if (legT >= prevT) byStrike.set(key, leg); // ties → later gamma order
+  }
+  return [...byStrike.values()];
+}
+
 /** Gamma event → { title, end_date, unitInfo, legs[] } of parseable touch legs. */
 export async function fetchTouchMeta(config) {
   const events = await fetchJson(gammaUrl(config.event_slug));
   if (!Array.isArray(events) || events.length === 0) throw new Error('Gamma API returned no events');
   const ev = events[0];
   const all = Array.isArray(ev.markets) ? ev.markets : [];
-  const legs = all.map((m) => {
+  const legs = dedupTouchLegs(all.map((m) => {
     const t = parseTouchLeg(m.question);
     if (!t) return null;
     const ids = parseClobTokenIds(m);
@@ -693,9 +716,10 @@ export async function fetchTouchMeta(config) {
       volume: m.volume != null ? Number(m.volume) : null,
       ...legWindowed(m), // windowed volume — supplementary, never hashed
       closed: m.closed === true, active: m.active !== false, accepting_orders: m.acceptingOrders !== false,
+      closed_time: m.closedTime ?? null, // early-settled strikes carry their touch date here
       uma_resolution_status: m.umaResolutionStatus ?? null, outcomes: m.outcomes ?? null, outcome_prices: m.outcomePrices ?? null,
     };
-  }).filter(Boolean);
+  }).filter(Boolean));
   if (legs.length < 2) throw new Error(`Touch event ${config.event_slug} has <2 parseable legs`);
   return { title: ev.title ?? config.event_slug, end_date: ev.endDate ?? null, unitInfo: deriveUnit(legs.map((l) => l.level)), legs };
 }
