@@ -16,7 +16,7 @@ import { AddToWatchlist, type Membership } from './AddToWatchlist';
 import { canonicalizeRawInputs } from '@/core/fetch.js';
 import { after } from 'next/server';
 import { headers } from 'next/headers';
-import { readHistoryLean, headlineValue, deriveVelocity, deriveDispersion, deriveDeltas, deriveBiggestMoves, deriveChartSeries, headlineChange, latestSnapshotWindow, deriveReliabilityTrend, readBackfillStatus, needsBackfill } from '@/lib/market-history.mjs';
+import { readHistoryLean, headlineValue, deriveVelocity, deriveDispersion, deriveDeltas, deriveBiggestMoves, deriveChartSeries, deriveTouchSeries, headlineChange, latestSnapshotWindow, deriveReliabilityTrend, readBackfillStatus, needsBackfill } from '@/lib/market-history.mjs';
 import { triggerBackfill } from '@/lib/trigger-backfill.mjs';
 import { unitFromLadder, fmtMoney, fmtRange, fmtEastern, impliedMedianLabel, displayTitle, fmtDeltaPp, deltaSign, meanRobustnessLabel, modeBucket, detailNarrative, daysToExpiryLabel, synthesizeSignals } from '@/lib/format-detail.mjs';
 import { DistributionSVG } from './DistributionSVG';
@@ -112,10 +112,13 @@ export async function DetailData({ id }: { id: string }) {
     dispersion: deriveDispersion(rows) as DispersionResult,
     points: rows.map((r) => ({ date: r.snapshot_date, value: headlineValue(r) as number })).filter((p) => p.value != null),
     kind: chartKind,
-    // v1 ITEM 7: the multi-line dual-axis chart series — per-threshold P(>X) + median/mean — for
-    // survival/bucket ladders only (null for binary/touch/categorical → single-line fallback).
-    // Built server-side from the record JSONB; only lean {date,value}[] per line ships to the client.
-    series: deriveChartSeries(rows),
+    // Multi-line chart series, built server-side from the lean rows; only {date,value}[] per line
+    // ships to the client. Ladders: per-threshold P(>X) + median/mean (dual-axis, v1 ITEM 7).
+    // Touch: P(touch ≥/≤ level) probability lines (Bug 3 — the chart plots probabilities, not the
+    // barrier price the headline midpoint tracks). Binary/categorical: null → single-line fallback.
+    series: chartKind === 'directional_touch'
+      ? (deriveTouchSeries(rows, { unit: body.record?.snapshot?.derived?.unit ?? body.record?.snapshot?.derived?.implied_range?.unit ?? '' }) as HistoryUI['series'])
+      : deriveChartSeries(rows),
     // Increment 2: capture window of the latest datapoint (US-hours vs off-peak) for the data note.
     snapshotWindow: latestSnapshotWindow(rows) as 'us-hours' | 'off-peak' | null,
     backfillStatus,

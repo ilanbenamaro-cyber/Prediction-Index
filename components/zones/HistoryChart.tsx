@@ -36,6 +36,11 @@ const RANGES: { key: string; days: number | null }[] = [
 ];
 const DAY_MS = 86_400_000;
 const PROB_CLASSES = ['hist-line-p0', 'hist-line-p1', 'hist-line-p2']; // up to 3 threshold lines
+// Multi-prob series colours: touch sides are FIXED (HIGH = warm amber, LOW = cool blue — the
+// direction must read at a glance); other keys take the palette by index. CSS variables only.
+const KEY_COLORS: Record<string, string> = { high: 'var(--accent-amber)', low: 'var(--accent-blue)' };
+const SERIES_PALETTE = ['var(--accent-amber)', 'var(--accent-blue)', 'var(--tier1)', 'var(--text-muted)'];
+const lineColor = (l: ChartLine, i: number) => KEY_COLORS[l.key] ?? SERIES_PALETTE[i % SERIES_PALETTE.length];
 
 const ms = (date: string) => Date.parse(`${date}T00:00:00Z`);
 
@@ -57,9 +62,11 @@ export function HistoryChart({ points, kind, unit = '', label = 'Value', series 
   const sel = RANGES.find((r) => r.key === range) ?? RANGES[3];
   const days = sel.days; // hoist for narrowing inside the filter closures
 
-  // DUAL-AXIS path (ladder with derived series). The collecting test uses the median line —
-  // the headline value line that always exists when there is any ladder history at all.
-  if (series && series.dual) {
+  // MULTI-LINE paths (a derived series). DUAL (ladder): per-threshold P(>X) on the left axis +
+  // median/mean on the right. PROB-ONLY (touch P(touch), categorical outcomes): N probability
+  // lines on one % axis. The collecting test uses the primary line — median where one exists,
+  // else the first probability line.
+  if (series && (series.dual || series.probLines.length > 0)) {
     const filt = (pts: HistoryPoint[]) => {
       if (days == null) return pts;
       const last = pts.length ? ms(pts[pts.length - 1].date) : 0;
@@ -74,8 +81,12 @@ export function HistoryChart({ points, kind, unit = '', label = 'Value', series 
         <ChartHead label={label} range={range} setRange={setRange} />
         {!enough
           ? <Collecting range={range} backfilling={backfilling} />
-          : <DualPlot probLines={probLines} valueLines={valueLines} lowDays={series.lowDays} unit={unit} />}
-        {enough && <DualLegend probLines={probLines} valueLines={valueLines} unit={unit} />}
+          : series.dual
+            ? <DualPlot probLines={probLines} valueLines={valueLines} lowDays={series.lowDays} unit={unit} />
+            : <MultiProbPlot lines={probLines} lowDays={series.lowDays} />}
+        {enough && (series.dual
+          ? <DualLegend probLines={probLines} valueLines={valueLines} unit={unit} />
+          : <MultiProbLegend lines={probLines} />)}
       </div>
     );
   }
@@ -307,5 +318,86 @@ function DualLegend({ probLines, valueLines, unit }: { probLines: ChartLine[]; v
       </div>
       <p className="hist-note">Probabilities read off the left axis; valuation off the right. Dashed/faded segments are low-confidence days.</p>
     </>
+  );
+}
+
+/** PROB-ONLY multi-line plot (touch P(touch) sides, categorical outcome lines): N probability
+ *  lines on a single % axis. Same segment-by-segment low-confidence dashing as DualPlot; colours
+ *  by line key (touch high/low fixed warm/cool) else the palette. */
+function MultiProbPlot({ lines, lowDays }: { lines: ChartLine[]; lowDays: string[] }) {
+  const P = PAD;
+  const low = new Set(lowDays);
+  const allDates = lines.flatMap((l) => l.points.map((p) => ms(p.date)));
+  const xLo = Math.min(...allDates), xHi = Math.max(...allDates);
+  const xScale = (msVal: number) => xHi === xLo ? P.l : P.l + ((msVal - xLo) / (xHi - xLo)) * (VB_W - P.l - P.r);
+  const yP = (v: number) => (VB_H - P.b) - v * (VB_H - P.t - P.b); // v in 0..1
+
+  const probTicks = [0, 0.25, 0.5, 0.75, 1];
+  const xTickY = VB_H - P.b + 10;
+
+  // Hover (snap): every line's value at the hovered date in one tooltip, colours matching the legend.
+  const allDateStrs = [...new Set(lines.flatMap((l) => l.points.map((p) => p.date)))].sort();
+  const anchors: SnapAnchor[] = allDateStrs.map((date) => {
+    const rows: TooltipRow[] = [];
+    const dots: { y: number; color: string }[] = [];
+    lines.forEach((l, i) => {
+      const pt = l.points.find((p) => p.date === date);
+      if (!pt) return;
+      const color = lineColor(l, i);
+      rows.push({ label: l.label ?? l.key, swatch: color, value: `${(pt.value * 100).toFixed(1)}%` });
+      dots.push({ y: yP(pt.value), color });
+    });
+    return { x: xScale(ms(date)), payload: { title: date, rows }, dots };
+  });
+
+  return (
+    <ChartCrosshair vbW={VB_W} vbH={VB_H} plotLeft={P.l} plotRight={VB_W - P.r} plotTop={P.t} plotBottom={VB_H - P.b}
+      mode="snap" anchors={anchors} ariaLabel="Multi-line probability history chart — hover for every series on each date">
+    <svg className="dist-svg" viewBox={`0 0 ${VB_W} ${VB_H}`} role="img" aria-label="Multi-line probability history chart" data-field="history-svg" data-multiprob="true">
+      {probTicks.map((v, i) => (
+        <g key={i}>
+          <line className="dist-grid" x1={P.l} x2={VB_W - P.r} y1={yP(v)} y2={yP(v)} />
+          <text className="dist-axis" x={P.l - 5} y={yP(v) + 3} textAnchor="end">{`${Math.round(v * 100)}%`}</text>
+        </g>
+      ))}
+      {lines.map((l, li) =>
+        l.points.slice(1).map((p, i) => {
+          const prev = l.points[i];
+          const isLow = low.has(prev.date) || low.has(p.date);
+          return (
+            <line
+              key={`${l.key}-${i}`}
+              className={`hist-line${isLow ? ' is-low' : ''}`}
+              style={{ stroke: lineColor(l, li) }}
+              x1={xScale(ms(prev.date))} y1={yP(prev.value)}
+              x2={xScale(ms(p.date))} y2={yP(p.value)}
+            />
+          );
+        }))}
+      <g data-field="hist-x-labels">
+        {pickTicks(allDateStrs, X_TICKS).map(({ item, i }) => {
+          const x = xScale(ms(item));
+          return <text key={i} className="dist-tick" transform={`rotate(-45 ${x.toFixed(1)} ${xTickY})`} x={x.toFixed(1)} y={xTickY} textAnchor="end">{item.slice(5)}</text>;
+        })}
+      </g>
+    </svg>
+    </ChartCrosshair>
+  );
+}
+
+/** Legend chips for the prob-only multi-line chart: swatch + label + the CURRENT value. */
+function MultiProbLegend({ lines }: { lines: ChartLine[] }) {
+  return (
+    <div className="hist-legend" data-field="history-legend">
+      {lines.map((l, i) => {
+        const last = l.points.length ? l.points[l.points.length - 1] : null;
+        return (
+          <span key={l.key} className="hist-leg">
+            <span className="hist-swatch" style={{ borderTopColor: lineColor(l, i) }} />
+            {`${l.label ?? l.key}${last ? ` · ${(last.value * 100).toFixed(0)}%` : ''}`}
+          </span>
+        );
+      })}
+    </div>
   );
 }

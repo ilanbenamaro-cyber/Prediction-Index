@@ -467,6 +467,70 @@ test('collapseDaily: two cron captures on one date → the nearer-US-peak (18:00
   assert.equal(out[0].snapshot_hour, 18);
 });
 
+// ── deriveTouchSeries (Bug 3, 2026-07-06): the touch chart plots P(touch), not the barrier
+//    price. One line per quoted side at the representative (nearest-50%) level. ────────────────
+import { deriveTouchSeries } from '../lib/market-history.mjs';
+
+/** A touch history row: per-level P(touch) series live in the record JSONB. */
+function touchRow(dayIdx, { high = null, low = null, confidenceTier = 'medium' } = {}) {
+  const derived = {};
+  if (high) derived.high_series = high;
+  if (low) derived.low_series = low;
+  return {
+    snapshot_date: dateAt(dayIdx), kind: 'directional_touch', confidence_tier: confidenceTier,
+    record: { snapshot: { derived } },
+  };
+}
+
+test('deriveTouchSeries: two-sided — picks the nearest-50% level per side and tracks it', () => {
+  const rows = [
+    touchRow(0, { high: [{ level: 70, prob: 0.999 }, { level: 80, prob: 0.20 }], low: [{ level: 30, prob: 0.01 }, { level: 60, prob: 0.35 }] }),
+    touchRow(1, { high: [{ level: 70, prob: 0.999 }, { level: 80, prob: 0.15 }], low: [{ level: 30, prob: 0.01 }, { level: 60, prob: 0.40 }] }),
+  ];
+  const s = deriveTouchSeries(rows, { unit: '' });
+  assert.equal(s.dual, false);
+  assert.equal(s.probLines.length, 2);
+  const hi = s.probLines.find((l) => l.key === 'high');
+  const lo = s.probLines.find((l) => l.key === 'low');
+  assert.equal(hi.threshold, 80); // |0.15−0.5| < |0.999−0.5| in the LATEST row
+  assert.equal(hi.label, 'P(touch ≥ $80)');
+  assert.deepEqual(hi.points.map((p) => p.value), [0.20, 0.15]);
+  assert.equal(lo.threshold, 60);
+  assert.equal(lo.label, 'P(touch ≤ $60)');
+  assert.deepEqual(lo.points.map((p) => p.value), [0.35, 0.40]);
+  assert.deepEqual(s.valueLines, []);
+});
+
+test('deriveTouchSeries: HIGH-only market → one clearly-labelled line; unit threads', () => {
+  const rows = [
+    touchRow(0, { high: [{ level: 1.25, prob: 0.60 }] }),
+    touchRow(1, { high: [{ level: 1.25, prob: 0.55 }] }),
+  ];
+  const s = deriveTouchSeries(rows, { unit: 'T' });
+  assert.equal(s.probLines.length, 1);
+  assert.equal(s.probLines[0].key, 'high');
+  assert.equal(s.probLines[0].label, 'P(touch ≥ $1.25T)');
+});
+
+test('deriveTouchSeries: a day missing the tracked level skips that point; low-conf days flagged', () => {
+  const rows = [
+    touchRow(0, { high: [{ level: 80, prob: 0.30 }] }),
+    touchRow(1, { high: [{ level: 85, prob: 0.25 }] }, /* level 80 absent this day */),
+    touchRow(2, { high: [{ level: 80, prob: 0.45 }], low: null, confidenceTier: 'low' }),
+  ];
+  const s = deriveTouchSeries(rows);
+  const hi = s.probLines[0];
+  assert.equal(hi.threshold, 80); // picked from the LATEST row
+  assert.deepEqual(hi.points.map((p) => p.date), [dateAt(0), dateAt(2)]); // day 1 skipped
+  assert.deepEqual(s.lowDays, [dateAt(2)]);
+});
+
+test('deriveTouchSeries: null for non-touch rows, <2 days, or no pickable level', () => {
+  assert.equal(deriveTouchSeries([touchRow(0, { high: [{ level: 80, prob: 0.3 }] })]), null); // 1 day
+  assert.equal(deriveTouchSeries([mkRow(0, { kind: 'binary' }), mkRow(1, { kind: 'binary' })]), null);
+  assert.equal(deriveTouchSeries([touchRow(0, {}), touchRow(1, {})]), null); // no sides at all
+});
+
 test('collapseDaily: already-unique dates pass through unchanged, ascending by date', () => {
   const rows = [
     { snapshot_date: '2026-07-02', snapshot_hour: 15, source: 'cron' },
