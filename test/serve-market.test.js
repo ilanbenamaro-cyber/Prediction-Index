@@ -18,11 +18,11 @@ const recordAt = (fetchedAtMs, extra = {}) => ({
 
 // A fake deps builder with call counters.
 function fakeDeps({ snapshot = null, market = null, probeState = 'OPEN', computeLifecycle = 'OPEN' } = {}) {
-  const calls = { probe: 0, compute: 0, write: 0, touch: 0 };
+  const calls = { readCache: 0, probe: 0, compute: 0, write: 0, touch: 0 };
   return {
     calls,
     deps: {
-      readCache: async () => ({ snapshot, market }),
+      readCache: async () => { calls.readCache++; return { snapshot, market }; },
       probeLifecycle: async () => { calls.probe++; return { lifecycle: { state: probeState, resolved_outcome: probeState === 'RESOLVED' ? [{ threshold: 1, outcome: 'Yes' }] : null } }; },
       computeMarketRecord: async ({ prior }) => { calls.compute++; return { record: recordAt(NOW, { _from: prior ? 'prior' : 'fresh' }), lifecycle: { state: computeLifecycle, resolved_outcome: null }, config: { id: 'x' } }; },
       writeRecord: async () => { calls.write++; },
@@ -118,4 +118,28 @@ test('compute validation failure → 422, never written to cache', async () => {
   const r = await serveMarket({ id: 'm', deps, now });
   assert.equal(r.status, 422);
   assert.equal(wrote, false, 'an invalid record must never reach the cache');
+});
+
+// ── market-id allow-list (rejects path traversal / query-injection before any I/O) ──────────────
+test('serveMarket: a path-traversal id → 400, no injected dep called', async () => {
+  const { deps, calls } = fakeDeps();
+  const r = await serveMarket({ id: '../../../etc/passwd', deps, now });
+  assert.equal(r.status, 400);
+  assert.equal(calls.readCache, 0, 'readCache must never run on an invalid id');
+  assert.equal(calls.probe + calls.compute + calls.write + calls.touch, 0);
+});
+
+test('serveMarket: a query-injection id (& query string) → 400, no injected dep called', async () => {
+  const { deps, calls } = fakeDeps();
+  const r = await serveMarket({ id: 'foo&limit=9', deps, now });
+  assert.equal(r.status, 400);
+  assert.equal(calls.readCache, 0, 'readCache must never run on an invalid id');
+  assert.equal(calls.probe + calls.compute + calls.write + calls.touch, 0);
+});
+
+test('serveMarket: a real-shaped gamma slug passes the id allow-list (deps ARE called)', async () => {
+  const { deps, calls } = fakeDeps({ snapshot: null });
+  const r = await serveMarket({ id: 'net-quarterly-earnings-nongaap-eps-02-11-2026-0pt27', deps, now });
+  assert.equal(r.status, 200);
+  assert.equal(calls.compute, 1, 'a valid slug must reach computeMarketRecord, not be rejected at validation');
 });

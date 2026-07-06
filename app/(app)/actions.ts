@@ -11,7 +11,7 @@ import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
 import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
-import { serveMarket } from '@/lib/serve-market.mjs';
+import { serveMarket, MARKET_ID_RE } from '@/lib/serve-market.mjs';
 import { DEPS } from '@/lib/market-deps.mjs';
 import { readCache, writeRecord } from '@/lib/cache.mjs';
 import { computeMarketRecord } from '@/lib/compute.mjs';
@@ -105,10 +105,21 @@ export async function removeMarket(marketId: string, orgId: string | null): Prom
  * it directly + writeRecord stores a new snapshot with as-of = now. revalidatePath('/',
  * 'page') re-renders ONLY the detail page segment — NOT the layout — so the rail is not
  * re-fetched (per the scope-the-revalidation constraint).
+ *
+ * Verifies the caller the same way lib/watchlist.mjs's currentUid does (a live
+ * getUser() token check, fail-closed) BEFORE any work — this action has no RLS to fall
+ * back on (it calls computeMarketRecord/writeRecord directly, not through addPersonal/
+ * addOrg), so the auth check has to live here.
  */
 export async function refreshMarket(slug: string): Promise<ActionResult> {
   const id = (slug ?? '').trim();
   if (!id) return { ok: false, error: 'no market selected' };
+  if (!MARKET_ID_RE.test(id)) return { ok: false, error: 'invalid market id' };
+
+  const supabase = await createClient();
+  const { data, error: authError } = await supabase.auth.getUser();
+  if (authError || !data?.user) return { ok: false, error: 'not authenticated' };
+
   try {
     const { snapshot } = await readCache(id); // prior, for the RESOLVED freeze path
     const prior = snapshot?.record ?? null;
