@@ -8,7 +8,33 @@
 > There is **no `.workflows/_system/` dir, no `codebase.md`/`MEMORY.md`** — the global `/sync`
 > skill tolerates their absence (updated 2026-06-18); don't be alarmed when it skips them.
 
-## ⮕ DIRECTION (2026-07-06, latest): HISTORYCHART REWORK + RESOLVED-MARKET DISPLAY — BOTH MERGED to main + PUSHED (`main` @ `79f7e0d`)
+## ⮕ DIRECTION (2026-07-06, latest): RESOLVED-NO-PRIOR 409 FIX — MERGED to main + PUSHED (`main` @ `39b0cbf`)
+- **`main` is at `39b0cbf`, in sync with `origin/main`.** Branch `fix/resolved-no-prior` (1 commit `20aa690`),
+  merged `--no-ff` (`39b0cbf`), pushed. **411/411 (+6 new); parity 4/4 byte-identical (`c1be52e4…b89003`);
+  tsc + next build clean; browser-verified.** Clean merge, no conflict.
+- **The bug:** browsing a RESOLVED market the product never captured while OPEN (e.g.
+  `?m=net-quarterly-earnings-nongaap-eps-02-11-2026-0pt27`, Cloudflare NET) threw a **409** ("no prior record
+  to freeze") from `computeBinaryRecord`. This was OUR gap, not a Polymarket limitation — gamma serves
+  resolved markets with `closed:true` + `umaResolutionStatus:'resolved'` + settled `outcomePrices`. (This
+  UPDATES last session's [[decisions]] entry that had deferred this as "the 409 is the correct honest
+  failure".)
+- **The fix (`lib/compute.mjs`):** new `buildMinimalResolvedRecord(meta, id, lifecycle?)` builds a valid
+  `kind:'binary'` record from the settled `outcomePrices` (YES/NO = 1/0 ARE the final prices — real data):
+  real re-verifiable `raw_sha256` over the UNCHANGED `canonicalizeRawInputs` recipe, `freshness.final`,
+  `resolved_outcome` from `classifyLifecycle`. Confidence = reliability **high** / liquidity **low** with
+  VALID enum tiers (the schema forbids a literal `tier:'RESOLVED'` — see [[gotchas]]). Wired into
+  `computeBinaryRecord`'s RESOLVED-no-prior branch; caches via `writeRecord` → future browses `SERVE_FINAL`,
+  backfill populates the chart. Browser-verified: loads with RESOLVED banner + 100% + "final", absent from
+  rail, cached, 0 app console errors. SpaceX (has prior) + OPEN markets unchanged.
+- **Two traps hit (now in [[gotchas]] "A 'minimal' resolved record can't invent a tier:'RESOLVED'…"):** the
+  `confidence.*.tier` schema enum, and `Number(null) === 0` fabricating a 0% probability (null-guard added,
+  caught by a defensive test).
+- **⚠ Scope / still-open (documented in the fn JSDoc + [[decisions]]):** BINARY-ONLY. `CLOSED_PENDING`-no-prior
+  and RESOLVED-no-prior for touch/categorical/ladder still 409 (their schema branches require full derived
+  blocks that can't be "minimal"). A scoped follow-up if those shapes ever need it.
+- **NEXT:** `git branch -d fix/resolved-no-prior` (fully merged). Nothing else pending on this.
+
+## ⮕ DIRECTION (2026-07-06): HISTORYCHART REWORK + RESOLVED-MARKET DISPLAY — BOTH MERGED to main + PUSHED (`main` @ `79f7e0d`)
 - **`main` is at `79f7e0d`, in sync with `origin/main`.** Two independent branches, each merged `--no-ff`:
   `feature/history-chart-multiseries` (`e0320e1`, 6 commits `6ad69ab..032a92f`) then
   `fix/resolved-market-display` (`79f7e0d`, 2 commits `2775bec..182aa60`). **Post-merge gates: 405/405

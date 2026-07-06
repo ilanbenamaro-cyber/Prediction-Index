@@ -5,6 +5,28 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## A "minimal" resolved record can't invent a `tier:'RESOLVED'`, and `Number(null)` is `0` not `NaN`
+**Symptom (both bit while building `buildMinimalResolvedRecord`, 2026-07-06):** two traps when hand-building a
+synthetic record for a resolved-no-prior binary market from gamma's settled `outcomePrices`.
+1. **`confidence.*.tier` is a strict enum.** The intuitive "minimal resolved record" sets
+   `confidence.reliability.tier = 'RESOLVED'` (and liquidity), but `docs/api/v1/schema.json` locks tier to
+   `enum:["high","medium","low"]` — so `validateRecord` throws `schema …/tier must be equal to one of the
+   allowed values`. There is NO "resolved" tier. The record MUST use a real tier; the settled-honest pick is
+   reliability **high** (the outcome is final, not an estimate) + liquidity **low** (can't transact). Same
+   applies to any place tempted to add a synthetic tier/status into a schema-constrained enum field.
+2. **`Number(null) === 0` (not `NaN`), so a null-price short-circuit is REQUIRED before `Number()`.** A price
+   parser `const num = (s) => { const n = Number(s); return Number.isFinite(n) ? n : null; }` returns **0** for
+   a missing price (`Number(null)`/`Number(undefined)` → `0`/`NaN`… `Number(null)` is 0!), silently
+   FABRICATING a 0% probability instead of `null`. Guard null FIRST:
+   `(s) => { if (s == null) return null; const n = Number(s); return Number.isFinite(n) ? n : null; }`.
+   A defensive test (malformed gamma → probability should be `null`) is what caught it — assert the *absence*
+   of data yields `null`, never `0`. `Number('')` is also 0, and `Number('  ')` is 0 — trim/guard blanks too
+   if they can occur. (Schema allows `probability: null`, so the honest null passes validation.)
+**Lesson:** when synthesizing a record to pass `validateRecord`, (a) never invent an enum value — read the
+schema's `enum` first; (b) any `Number(x)` over possibly-absent API data needs an explicit null/blank guard
+BEFORE the coercion, or a "no data" case becomes a confident `0`. See [[decisions]] "Resolved markets with NO
+prior now build a minimal record…".
+
 ## History rows can't distinguish bucket_pmf from survival — `fineKind` falls back to 'survival'
 **Symptom (caught during the 2026-07-06 multi-series design, not a bite):** the plan called for a
 bucket-only IQR band on the history chart, but a Bitcoin bucket market's `market_history.kind` reads

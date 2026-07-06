@@ -5,7 +5,43 @@ Newest at top. If you're about to change one of these, read the entry first.
 
 ---
 
+## Resolved markets with NO prior now build a minimal record from settled outcomePrices (binary) — 409 removed
+**Decided (2026-07-06):** browsing a RESOLVED market the product never captured while OPEN threw a 409
+("no prior record to freeze") from `computeBinaryRecord`. That was OUR gap, not a Polymarket limitation:
+gamma DOES serve resolved markets (`closed:true` + `umaResolutionStatus:'resolved'` + settled
+`outcomePrices`). **This SUPERSEDES the "just 409 — don't fake a record" stance in the entry below (its
+3rd bullet) FOR BINARY markets** — because the settled `outcomePrices` (YES/NO → "1"/"0") ARE the FINAL
+prices, real observed data, so the record is reconstructed honestly, not faked.
+- **`lib/compute.mjs buildMinimalResolvedRecord(meta, id, lifecycle?)`** builds a valid `kind:'binary'`
+  record from the settled prices: `probability` = the YES settle, a REAL re-verifiable `raw_sha256` over the
+  **UNCHANGED** `canonicalizeRawInputs` recipe (threshold 1=YES / 0=NO, mirroring the live binary fetcher;
+  `midpoint_source:'resolved_settlement'` stays OUT of the canonicalizer so the frozen hash recipe is
+  byte-stable), `freshness.final`, and `snapshot.lifecycle.resolved_outcome` (from the existing
+  `classifyLifecycle` — the outcome whose price settled to 1). It reuses `buildBinaryRecord` for a
+  schema-correct skeleton, then overrides confidence + narrative.
+- **Confidence uses VALID enum tiers, NOT a literal `'RESOLVED'` tier.** The schema locks
+  `confidence.*.tier` to `enum:["high","medium","low"]` (see [[gotchas]] "A 'minimal' resolved record…"),
+  so the naive `tier:'RESOLVED'` FAILS `validateRecord`. The settled-honest choice: reliability **high**
+  (the outcome is FINAL, not an estimate) + liquidity **low** (you can no longer transact) — set explicitly,
+  not via the live scorer (which would report a misleading "tight spread" on a market with no book).
+- **The record caches** (`writeRecord` → `market_snapshots` RESOLVED/`is_final`), so future browses
+  `SERVE_FINAL` from cache; the browse-history backfill trigger populates the trend chart. Browser-verified
+  on `net-quarterly-earnings-nongaap-eps-02-11-2026-0pt27` (Cloudflare NET, resolved YES): loads with the
+  RESOLVED banner + 100% + "final", absent from the rail, cached, history backfilled, 0 app console errors.
+**Constrains:** BINARY-ONLY — it's the reported shape AND the only kind whose schema branch permits a truly
+minimal derived block (`{kind, probability, confidence, total_volume, freshness}`). `CLOSED_PENDING`-no-prior
+still 409s (trading ended, UMA unconfirmed → no settled outcome to build from). RESOLVED-no-prior for
+touch/categorical/ladder still 409s — their schema branches require full derived blocks
+(`implied_range`/`high_series`, `outcomes`/`dominant_outcome`/`entropy`, `markets`/`iqr`/`median`) that can't
+be "minimal"; building those from settled prices is a separate larger change (a scoped follow-up, noted in
+the function's JSDoc). NEVER invent a `tier` outside the enum. SpaceX has a prior → never hits this path →
+**parity 4/4 byte-identical.** Additive: only `computeBinaryRecord`'s RESOLVED-no-prior branch changed.
+
 ## Resolved markets are NOT searchable (gamma limitation) but browse fine by direct URL — INTENTIONAL, no code change
+**[UPDATED 2026-07-06 — the 3rd bullet's "just 409 / don't fake a record" is SUPERSEDED FOR BINARY by the
+entry above: a resolved BINARY market with no prior now builds a real record from settled outcomePrices. The
+search limitation (bullet 1) + cached-browse behavior (bullet 2) still hold; the 409 now only applies to
+CLOSED_PENDING and to non-binary resolved-no-prior markets.]**
 **Decided (2026-07-06):** investigating "let me search for and view a RESOLVED market that isn't in my
 watchlist" — the diagnosis is **Case A, a Polymarket gamma limitation, not a product bug.**
 - **Search returns only ACTIVE markets.** `app/api/search/route.ts` proxies gamma `public-search`, and that
