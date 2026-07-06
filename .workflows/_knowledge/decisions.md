@@ -5,6 +5,36 @@ Newest at top. If you're about to change one of these, read the entry first.
 
 ---
 
+## Resolved markets are NOT searchable (gamma limitation) but browse fine by direct URL — INTENTIONAL, no code change
+**Decided (2026-07-06):** investigating "let me search for and view a RESOLVED market that isn't in my
+watchlist" — the diagnosis is **Case A, a Polymarket gamma limitation, not a product bug.**
+- **Search returns only ACTIVE markets.** `app/api/search/route.ts` proxies gamma `public-search`, and that
+  endpoint returns only `closed:false active:true` events (verified live: `?q=spacex` returns 8 events, all
+  active; the resolved `spacex-ipo-closing-market-cap-above` is absent). Our route does NOT filter on
+  closed/active — it passes them through, and `MarketSearch.tsx` would even render a `state-resolved` dot if
+  gamma returned one. So there is nothing to "fix" in our code: gamma simply doesn't surface resolved events.
+- **A resolved market DOES load by direct `?m=<slug>` URL — regardless of watchlist status.** `serveMarket`
+  has ZERO watchlist dependency (it reads the cache by single id; the `.in('market_id', ids)` firewall is on
+  the RAIL scan read, not the detail serve). A cached RESOLVED record → `decideBeforeProbe` → `SERVE_FINAL`
+  (monotonic, no probe, 0 Polymarket calls) → 200, and the detail renders the RESOLVED state cards (settlement
+  outcome, final median, "final · no further updates"), NOT live P(>X). Browser-verified on SpaceX (watchlisted
+  resolved): RESOLVED banner "settled in $2–2.2T", 0 console errors. Watchlist status only affects (a) rail
+  membership and (b) the browse-history backfill trigger, which for a resolved market is a fire-and-forget,
+  failure-tolerant CLOB-history reconstruction — never blocks the serve.
+- **A resolved market the system NEVER cached while OPEN cannot be served — clean 409, not a crash.**
+  `computeMarketRecord` on a non-OPEN market with `prior=null` throws `code 409` ("is RESOLVED with no prior
+  record to freeze"); `statusFor` maps it to 409 (verified by driving the real path with the resolved SpaceX
+  slug + `prior:null`). This is honest: a resolved market exposes NO live CLOB midpoints (see [[gotchas]] "A
+  RESOLVED Polymarket market returns NO CLOB midpoints"), so there is genuinely no data to build a fresh record
+  from — freezing REQUIRES a prior OPEN capture. It is unreachable via search (Case A) and only hit by manually
+  typing a URL for a market the product never saw. Reconstructing such a record from CLOB price HISTORY (the
+  backfill path) is possible in principle but is a feature, not a bug fix — deferred.
+**Constrains:** don't add a "hide closed" filter to the search route (it already shows nothing resolved, and a
+future gamma that DID return them should display them with the resolved dot the client already has). Don't try
+to "serve" a never-captured resolved market by faking a record — the 409 is the correct honest failure. If
+resolved-market discovery is ever wanted, it needs a different source than gamma `public-search` (a resolved-
+markets index) + the backfill-from-history reconstruction, not a change to the serve path.
+
 ## Browse markets load history via a DERIVED model — no `scope` column, no migration
 **Decided (2026-07-03):** any VIEWED market (search/⌘K/direct `?m=` URL) now reconstructs its full
 CLOB history, not just watchlisted ones — while the rail stays watchlist-only and the cron never

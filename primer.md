@@ -46,6 +46,32 @@
 - **NEXT:** operator review + `--no-ff` merge; optional follow-ups — velocity-of-P(touch) for touch
   cards, a 4th survival threshold line, re-seed the pre-split frozen rows (si-hit + SpaceX C4).
 
+## ⮕ DIRECTION (2026-07-06): RESOLVED-MARKET DISPLAY — 2 fixes on `fix/resolved-market-display`, AWAITING OPERATOR MERGE
+- **Branch `fix/resolved-market-display` (2 commits, off `main` @ `d94b4df`), NOT merged/pushed.**
+  **387/387 (baseline, no code tests needed — Fix 1 is a client-component display change, Fix 2 is a
+  no-code diagnosis); parity 4/4 byte-identical; tsc + next build clean; browser-verified.**
+  ⚠ Independent of the ALSO-UNMERGED `feature/history-chart-multiseries` (2026-07-06 chart rework) —
+  both branch off `main`; both prepend to this primer + touch `app/globals.css`, so expect a trivial
+  merge conflict (keep both). Merge order doesn't matter.
+- **FIX 1 — RESOLVED badge, not STALE (`2775bec`):** a watchlisted market with lifecycle=RESOLVED showed
+  a STALE pill ("needs refresh" — meaningless for a frozen record). `WatchlistRows.Freshness` now renders
+  a neutral/muted **RESOLVED** badge (`var(--text-muted)` + subtle border, distinct from amber/red STALE)
+  and excludes resolved markets from the stale calc, with `lifecycle_state === 'RESOLVED'` taking priority
+  over `stale_after` (defence if it and `is_final` ever diverge). `lifecycle_state`/`is_final` were already
+  on the scan row (assembleScanRows) → no data-layer change. Browser-verified: SpaceX reads "resolved",
+  genuinely-stale OPEN markets keep "stale".
+- **FIX 2 — resolved browse (`182aa60`, DIAGNOSIS ONLY, no serve change):** **Case A, gamma limitation.**
+  gamma `public-search` returns only active markets (verified `?q=spacex` omits resolved SpaceX), so
+  resolved markets are unsearchable — our route/client don't filter them, nothing to fix. A cached resolved
+  market DOES load by direct `?m=` URL regardless of watchlist (`serveMarket` has no watchlist dependency →
+  SERVE_FINAL; SpaceX verified: RESOLVED cards + settlement + "final", 0 console errors). A never-cached
+  resolved market → clean **409** ("no prior record to freeze"), not a 500 (verified via
+  `computeMarketRecord` prior=null) — honest, since resolved markets expose no live CLOB prices. Full write-up
+  in [[decisions]] "Resolved markets are NOT searchable…".
+- **NEXT:** operator review + merge (this branch + the chart branch, either order). Optional deferred:
+  resolved-market discovery would need a non-gamma index + backfill-from-history reconstruction (not a
+  serve-path change).
+
 ## ⮕ DIRECTION (2026-07-03/04): BROWSE-HISTORY + 2 bug fixes — ALL MERGED to main + PUSHED (`main` @ `4b02cc2`)
 - **`main` is at `4b02cc2`, in sync with `origin/main`.** Everything below the predemo/HARD-STOP entries
   (which were merged as `fe84e7e`) is now ALSO on main + pushed. **387/387; parity 4/4 byte-identical
