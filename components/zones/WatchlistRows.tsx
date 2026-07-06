@@ -59,8 +59,12 @@ function ageLabel(hours: number): string {
 }
 
 /** Freshness is time-dependent → compute on the client (live `now`) to stay honest and
- *  avoid a hydration mismatch. RESOLVED/final rows are never stale (no stale_after). */
-function Freshness({ staleAfter, fetchedAt, isFinal }: { staleAfter: string | null; fetchedAt: string | null; isFinal: boolean }) {
+ *  avoid a hydration mismatch. A RESOLVED market is DONE, not stale: it shows a neutral RESOLVED
+ *  badge and is excluded from the stale calc entirely. The lifecycle check takes PRIORITY over
+ *  stale_after — a resolved market can never be stale, even if a stale_after somehow lingers or
+ *  is_final wasn't set (defence against the two diverging). */
+function Freshness({ staleAfter, fetchedAt, isFinal, lifecycleState }:
+  { staleAfter: string | null; fetchedAt: string | null; isFinal: boolean; lifecycleState: ScanRow['lifecycle_state'] }) {
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
     setNow(Date.now());
@@ -68,7 +72,11 @@ function Freshness({ staleAfter, fetchedAt, isFinal }: { staleAfter: string | nu
     return () => clearInterval(id);
   }, []);
 
-  if (isFinal) return <span className="wl-fresh faint">final</span>;
+  // Terminal state — resolved (or otherwise frozen-final). NOT a freshness issue, so no stale
+  // pill, ever. Distinct muted badge (done, archived), visually apart from the amber/red STALE.
+  if (lifecycleState === 'RESOLVED' || isFinal) {
+    return <span className="wl-fresh"><span className="wl-resolved-pill" title="market resolved — final record">resolved</span></span>;
+  }
   if (now == null || !fetchedAt) return <span className="wl-fresh" suppressHydrationWarning />; // pre-mount: no SSR clock
   const ageH = (now - Date.parse(fetchedAt)) / 3_600_000;
   const stale = staleAfter != null && now > Date.parse(staleAfter);
@@ -246,7 +254,7 @@ export function WatchlistRows({ rows, orgs = [] }: { rows: ScanRow[]; orgs?: Arr
                     <span className={`wl-conf-dot ${liqClass}`} data-field="liquidity" aria-hidden="true" />
                   </span>
                 )}
-                <Freshness staleAfter={r.stale_after} fetchedAt={r.fetched_at} isFinal={r.is_final} />
+                <Freshness staleAfter={r.stale_after} fetchedAt={r.fetched_at} isFinal={r.is_final} lifecycleState={r.lifecycle_state} />
               </div>
             </Link>
             <button

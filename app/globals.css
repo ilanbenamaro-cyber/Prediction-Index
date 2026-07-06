@@ -225,6 +225,10 @@ a:hover { text-decoration: underline; }
 .wl-conf { font-size: var(--fs-micro); letter-spacing: var(--track-label); font-weight: 600; }
 .wl-fresh { margin-left: auto; flex: 0 0 auto; font-size: var(--fs-micro); }
 .wl-stale-pill { text-transform: uppercase; letter-spacing: var(--track-label); }
+/* RESOLVED badge: a terminal state, NOT a freshness warning — muted/neutral (done, archived),
+   deliberately distinct from the amber/red STALE pill. Uses only existing surface/text tokens. */
+.wl-resolved-pill { text-transform: uppercase; letter-spacing: var(--track-label); color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 5px; background: var(--bg-card); }
 
 /* Enh 2: rail row polish — volume tint, confidence dot, near-settlement clock, binary chip */
 .wl-row { background-image: linear-gradient(to right, transparent 55%, rgba(196, 127, 58, calc(var(--vol-tint, 0) * 0.13))); }
