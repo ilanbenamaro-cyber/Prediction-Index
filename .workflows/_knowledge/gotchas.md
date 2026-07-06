@@ -5,6 +5,23 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## `raw_inputs` has a SCHEMA-WIDE `minItems:1` — it's not just a per-kind `markets`/`outcomes` constraint
+**Symptom (hit extending `buildMinimalResolvedRecord` to categorical, 2026-07-06):** assumed a categorical
+minimal record could degrade to an EMPTY distribution when every leg's settled price was unparseable —
+`parseCategoricalOutcomes([])`/`shannonEntropy([])` both degrade gracefully (no crash, `dominant_outcome:
+null`, `entropy:0`), and the categorical schema branch's own `outcomes` field has no `minItems`. But
+`validateRecord` still threw: `schema /snapshot/raw_inputs must NOT have fewer than 1 items` — the
+TOP-LEVEL `snapshot.raw_inputs` array (required by EVERY record, independent of `derived.kind`) has its
+OWN `minItems:1` in `docs/api/v1/schema.json`, unrelated to any per-kind field's own constraints.
+**Lesson:** a shape's own `derived.*` fields degrading gracefully to empty does NOT mean the WHOLE record
+validates on zero usable legs — check `raw_inputs`' constraint too (it's schema-wide, not kind-scoped).
+For `buildMinimalResolvedRecord`'s ladder/touch/categorical builders, an all-unparseable leg set now
+throws the SAME honest 409 as the ladder/touch shapes (which needed it for their OWN minItems reasons
+anyway) — never a record with an empty `raw_inputs`. Binary is exempt: it always emits exactly 2 rows
+(YES+NO) with a `'0'` fallback midpoint, so it never hits zero. Grep the schema's `minItems` before
+assuming a "can this be empty?" answer generalizes across nesting levels. See [[decisions]]
+"Resolved-no-prior 409 fix EXTENDED to all 5 shapes".
+
 ## A "minimal" resolved record can't invent a `tier:'RESOLVED'`, and `Number(null)` is `0` not `NaN`
 **Symptom (both bit while building `buildMinimalResolvedRecord`, 2026-07-06):** two traps when hand-building a
 synthetic record for a resolved-no-prior binary market from gamma's settled `outcomePrices`.

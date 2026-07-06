@@ -8,31 +8,42 @@
 > There is **no `.workflows/_system/` dir, no `codebase.md`/`MEMORY.md`** — the global `/sync`
 > skill tolerates their absence (updated 2026-06-18); don't be alarmed when it skips them.
 
-## ⮕ DIRECTION (2026-07-06, latest): RESOLVED-NO-PRIOR 409 FIX — MERGED to main + PUSHED (`main` @ `39b0cbf`)
-- **`main` is at `39b0cbf`, in sync with `origin/main`.** Branch `fix/resolved-no-prior` (1 commit `20aa690`),
-  merged `--no-ff` (`39b0cbf`), pushed. **411/411 (+6 new); parity 4/4 byte-identical (`c1be52e4…b89003`);
-  tsc + next build clean; browser-verified.** Clean merge, no conflict.
-- **The bug:** browsing a RESOLVED market the product never captured while OPEN (e.g.
-  `?m=net-quarterly-earnings-nongaap-eps-02-11-2026-0pt27`, Cloudflare NET) threw a **409** ("no prior record
-  to freeze") from `computeBinaryRecord`. This was OUR gap, not a Polymarket limitation — gamma serves
-  resolved markets with `closed:true` + `umaResolutionStatus:'resolved'` + settled `outcomePrices`. (This
-  UPDATES last session's [[decisions]] entry that had deferred this as "the 409 is the correct honest
-  failure".)
-- **The fix (`lib/compute.mjs`):** new `buildMinimalResolvedRecord(meta, id, lifecycle?)` builds a valid
-  `kind:'binary'` record from the settled `outcomePrices` (YES/NO = 1/0 ARE the final prices — real data):
-  real re-verifiable `raw_sha256` over the UNCHANGED `canonicalizeRawInputs` recipe, `freshness.final`,
-  `resolved_outcome` from `classifyLifecycle`. Confidence = reliability **high** / liquidity **low** with
-  VALID enum tiers (the schema forbids a literal `tier:'RESOLVED'` — see [[gotchas]]). Wired into
-  `computeBinaryRecord`'s RESOLVED-no-prior branch; caches via `writeRecord` → future browses `SERVE_FINAL`,
-  backfill populates the chart. Browser-verified: loads with RESOLVED banner + 100% + "final", absent from
-  rail, cached, 0 app console errors. SpaceX (has prior) + OPEN markets unchanged.
-- **Two traps hit (now in [[gotchas]] "A 'minimal' resolved record can't invent a tier:'RESOLVED'…"):** the
-  `confidence.*.tier` schema enum, and `Number(null) === 0` fabricating a 0% probability (null-guard added,
-  caught by a defensive test).
-- **⚠ Scope / still-open (documented in the fn JSDoc + [[decisions]]):** BINARY-ONLY. `CLOSED_PENDING`-no-prior
-  and RESOLVED-no-prior for touch/categorical/ladder still 409 (their schema branches require full derived
-  blocks that can't be "minimal"). A scoped follow-up if those shapes ever need it.
-- **NEXT:** `git branch -d fix/resolved-no-prior` (fully merged). Nothing else pending on this.
+## ⮕ DIRECTION (2026-07-06, latest): RESOLVED-NO-PRIOR 409 FIX — ALL 5 SHAPES — MERGED to main + PUSHED (`main` @ `40e5855`)
+- **`main` is at `40e5855`, in sync with `origin/main`.** Two branches, sequential passes on the same fix:
+  `fix/resolved-no-prior` (`20aa690`, binary-only) merged as `39b0cbf`, then `fix/resolved-no-prior-all-shapes`
+  (`4fafd88`, the remaining 4 shapes) merged `--no-ff` as `40e5855` — clean merge, no conflict. **Final gates:
+  432/432 (+21 over the binary-only pass's 411); parity 4/4 byte-identical (`c1be52e4…b89003`); tsc + next
+  build clean; browser-verified.**
+- **The bug (both passes):** browsing a RESOLVED market the product never captured while OPEN threw a
+  **409** ("no prior record to freeze") — OUR gap, not a Polymarket limitation (gamma serves resolved
+  markets with `closed:true` + `umaResolutionStatus:'resolved'` + settled `outcomePrices`).
+- **Pass 1 (binary, `39b0cbf`):** `buildMinimalResolvedRecord` built a valid `kind:'binary'` record from
+  settled YES/NO prices. Verified live on `net-quarterly-earnings-nongaap-eps-02-11-2026-0pt27` (Cloudflare
+  NET). Two traps hit (now in [[gotchas]]): the `confidence.*.tier` schema enum (no literal `'RESOLVED'`
+  tier exists) and `Number(null) === 0` fabricating a false 0% probability.
+- **Pass 2 (all shapes, `40e5855`):** `buildMinimalResolvedRecord` is now shape-dispatching —
+  `(shape, meta, id, lifecycle?)` — covering survival/bucket_pmf/directional_touch/categorical too, wired
+  into `computeMarketRecord`'s survival branch + the 3 other shapes' compute functions. **Design: each
+  shape builds a `live`-shaped object from settled prices and feeds it through the SAME builder the OPEN
+  path already uses** (mirrors the backfill pattern) — reusing isotonic adjustment/quantile crossings/
+  de-vig/entropy rather than re-deriving bucket math. A shared `resolvedConfidence()` (reliability high /
+  liquidity low) replaces each shape's live-scored confidence. `CLOSED_PENDING`-no-prior still 409s
+  everywhere (genuinely no settled outcome). Verified live on
+  `what-price-will-bitcoin-hit-june-29-july-5-2026` (14-leg survival ladder): loads RESOLVED/final/absent
+  from rail, 0 console errors; NET binary + SpaceX + an OPEN binary all regression-verified unchanged.
+- **⚠ FOUND, NOT fixed (out of scope, flagged in [[decisions]] + [[gotchas]]):** (a) the reported Bitcoin
+  market classifies as `'survival'` but is ACTUALLY a two-sided "reach $X / dip to $X" market the shape
+  classifier doesn't detect (its `TOUCH_RE` only recognizes WTI/Silver's `"(HIGH)"/"(LOW)"` wording) —
+  its settled outcomes are genuinely non-monotonic as a one-directional ladder; the existing isotonic step
+  handles it without a crash, and a new `ladderSettlementLabel` avoids emitting a backwards-reading range
+  string for this case; (b) the UI's OWN `MarketDetailView.resolvedBand` has the identical un-fixed
+  backwards-label bug (independent of `derived.narrative`) — not touched this session; (c) a new gotcha —
+  `raw_inputs` has a SCHEMA-WIDE `minItems:1` independent of any per-kind field's own constraints (bit
+  while assuming categorical could degrade to an empty distribution).
+- **NEXT:** `git branch -d fix/resolved-no-prior-all-shapes` (fully merged; `fix/resolved-no-prior` from the
+  binary pass should already be gone). Nothing else pending on the resolved-no-prior fix. Possible future
+  follow-ups (not scheduled): fix the "reach/dip" shape-classifier gap, fix `resolvedBand`'s backwards
+  range in the UI.
 
 ## ⮕ DIRECTION (2026-07-06): HISTORYCHART REWORK + RESOLVED-MARKET DISPLAY — BOTH MERGED to main + PUSHED (`main` @ `79f7e0d`)
 - **`main` is at `79f7e0d`, in sync with `origin/main`.** Two independent branches, each merged `--no-ff`:

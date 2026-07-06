@@ -5,6 +5,52 @@ Newest at top. If you're about to change one of these, read the entry first.
 
 ---
 
+## Resolved-no-prior 409 fix EXTENDED to all 5 shapes — survival/bucket_pmf/directional_touch/categorical
+**Decided (2026-07-06):** the binary-only fix below (see the immediately-following entry) is now extended
+to the 4 remaining shapes. **This SUPERSEDES that entry's "Constrains: BINARY-ONLY" line** — every shape
+now builds a minimal record from settled `outcomePrices` instead of 409ing on RESOLVED+no-prior.
+- **`buildMinimalResolvedRecord` is now a SHAPE-DISPATCHING function** — `buildMinimalResolvedRecord(shape,
+  meta, id, lifecycle?)` — called uniformly from `computeMarketRecord`'s survival branch plus
+  `computeBucketPmfRecord`/`computeTouchRecord`/`computeCategoricalRecord`'s RESOLVED-no-prior branches.
+  `CLOSED_PENDING`-no-prior still 409s everywhere (no settled outcome exists to build from — genuinely
+  no data, not a gap).
+- **The reuse pattern (the load-bearing design choice):** each shape constructs a `live`-shaped object
+  from the settled prices — the SAME shape each shape's own `fetchXSnapshot` produces — then feeds it
+  through the SAME builder the OPEN path already uses (`buildSnapshotRecord`/`buildTouchRecord`/
+  `buildCategoricalRecord`). This is the EXACT pattern `lib/backfill-record.mjs` already uses (a
+  `live`-shaped object built from CLOB price HISTORY, not live quotes, fed through the same core
+  builders) — so isotonic adjustment, quantile crossings, de-vig, and entropy are REUSED, not
+  re-derived by hand. Bucket_pmf specifically reuses `core/bucket.js buildPmfLadder` fed `{lo,hi,prob}`
+  with the settled 0/1 in place of a live PMF — de-vig is then a no-op (exactly one leg is 1).
+- **A shared `resolvedConfidence()`** (reliability high / liquidity low, valid enum tiers) replaces every
+  shape's live-scored confidence post-hoc — the live scorer would otherwise emit a misleading "tight
+  spread"/"deep book" default reason for a market with no live book at all.
+- **A single unparseable leg is DROPPED, never fabricated.** When EVERY leg of a non-binary shape is
+  unparseable, the record genuinely cannot be built — `raw_inputs` has a SCHEMA-WIDE `minItems:1`
+  (independent of `kind`; see [[gotchas]] "raw_inputs minItems:1 is schema-wide…") — so that remains an
+  honest 409, never a faked record. (Binary never hits this: it always emits exactly 2 raw_inputs rows,
+  YES+NO, with a `'0'` fallback midpoint.)
+- **Diagnostic finding (flagged, NOT fixed — out of scope):** the reported Bitcoin market
+  (`what-price-will-bitcoin-hit-june-29-july-5-2026`) classifies as **`survival`** via the existing
+  `classifyMarketShape`/`ladderShapeFromMarkets`, but is ACTUALLY a two-sided "reach $X / dip to $X"
+  structure — the classifier's `TOUCH_RE` only recognizes WTI/Silver's literal `"(HIGH)"/"(LOW)"` wording,
+  not this market's phrasing, so it falls through to the generic `$`-threshold `'survival'` branch. Its
+  settled per-rung outcomes are genuinely NON-MONOTONIC as a one-directional ladder (Yes at $58/$62
+  sandwiched among No at 46–56 and 64–74) — the SAME isotonic-adjustment step already trusted for noisy
+  LIVE quotes handles this without a crash (never new/invented math), but a naive settlement-range label
+  ("lastYes"–"firstNo") would read BACKWARDS ("settled in $62–$46") for this pathological case; a new
+  `ladderSettlementLabel` detects the inversion and falls back to an honest non-specific statement instead
+  of asserting a wrong-looking range. **The UI's OWN `MarketDetailView.resolvedBand` has the identical
+  un-fixed backwards-label bug** (it's independent of `derived.narrative`, computed straight from
+  `lifecycle.resolved_outcome` in the view) — this session did NOT touch that UI code; it's flagged here
+  for whoever eventually fixes the classifier or the view.
+**Constrains:** never fix the classifier gap or the UI's `resolvedBand` bug as a side-effect of an
+unrelated change — either is a real, separately-scoped fix (the classifier touches `classifyMarketShape`,
+used everywhere including the OPEN path, and needs its own parity/regression pass). NEVER invent a `tier`
+outside the enum, in ANY new minimal-record builder. SpaceX has a prior → never hits any of these paths →
+**parity 4/4 byte-identical.** 21 new tests (3-6 per shape). Additive: only the 4 shapes' RESOLVED-no-prior
+branches + `computeMarketRecord`'s survival branch changed.
+
 ## Resolved markets with NO prior now build a minimal record from settled outcomePrices (binary) — 409 removed
 **Decided (2026-07-06):** browsing a RESOLVED market the product never captured while OPEN threw a 409
 ("no prior record to freeze") from `computeBinaryRecord`. That was OUR gap, not a Polymarket limitation:
@@ -28,14 +74,11 @@ prices, real observed data, so the record is reconstructed honestly, not faked.
   `SERVE_FINAL` from cache; the browse-history backfill trigger populates the trend chart. Browser-verified
   on `net-quarterly-earnings-nongaap-eps-02-11-2026-0pt27` (Cloudflare NET, resolved YES): loads with the
   RESOLVED banner + 100% + "final", absent from the rail, cached, history backfilled, 0 app console errors.
-**Constrains:** BINARY-ONLY — it's the reported shape AND the only kind whose schema branch permits a truly
-minimal derived block (`{kind, probability, confidence, total_volume, freshness}`). `CLOSED_PENDING`-no-prior
-still 409s (trading ended, UMA unconfirmed → no settled outcome to build from). RESOLVED-no-prior for
-touch/categorical/ladder still 409s — their schema branches require full derived blocks
-(`implied_range`/`high_series`, `outcomes`/`dominant_outcome`/`entropy`, `markets`/`iqr`/`median`) that can't
-be "minimal"; building those from settled prices is a separate larger change (a scoped follow-up, noted in
-the function's JSDoc). NEVER invent a `tier` outside the enum. SpaceX has a prior → never hits this path →
-**parity 4/4 byte-identical.** Additive: only `computeBinaryRecord`'s RESOLVED-no-prior branch changed.
+**Constrains:** [SUPERSEDED by the entry above — no longer BINARY-ONLY] it's the reported shape AND the only
+kind whose schema branch permits a truly minimal derived block (`{kind, probability, confidence,
+total_volume, freshness}`). `CLOSED_PENDING`-no-prior still 409s (trading ended, UMA unconfirmed → no
+settled outcome to build from). NEVER invent a `tier` outside the enum. SpaceX has a prior → never hits this
+path → **parity 4/4 byte-identical.**
 
 ## Resolved markets are NOT searchable (gamma limitation) but browse fine by direct URL — INTENTIONAL, no code change
 **[UPDATED 2026-07-06 — the 3rd bullet's "just 409 / don't fake a record" is SUPERSEDED FOR BINARY by the
