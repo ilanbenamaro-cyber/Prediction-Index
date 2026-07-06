@@ -230,7 +230,7 @@ function MarketDetailView({ record, envelope, hist, deltas, movers, narrativeBit
         <div>
           <h1 className="detail-title" data-field="title">{displayTitle(asset.name, envelope?.market_id)}</h1>
           <div className="detail-sub muted">
-            {asset.platform ?? 'polymarket'}{asset.resolves ? ` · resolves ${asset.resolves}` : ''}
+            {asset.platform ?? 'prediction index'}{asset.resolves ? ` · resolves ${asset.resolves}` : ''}
             {daysToExpiryLabel(asset.resolves) && <span data-field="days-to-expiry"> · {daysToExpiryLabel(asset.resolves)}</span>}
             {asset.market_url && <> · <a href={asset.market_url} target="_blank" rel="noopener">view market ↗</a></>}
           </div>
@@ -560,7 +560,7 @@ export function DetailSkeleton() {
           which takes a moment, so the wait reads as work, not a hang. */}
       <div className="detail-loading-msg" role="status" aria-live="polite">
         <span className="detail-loading-title">Computing market data…</span>
-        <span className="detail-loading-sub faint">Fetching live Polymarket prices and running the verified pipeline — this takes a moment for a new market.</span>
+        <span className="detail-loading-sub faint">Fetching live Prediction Index prices and running the verified pipeline — this takes a moment for a new market.</span>
         <div className="detail-loading-bar" aria-hidden="true"><div className="detail-loading-bar-fill" /></div>
       </div>
       <div className="wl-skel-bar" style={{ width: '70%', height: 40, marginBottom: 12 }} aria-hidden="true" />

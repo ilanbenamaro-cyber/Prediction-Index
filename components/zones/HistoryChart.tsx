@@ -144,7 +144,7 @@ function Collecting({ range, backfilling = false }: { range: string; backfilling
   if (backfilling) {
     return (
       <div className="empty" data-field="history-backfilling" aria-live="polite">
-        {'Backfilling history… — reconstructing the daily series from Polymarket price history. This section populates automatically once it completes.'}
+        {'Backfilling history… — reconstructing the daily series from Prediction Index price history. This section populates automatically once it completes.'}
       </div>
     );
   }

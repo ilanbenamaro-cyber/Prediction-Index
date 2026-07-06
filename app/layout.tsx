@@ -19,8 +19,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Polymarket terminal',
-  description: 'Institutional prediction-market signal — verified Polymarket data.',
+  title: 'Prediction Index',
+  description: 'Institutional prediction-market signal — verified Prediction Index data.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
