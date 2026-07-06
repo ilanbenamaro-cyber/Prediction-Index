@@ -55,7 +55,14 @@ function resolvedBand(outcome: ResolvedLeg[] | undefined, unit: string): string 
   const lastYes = yes.length ? Math.max(...yes) : null;
   const firstNo = no.length ? Math.min(...no) : null;
   const p = unit === '%' ? '' : '$'; // percent buckets carry no '$' prefix
-  if (lastYes != null && firstNo != null) return `settled in ${p}${lastYes}–${firstNo}${unit}  (>${p}${lastYes}${unit} Yes · >${p}${firstNo}${unit} No)`;
+  if (lastYes != null && firstNo != null) {
+    // UI twin of lib/compute.mjs's ladderSettlementLabel (~line 247): lastYes >= firstNo means the
+    // settled outcomes are NOT a simple ascending survival step (a two-sided structure the shape
+    // classifier missed) — asserting a specific range there would read backwards/confusing, so fall
+    // back to an honest non-specific statement instead of inventing a misleading range.
+    if (lastYes < firstNo) return `settled in ${p}${lastYes}–${firstNo}${unit}  (>${p}${lastYes}${unit} Yes · >${p}${firstNo}${unit} No)`;
+    return 'settled (see per-threshold outcomes for the exact settlement pattern)';
+  }
   if (lastYes != null) return `settled above ${p}${lastYes}${unit}`;
   if (firstNo != null) return `settled below ${p}${firstNo}${unit}`;
   return null;
