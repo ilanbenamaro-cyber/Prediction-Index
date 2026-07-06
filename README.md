@@ -1,4 +1,4 @@
-# polymarket-tracker
+# Prediction Index
 
 Tracks the Polymarket **"SpaceX IPO closing market cap above ___?"** prediction
 market. It runs two ways:
@@ -10,7 +10,6 @@ market. It runs two ways:
   no laptop, publishes a public dashboard, and emails subscribers at market open
   and close. This is the production system.
 
-Built to be imported into `~/jarvis/daemon.js` when Jarvis Phase 2 begins.
 
 ---
 
