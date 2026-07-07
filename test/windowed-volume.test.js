@@ -48,6 +48,25 @@ test('windowedVolumeSignal: LOW catches the dormant-but-historically-traded mark
   assert.equal(winSig({ volume_24hr: 0, volume_1wk: 0 }).tier, 'low');
 });
 
+// H2: the MEDIUM-tier naming fix (250e4af, "name whichever window ACTUALLY earned it") was never
+// carried to LOW — LOW named the window by mere presence (`v24 != null ? '24h' : '7d'`), so a
+// present-but-exactly-zero 24h figure beside a real (if sub-threshold) 7d number reported the
+// misleading "$0" instead of the more representative week-long figure.
+test('windowedVolumeSignal: LOW qualified via 7d window (24h present but zero) names "7d", not "24h"', () => {
+  // 24h is present but genuinely zero (no trades today); 7d has real, if sub-threshold, activity.
+  const via7 = winSig({ volume_24hr: 0, volume_1wk: 20_000 });
+  assert.equal(via7.tier, 'low');
+  assert.match(via7.reason, /thin 7d volume \(\$20,000\)/);
+  assert.doesNotMatch(via7.reason, /24h/);
+});
+
+test('windowedVolumeSignal: LOW with a real nonzero 24h figure still prefers 24h (unchanged)', () => {
+  // Regression-lock: the US-recession case above (v24=478, both present) must still name 24h — the
+  // fix only changes the EXACTLY-ZERO-24h case, not "24h present and genuinely informative".
+  const via24 = winSig({ volume_24hr: 478, volume_1wk: 16_071 });
+  assert.match(via24.reason, /thin 24h volume \(\$478\)/);
+});
+
 test('windowedVolumeSignal: just-over-the-line Anthropic is HIGH (24h $51,666 ≥ $50K)', () => {
   assert.equal(winSig({ volume_24hr: 51_666, volume_1wk: 220_614 }).tier, 'high');
 });

@@ -99,8 +99,14 @@ export function windowedVolumeSignal(liquidity) {
     const usd = `$${Math.round(via24 ? v24n : v7n).toLocaleString('en-US')}`;
     return { tier: 'medium', reason: `moderate ${window} volume (${usd})` };
   }
-  const window = v24 != null ? '24h' : '7d';
-  const usd = `$${Math.round(v24 ?? v7 ?? 0).toLocaleString('en-US')}`;
+  // H2: mirror the MEDIUM path's "name whichever window actually earned it" (250e4af) — a
+  // present-but-exactly-zero 24h figure beside a real (if sub-threshold) 7d number would otherwise
+  // report the misleading "$0" instead of the more representative week-long figure. Prefer 24h
+  // only when it's genuinely informative (present AND nonzero); fall back to 7d when present,
+  // else 24h (the only field available, even if zero).
+  const via24 = v24 != null && v24n > 0;
+  const window = via24 ? '24h' : (v7 != null ? '7d' : '24h');
+  const usd = `$${Math.round(window === '24h' ? v24n : v7n).toLocaleString('en-US')}`;
   return { tier: 'low', reason: `thin ${window} volume (${usd})` };
 }
 
@@ -333,7 +339,14 @@ export function scoreConfidence({
 
   // ── reliability score (0..1) ──
   const countScore = Math.min(1, count / ladderSize);
-  const monoScore = nearSettled ? 1 : Math.max(0, 1 - rawViolations / 4) * Math.max(0, 1 - maxAdjustment / 0.1);
+  // Mirror R2's own immateriality carve-out (H1): a sub-MATERIAL_ADJUSTMENT isotonic tweak is
+  // "negligible" for the TIER regardless of rawViolations count — monoScore must agree, or a
+  // tier=high market can carry an unexplained, violations-penalized score (~0.6-0.8) with no
+  // reason string accounting for the gap. Threshold and tier logic are UNCHANGED; only the score
+  // formula's guard is added.
+  const monoScore = nearSettled || maxAdjustment < MATERIAL_ADJUSTMENT
+    ? 1
+    : Math.max(0, 1 - rawViolations / 4) * Math.max(0, 1 - maxAdjustment / 0.1);
   const spreadScore = priceOnly ? 0.6 : Math.max(0, Math.min(1, 1 - spread / 0.1));
   let relScore = (countScore + monoScore + spreadScore) / 3;
   if (anomalies && anomalies.stale) relScore -= 0.15;

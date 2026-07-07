@@ -114,6 +114,8 @@ export function scoreTouchConfidence({ rawInputs, totalVolume, midpointFallback 
 /** Display string for a range bound, including the honest "outside the strike ladder" cases
  *  when the 50% crossover falls beyond the quoted levels (Bug 5 ethos — never a bare null). */
 function boundLabel(value, series, kind, unit) {
+  // TODO: boundLabel hardcodes '$' — fix when first %-unit touch market exists
+  //       see .workflows/_knowledge/gotchas.md "touch-record boundLabel"
   if (value != null) return `$${value.toFixed(2)}${unit}`;
   if (!series.length) return 'n/a';
   const levels = series.map((s) => s.level);

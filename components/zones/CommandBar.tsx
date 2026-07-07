@@ -10,7 +10,7 @@ export function CommandBar({ userEmail }: { userEmail: string }) {
   return (
     <header className="cmdbar cmdbar-row">
       <div className="cmdbar-brand">
-        <span className="num">PM</span> TERMINAL
+        <span className="num">PREDICTION INDEX</span>
       </div>
 
       <MarketSearch />
