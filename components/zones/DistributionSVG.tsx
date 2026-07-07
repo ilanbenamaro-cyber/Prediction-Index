@@ -71,7 +71,7 @@ function CdfPanel({ markets, impliedMedian, unit }: { markets: LadderPoint[]; im
       <polygon className="dist-cdf-area" points={areaPts} fill="url(#cdf-fill-grad)" /> {/* Enh 1: gradient fill */}
       <polyline className="dist-cdf-line" points={pts} fill="none" />
       {markets.map((m, i) => ( // index key: an arbitrary market's parsed thresholds aren't guaranteed unique
-        <circle key={i} className="dist-cdf-dot" cx={xScale(m.threshold, lo, hi)} cy={yScalePct(m.prob * 100)} r={2.5}>
+        <circle key={i} className="dist-cdf-dot" cx={xScale(m.threshold, lo, hi)} cy={yScalePct(m.prob * 100)} r={1.8}>
           <title>{`${tickLabel(m.label)} · P(>) ${(m.prob * 100).toFixed(1)}%${m.volume != null ? ` · vol $${Math.round(m.volume).toLocaleString('en-US')}` : ''}`}</title>
         </circle>
       ))}
@@ -85,7 +85,7 @@ function CdfPanel({ markets, impliedMedian, unit }: { markets: LadderPoint[]; im
       {medX != null && (
         <g data-field="cdf-median-marker">
           <line className="dist-median" x1={medX} x2={medX} y1={PAD.t} y2={VB_H - PAD.b} />
-          <circle className="dist-median-dot" cx={medX} cy={yScalePct(50)} r={3.2} /> {/* Enh 1: marker on the 50% crossing */}
+          <circle className="dist-median-dot" cx={medX} cy={yScalePct(50)} r={2.4} /> {/* Enh 1: marker on the 50% crossing */}
           <text className="dist-median-lbl" x={Math.min(medX + 4, VB_W - PAD.r - 60)} y={PAD.t + 9}>{`median ${unit === '%' ? '' : '$'}${impliedMedian?.toFixed(2)}${unit}`}</text>
         </g>
       )}

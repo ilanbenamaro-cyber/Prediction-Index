@@ -24,7 +24,9 @@ export function CategoricalOutcomeBars({ outcomes }: { outcomes: CategoricalOutc
   const shown = expanded ? outcomes : outcomes.slice(0, MAX_BARS);
   const hidden = outcomes.length - shown.length;
   const max = Math.max(0.01, ...outcomes.map((o) => o.probability)); // fixed scale (leader)
-  const rowH = 26;
+  // LEDGER chart recalibration: the 480-wide viewBox renders ~2.4x, so viewBox rows must be
+  // tighter than they look here — 17 (≈40px rendered) reads terminal-dense; 26 read toy-scaled.
+  const rowH = 17;
   const VB_W = 480;
   const VB_H = shown.length * rowH + 8;
   const labelW = 150;
@@ -51,9 +53,9 @@ export function CategoricalOutcomeBars({ outcomes }: { outcomes: CategoricalOutc
           return (
             <g key={i}>
               {isHover && <rect className="cat-bar-hoverbg" x={0} y={y} width={VB_W} height={rowH} />}
-              <text className="cat-bar-label" x={labelW - 6} y={y + rowH / 2 + 3} textAnchor="end">{o.label}</text>
-              <rect className={`cat-bar${i === 0 ? ' cat-bar-top' : ''}`} x={labelW} y={y + 3} width={Math.max(1, w)} height={rowH - 10} rx={2} />
-              <text className="cat-bar-pct" x={labelW + Math.max(1, w) + 6} y={y + rowH / 2 + 3} textAnchor="start">{pct1(o.probability)}</text>
+              <text className="cat-bar-label" x={labelW - 6} y={y + rowH / 2 + 2.5} textAnchor="end">{o.label}</text>
+              <rect className={`cat-bar${i === 0 ? ' cat-bar-top' : ''}`} x={labelW} y={y + 4} width={Math.max(1, w)} height={rowH - 8} />
+              <text className="cat-bar-pct" x={labelW + Math.max(1, w) + 6} y={y + rowH / 2 + 2.5} textAnchor="start">{pct1(o.probability)}</text>
             </g>
           );
         })}
