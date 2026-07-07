@@ -53,8 +53,9 @@ const VOL24_HIGH_FLOOR = 2_000;
 // answers "can you transact at SIZE right now", complementing windowed volume ("was there recent
 // flow"); they go worst-of in the LIQUIDITY dimension. Operator-calibrated against ~150 live markets
 // (depth p50 ≈ $62K, p75 ≈ $352K): HIGH ≥ $100K (move real size), MED ≥ $10K (usable), LOW below
-// (thin book, easy to push). ⚠ RED-TEAM TODO: pressure-test these cutoffs (with Increment B's
-// entropy 0.40 / leader 0.70 / rel-spread 0.50).
+// (thin book, easy to push). Red-teamed 2026-06-30 (see decisions.md "Red-team of the confidence
+// tuning constants") — boundary/manipulation/interaction cases + a 280-market live re-survey moved
+// no threshold.
 const DEPTH_HIGH = 100_000;
 const DEPTH_MEDIUM = 10_000;
 

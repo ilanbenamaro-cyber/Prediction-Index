@@ -8,7 +8,46 @@
 > There is **no `.workflows/_system/` dir, no `codebase.md`/`MEMORY.md`** — the global `/sync`
 > skill tolerates their absence (updated 2026-06-18); don't be alarmed when it skips them.
 
-## ⮕ DIRECTION (2026-07-06, latest): RESOLVED-NO-PRIOR 409 FIX — ALL 5 SHAPES — MERGED to main + PUSHED (`main` @ `40e5855`)
+## ⮕ DIRECTION (2026-07-06, latest): PERFECTION PASS — 14 gated fixes on `fix/perfection-pass-2026-07-06` — **PR #1 OPEN, AWAITING OPERATOR MERGE**
+- **PR: https://github.com/ilanbenamaro-cyber/Prediction-Index/pull/1** (branch pushed; a direct
+  push to main was DENIED by the permission classifier → PR-review flow; local main was reset back
+  to `origin/main` @ `7c9b08f`, nothing lost — the branch carries everything). **Gates on the branch
+  tip (== the merge tree, main hasn't moved): 454/454 (+22 over the 432 baseline); parity 4/4
+  byte-identical (`c1be52e4…b89003`); tsc + clean `next build`; verify-phase2a vs the PRODUCTION
+  build ALL GREEN — including C4, green for the first time since the confidence split.** Full-system
+  audit (Opus math + Opus security + adversarial probes): **no P0 anywhere**; Playwright sweep of
+  every view/state: **0 console errors**.
+- **Why C4 is finally green (P1):** `seed-spacex.mjs` was a SILENT NO-OP — `writeRecord` upserts with
+  `ignoreDuplicates` on `(market_id, fetched_at)` and a frozen record's fetched_at never changes, so
+  the documented "re-run the seed" remediation could never work. `writeRecord` gained a `replace`
+  option (seed-only); dev re-seeded. See [[gotchas]] "A conflict-IGNORING upsert…".
+- **Touch dup-strike dedup (P1, the session's big data-accuracy find):** gamma touch events carry
+  re-listed strikes with CONTRADICTORY settlements (early-touched Yes + re-listed No at the same
+  level). `dedupTouchLegs` in `fetchTouchMeta` keeps the current board. `si-hit-jun-2026` fully
+  remediated on dev: 70 stale pre-split snapshot rows purged → serves 200 RESOLVED ("touched LOW
+  $60–75"), history purged + re-backfilled (187 rows, 21 unique strikes). See [[decisions]]
+  "Touch strikes dedup to the CURRENT BOARD".
+- **Other P1s:** unknown/delisted slug → 404 (was 502); post-jump velocity window clipped to its
+  "7d" label; resolved-market display voice (settlement banners for touch/categorical, resolved
+  narratives, expiry-countdown suppression). **P2s:** refreshMarket getUser guard + MARKET_ID_RE
+  allow-list; %-unit touch settlement labels; resolvedBand inversion guard; binary NO% complement
+  (101% artifact); caveat-dot basis chips; slug-uniquifier strip + platformLabel; search clears on
+  close; degenerate range labels; net-move/fitted-trend disambiguation.
+- **CLOSED carried items:** si-hit 422 (above); cron snapshot_hour 15/19 = dev-DB manual runs, NOT a
+  bug (see [[decisions]] "Cron snapshot_hour…"; prod-hours check = operator standup); Bitcoin
+  two-sided confirmed serving 200 RESOLVED on prod (classifier-gap note stands, no code change).
+- **⚠ HARD-STOP items awaiting operator (untouched):** (H1) `core/confidence.js` monoScore ignores
+  the MATERIAL_ADJUSTMENT carve-out the tier honors → tier=high can carry an unexplained ~0.6 score;
+  (H2) LOW-tier windowed-volume reason names the window by field-presence (the MEDIUM naming fix was
+  never carried to LOW); (H3) `core/touch-record.js boundLabel` hardcodes `$` at 5 sites (no live
+  %-unit touch market exists → zero current impact); (H4, brand call) the header still reads
+  "PM TERMINAL" post-rebrand — repo was renamed Prediction-Index, so likely stale, but brand identity
+  is the operator's decision.
+- **NEXT:** operator reviews + merges PR #1; decides H1–H4; prod standup checks prod cron rows land
+  at hours 2/18; optional `git branch -d fix/resolved-no-prior-all-shapes` (carried). Dev-DB state
+  changed this session: SpaceX re-seeded (current shape), si-hit purged+rebuilt.
+
+## ⮕ DIRECTION (2026-07-06): RESOLVED-NO-PRIOR 409 FIX — ALL 5 SHAPES — MERGED to main + PUSHED (`main` @ `40e5855`)
 - **`main` is at `40e5855`, in sync with `origin/main`.** Two branches, sequential passes on the same fix:
   `fix/resolved-no-prior` (`20aa690`, binary-only) merged as `39b0cbf`, then `fix/resolved-no-prior-all-shapes`
   (`4fafd88`, the remaining 4 shapes) merged `--no-ff` as `40e5855` — clean merge, no conflict. **Final gates:

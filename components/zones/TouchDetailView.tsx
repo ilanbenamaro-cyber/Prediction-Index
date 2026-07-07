@@ -7,7 +7,7 @@
 // 50% crossovers) as a horizontal range bar, plus a touch-probability table. The TRUST layer
 // (confidence, freshness, provenance + hash-verify) is identical to every other detail.
 import { canonicalizeRawInputs } from '@/core/fetch.js';
-import { fmtEastern, displayTitle, pointChange, touchNarrative, daysToExpiryLabel, barrierPathUncertainty } from '@/lib/format-detail.mjs';
+import { fmtEastern, displayTitle, pointChange, touchNarrative, daysToExpiryLabel, barrierPathUncertainty, platformLabel } from '@/lib/format-detail.mjs';
 import { rangeBarLayout, niceTicks, buildAxisSamples, resolveBound } from '@/lib/touch-rangebar.mjs';
 import { ChartCrosshair, type InterpConfig, type InterpChannel } from './ChartCrosshair';
 import { interpSeriesAtLevel } from '@/lib/chart-hover.mjs';
@@ -24,6 +24,18 @@ const LIFECYCLE_CLASS: Record<string, string> = { OPEN: 'state-open', CLOSED_PEN
 const LIFECYCLE_LABEL: Record<string, string> = { OPEN: 'OPEN', CLOSED_PENDING: 'CLOSED · PENDING', RESOLVED: 'RESOLVED' };
 
 const fmtVol = (v: number | null | undefined) => (v == null ? '—' : `$${Math.round(v).toLocaleString('en-US')}`);
+
+/** FIX 1b: the settled touch label for a RESOLVED market — mirrors lib/compute.mjs's
+ *  touchSettlementLabel exactly (same threshold, same join, same fallback phrase) so the banner
+ *  and narrative agree with how the record itself would have described its own settlement. */
+function resolvedTouchLabel(high: TouchPoint[], low: TouchPoint[], unit: string): string {
+  const pfx = unit === '%' ? '' : '$';
+  const hit = [
+    ...high.filter((p) => p.prob >= 0.5).map((p) => `HIGH ${pfx}${p.level}${unit}`),
+    ...low.filter((p) => p.prob >= 0.5).map((p) => `LOW ${pfx}${p.level}${unit}`),
+  ];
+  return hit.length ? `touched ${hit.join(', ')}` : 'neither level was touched';
+}
 
 // Item 4 redesign — a padded 480×150 viewBox (no clipping), a real tick axis reusing
 // DistributionSVG's dist-tick/dist-grid tokens, and the implied band + markers in the middle.
@@ -200,6 +212,9 @@ export function TouchDetailView({ record, envelope, hist, addControl }: { record
   const midChange7 = daysHave >= 7 ? pointChange(pts, 7) : null;
   const fmtSigned = (c: number | null) => c == null ? null : `${c >= 0 ? '+' : '−'}$${Math.abs(c).toFixed(2)}${unit}`;
   const signCls = (c: number | null) => c == null ? '' : c > 0 ? 'is-up' : c < 0 ? 'is-down' : '';
+  // FIX 1: a RESOLVED touch market's settlement label — which levels were actually touched —
+  // derived from the same high/low series the table renders (mirrors compute.mjs 1:1).
+  const resolvedLabel = isFinal ? resolvedTouchLabel(high, low, unit) : null;
 
   return (
     <article className="detail-view" data-zone="detail-view" data-kind="directional_touch" data-market-id={envelope?.market_id} data-lifecycle={lifecycleState}>
@@ -207,8 +222,9 @@ export function TouchDetailView({ record, envelope, hist, addControl }: { record
         <div>
           <h1 className="detail-title" data-field="title">{displayTitle(asset.name, envelope?.market_id)}</h1>
           <div className="detail-sub muted">
-            {asset.platform ?? 'prediction index'}{asset.resolves ? ` · resolves ${asset.resolves}` : ''}
-            {daysToExpiryLabel(asset.resolves) && <span data-field="days-to-expiry"> · {daysToExpiryLabel(asset.resolves)}</span>}
+            {platformLabel(asset.platform)}{asset.resolves ? ` · resolves ${asset.resolves}` : ''}
+            {/* FIX 1: a RESOLVED market omits the days-to-expiry segment — it no longer applies. */}
+            {!isFinal && daysToExpiryLabel(asset.resolves) && <span data-field="days-to-expiry"> · {daysToExpiryLabel(asset.resolves)}</span>}
             {asset.market_url && <> · <a href={asset.market_url} target="_blank" rel="noopener">view market ↗</a></>}
             <> · <span className="touch-tag">TOUCH MARKET</span></>
           </div>
@@ -227,6 +243,16 @@ export function TouchDetailView({ record, envelope, hist, addControl }: { record
           )}
         </div>
       </header>
+
+      {/* FIX 1: RESOLVED banner — the touch view had none, so a settled touch market read like a
+          live one. Same JSX structure/classes as the binary/ladder banner. */}
+      {isFinal && (
+        <div className="detail-resolved" data-field="resolved-banner">
+          <span className="detail-resolved-tag">RESOLVED</span>
+          <span className="detail-resolved-band">{resolvedLabel ?? 'settled'}</span>
+          <span className="detail-resolved-note faint">final record · served from cache, not re-pulled live</span>
+        </div>
+      )}
 
       {/* what a touch market IS — so the quant knows exactly what they're reading */}
       <p className="touch-explainer faint" data-field="touch-explainer">
@@ -304,7 +330,7 @@ export function TouchDetailView({ record, envelope, hist, addControl }: { record
 
       {/* NARRATIVE (v1 ITEM 1) — the implied range + midpoint move + confidence, built display-side;
           Δ sentences omit gracefully when history is absent (never a dash). */}
-      <p className="detail-narrative" data-field="narrative">{`${touchNarrative({ lowLabel: range.low_label ?? '', highLabel: range.high_label ?? '', midChange30, midChange7, unit, reliabilityTier: conf.reliability?.tier ?? null, liquidityTier: conf.liquidity?.tier ?? null, resolves: asset.resolves ?? null }) || d.narrative || ''}${hist?.synthesis ? ` ${hist.synthesis}` : ''}`}</p>
+      <p className="detail-narrative" data-field="narrative">{`${touchNarrative({ lowLabel: range.low_label ?? '', highLabel: range.high_label ?? '', midChange30, midChange7, unit, reliabilityTier: conf.reliability?.tier ?? null, liquidityTier: conf.liquidity?.tier ?? null, resolves: asset.resolves ?? null, resolvedLabel }) || d.narrative || ''}${hist?.synthesis ? ` ${hist.synthesis}` : ''}`}</p>
 
       {/* TOUCH PROBABILITY TABLE — P(touch ≥) for HIGH legs, P(touch ≤) for LOW legs. Near
           settlement (Bug B) it shows the active range only with a "show all" toggle; otherwise

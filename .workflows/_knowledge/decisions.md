@@ -5,6 +5,56 @@ Newest at top. If you're about to change one of these, read the entry first.
 
 ---
 
+## Touch strikes dedup to the CURRENT BOARD — tradeable wins, else latest closedTime
+**Decided (2026-07-06):** one gamma touch event can carry duplicate (side, level) legs with
+contradictory settlements — a leg that touches settles Yes EARLY (closedTime = touch date) and the
+board re-lists a fresh strike at the same level measuring from its re-listing (observed live on
+`si-hit-jun-2026`: "hit (HIGH) $110" both Yes-in-January and No-at-window-end). Ingesting every leg
+produced duplicate table rows live and a self-contradictory settlement narrative on the
+resolved-no-prior path. **Rule:** `core/fetch.js dedupTouchLegs` (pure, unit-tested) keeps ONE leg per
+(side, level): a still-tradeable leg wins; among closed legs the latest `closedTime` wins; ties go to
+later gamma order. Applied inside `fetchTouchMeta`, so live pricing, the lifecycle probe, backfill
+reconstruction, and `buildMinimalResolvedRecord` all inherit it.
+**Why "current board":** the re-listed strike is what Polymarket's own UI presents as the market's
+final state; mixing observation windows asserts contradictions no user can act on. The superseded
+strike's early-touch information is genuinely lost from our record — accepted (we report the board,
+not a synthesized union). **Constrains:** raw_inputs for a dup-carrying touch market now exclude
+superseded strikes (fewer rows, different hash than a pre-fix compute — correct, it's different
+observed data). History rows backfilled BEFORE the fix carry the dups — purge + re-backfill per
+market (si-hit rebuilt 2026-07-06). SpaceX is survival → parity untouched. `closed_time` is parsed
+per-leg in fetchTouchMeta, additive.
+
+## Cron snapshot_hour "15/19 vs documented 2/18" — NOT a bug; the dev DB has no cron
+**Decided/diagnosed (2026-07-06, closes the carried open item):** `vercel.json` correctly schedules
+`/api/snapshot` at `0 2 * * *` + `0 18 * * *`, and the route stamps `snapshot_hour` via
+`new Date(startedAt).getUTCHours()` — both verified correct. The observed 15/19 rows came from the
+DEV database (`.env.local` → dxoyxjxc…), where there IS no Vercel cron: every `source='cron'` row
+there is a MANUAL bearer-invoked run fired during work sessions (~11am/3pm ET → 15/19 UTC). The
+h0-cron rows predate migration 0009's hour stamping. **Constrains:** never "fix" vercel.json or the
+hour stamping off dev-DB observations; the real check — prod `market_history` rows landing at hours
+2/18 — is an OPERATOR item (prod creds are not in the dev env). `prefersCapture` is hour-agnostic
+either way, so nothing breaks regardless.
+
+## Serve/display hardening decisions (perfection pass, 2026-07-06)
+One entry for the smaller settled rules from the audit pass; each is enforced by tests:
+- **An unknown/delisted slug is 404, not 502** (`statusFor`): "Gamma API returned no events" means
+  the market doesn't exist at the source — "not found", not "upstream failure". Real upstream errors
+  (429/503/network, explicit `→ NNN`) stay 502.
+- **Market ids are format-validated at the trust boundary** (`MARKET_ID_RE` in serve-market.mjs,
+  applied in `serveMarket` + `refreshMarket`): rejects query-injection characters before the slug
+  reaches the gamma URL; `refreshMarket` also now verifies the caller via `getUser()` fail-closed
+  (it writes via service-role directly, so it cannot lean on RLS).
+- **A RESOLVED market never speaks in live-market voice**: the four narrative builders take a
+  `resolvedLabel` and swap to a settlement-first sentence (dropping tradability/consensus clauses);
+  touch + categorical views gained the RESOLVED banner the other views had; the days-to-expiry
+  subtitle segment is suppressed once resolved. All display-side — stored narratives untouched.
+- **The post-jump velocity window is clipped to its label** (`deriveVelocity`): slope window =
+  `max(jump day, last 7d)`, so the "7d" card never regresses over up to 21 post-jump days.
+- **Display normalization beats stored history**: `platformLabel()` renders 'prediction index' for
+  records frozen before the rebrand; `titleFromSlug` strips gamma's trailing 13+-digit uniquifiers;
+  binary NO% complements YES only when the quotes are consistent (a real overround stays visible);
+  basis chips mark `moderate …`/`market resolved …` reasons as caveats (·), never failures (✗).
+
 ## Resolved-no-prior 409 fix EXTENDED to all 5 shapes — survival/bucket_pmf/directional_touch/categorical
 **Decided (2026-07-06):** the binary-only fix below (see the immediately-following entry) is now extended
 to the 4 remaining shapes. **This SUPERSEDES that entry's "Constrains: BINARY-ONLY" line** — every shape

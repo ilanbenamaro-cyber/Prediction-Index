@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { unitFromLadder, fmtMoney, fmtRange, fmtEastern, settlementZone, settlementZoneLabel,
-  pointChange, binaryNarrative, touchNarrative, categoricalNarrative, confidenceSentence } from '../lib/format-detail.mjs';
+  pointChange, binaryNarrative, touchNarrative, categoricalNarrative, confidenceSentence, noProbLabel } from '../lib/format-detail.mjs';
 
 test('derives T from a trillions ladder (SpaceX-style)', () => {
   assert.equal(unitFromLadder([{ label: '>$1T' }, { label: '>$1.8T' }]), 'T');
@@ -55,6 +55,13 @@ test('fmtRange formats a {low,high} band or returns null', () => {
   assert.equal(fmtRange({ low: 26, high: 30 }, 'B'), '$26.00–$30.00B');
   assert.equal(fmtRange(null, 'T'), null);
   assert.equal(fmtRange({ low: 1 }, 'T'), null); // missing high
+});
+
+// ── FIX 6b: a degenerate lo===hi range collapses to a single value ──────────────
+test('fmtRange: lo === hi renders the single value, not "$X–$X"', () => {
+  assert.equal(fmtRange({ low: 100, high: 100 }, ''), '$100.00');
+  assert.equal(fmtRange({ low: 2.1, high: 2.1 }, 'T'), '$2.10T');
+  assert.equal(fmtRange({ low: 1, high: 1 }, '%'), '1.00%');
 });
 
 test('end-to-end: a billions market formats its headline in $B', () => {
@@ -158,6 +165,16 @@ test('displayTitle: prefers the stored name, falls back to a cleaned slug', () =
   assert.equal(displayTitle('wti-crude-oil', 'wti-crude-oil'), 'Wti Crude Oil');
 });
 
+// ── FIX 4: gamma's trailing numeric uniquifier is stripped before title-casing ──
+test('titleFromSlug: strips a trailing 13+-digit gamma uniquifier', () => {
+  assert.equal(titleFromSlug('strc-hits-100-by-20260618001620693'), 'Strc Hits 100 By');
+  assert.equal(titleFromSlug('world-cup-golden-ball-winner-20260603194031758'), 'World Cup Golden Ball Winner');
+});
+
+test('titleFromSlug: a trailing 4-digit year is untouched (not a uniquifier)', () => {
+  assert.equal(titleFromSlug('how-many-fed-rate-cuts-in-2026'), 'How Many Fed Rate Cuts In 2026');
+});
+
 // ── date-range repair in titles (the Bitcoin "June 22 28 2026" bug) ──────────────
 import { humanizeDateRange } from '../lib/format-detail.mjs';
 test('humanizeDateRange: inserts an em-dash + comma into a stripped date range', () => {
@@ -171,6 +188,15 @@ test('humanizeDateRange: inserts an em-dash + comma into a stripped date range',
 test('titleFromSlug + displayTitle repair date ranges end-to-end', () => {
   assert.equal(titleFromSlug('bitcoin-june-22-28-2026'), 'Bitcoin June 22–28, 2026');
   assert.equal(displayTitle('Will Bitcoin dip June 22 28 2026?', 'x'), 'Will Bitcoin dip June 22–28, 2026?');
+});
+
+// ── FIX 4: platform label normalization (stored 'polymarket' predates the rebrand) ──
+import { platformLabel } from '../lib/format-detail.mjs';
+test('platformLabel: null/undefined/polymarket render as "prediction index"; other values pass through', () => {
+  assert.equal(platformLabel(null), 'prediction index');
+  assert.equal(platformLabel(undefined), 'prediction index');
+  assert.equal(platformLabel('polymarket'), 'prediction index');
+  assert.equal(platformLabel('kalshi'), 'kalshi');
 });
 
 // ── Enh 5: human-readable volume ────────────────────────────────────────────────
@@ -240,6 +266,65 @@ test('detailNarrative: full paragraph with history; omits Δ/band sentences with
   assert.doesNotMatch(noHist, /band is/);  // no band sentence
   assert.doesNotMatch(noHist, /—/);        // never a dash in prose
   assert.match(noHist, /Moderate confidence in both/);
+});
+
+// ── FIX 2: binary NO label complements YES when quotes are consistent ───────────
+test('noProbLabel: independent rounding does not fabricate a false 101%/99% sum', () => {
+  // YES 0.605 / NO 0.395 sum to exactly 1.000, but round(60.5)=61 and round(39.5)=40 → 101 raw.
+  // Consistent quotes → NO complements the rounded YES (61% → 39%), never a fabricated 101%.
+  assert.equal(noProbLabel(0.605, 0.395), '39%');
+  // YES 0.601 / NO 0.399 → round(60.1)=60, round(39.9)=40 → already sums to 100; complement agrees.
+  assert.equal(noProbLabel(0.601, 0.399), '40%');
+});
+
+test('noProbLabel: a genuine overround stays visible (quotes disagree beyond tolerance)', () => {
+  // YES 0.55 + NO 0.50 = 1.05 — a real overround, more than 0.5pp off 1 — show the true NO.
+  assert.equal(noProbLabel(0.55, 0.50), '50%');
+});
+
+test('noProbLabel: null when either quote is missing', () => {
+  assert.equal(noProbLabel(null, 0.4), null);
+  assert.equal(noProbLabel(0.6, null), null);
+  assert.equal(noProbLabel(undefined, undefined), null);
+});
+
+// ── FIX 1: resolved-aware narratives (RESOLVED markets speak in the past tense) ──
+test('detailNarrative: resolvedLabel returns the resolved variant, no live clauses', () => {
+  const s = detailNarrative({ medianLabel: '$2.10T', resolvedLabel: 'settled in $2–2.2T', change30: -0.07, unit: 'T' });
+  assert.match(s, /^This market has resolved — settled in \$2–2\.2T\./);
+  assert.match(s, /implied valuation moved down \$0\.07T over its final month\./);
+  assert.doesNotMatch(s, /trade at/);
+  assert.doesNotMatch(s, /trustworthy/);
+  // no change30 → no final-month sentence, still no live clauses
+  const noMove = detailNarrative({ medianLabel: '$2.10T', resolvedLabel: 'settled', reliabilityTier: 'high', liquidityTier: 'low', unit: 'T' });
+  assert.equal(noMove, 'This market has resolved — settled.');
+});
+
+test('binaryNarrative: resolvedLabel returns the resolved variant, no live clauses', () => {
+  const s = binaryNarrative({ prob: 0.5, resolvedLabel: 'resolved YES', change30: -0.149 });
+  assert.match(s, /^This market has resolved — resolved YES\./);
+  assert.match(s, /moved down 14\.9pp over its final month\./);
+  assert.doesNotMatch(s, /trade at/);
+  assert.doesNotMatch(s, /trustworthy/);
+  const noMove = binaryNarrative({ prob: 1, resolvedLabel: 'resolved NO', reliabilityTier: 'high', liquidityTier: 'low' });
+  assert.equal(noMove, 'This market has resolved — resolved NO.');
+});
+
+test('touchNarrative: resolvedLabel returns the resolved variant, no tradability/range clauses', () => {
+  const s = touchNarrative({ lowLabel: '$66.73', highLabel: '$90.00', resolvedLabel: 'touched HIGH $90.00', reliabilityTier: 'high', liquidityTier: 'low' });
+  assert.equal(s, 'This market has resolved — touched HIGH $90.00. This was a barrier-option market: each leg priced the probability of touching a level before expiry, not a settlement value.');
+  assert.doesNotMatch(s, /trade at/);
+  assert.doesNotMatch(s, /implied barrier range runs/);
+});
+
+test('categoricalNarrative: resolvedLabel returns the resolved variant, no live clauses', () => {
+  const s = categoricalNarrative({ dominantOutcome: '0 (0 bps)', dominantProb: 0.80, resolvedLabel: 'resolved 0 (0 bps)', change30: 0.03, reliabilityTier: 'high', liquidityTier: 'low' });
+  assert.match(s, /^This market has resolved — resolved 0 \(0 bps\)\./);
+  assert.match(s, /moved up 3\.0pp over its final month\./);
+  assert.doesNotMatch(s, /trade at/);
+  assert.doesNotMatch(s, /trustworthy/);
+  const noMove = categoricalNarrative({ dominantOutcome: 'Yes', dominantProb: 1, resolvedLabel: 'resolved Yes' });
+  assert.equal(noMove, 'This market has resolved — resolved Yes.');
 });
 
 // ── confidenceSentence (the 3×3 reliability×liquidity synthesis) ──────────────

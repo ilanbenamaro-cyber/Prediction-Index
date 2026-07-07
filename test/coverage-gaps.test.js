@@ -68,9 +68,15 @@ test('statusFor: compute codes pass through; validation → 422; upstream → 50
   assert.equal(statusFor(codeErr(409)), 409);
   assert.equal(statusFor(new Error('Record invalid:\n  - schema x')), 422);
   assert.equal(statusFor(new Error('https://gamma… → 500 Internal Server Error')), 502);
-  assert.equal(statusFor(new Error('Gamma API returned no events')), 502);
   assert.equal(statusFor(new Error('CLOB midpoints: nope')), 502);
   assert.equal(statusFor(new Error('anything else')), 500);
+});
+
+// unknown/delisted market (no gamma event for the slug) is "not found", not an upstream failure —
+// a typo'd or delisted slug must 404, while a genuine upstream error (429/503/network) stays 502.
+test('statusFor: "Gamma API returned no events" → 404 (not 502); other upstream failures stay 502', () => {
+  assert.equal(statusFor(new Error('Gamma API returned no events')), 404);
+  assert.equal(statusFor(new Error('https://gamma-api.polymarket.com/events?slug=x → 403 Forbidden')), 502);
 });
 
 // ── freezePriorRecord (the resolution-transition path; C4's failure mode characterized) ────────

@@ -7,7 +7,9 @@
 //
 // Run once after applying the migration, with the service-role creds in env:
 //   SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… node scripts/seed-spacex.mjs
-// (Idempotent: re-running upserts the same row.)
+// (Idempotent: re-running REPLACES the stored row with the canonical latest.json
+// record — a frozen record's fetched_at never changes, so a plain conflict-ignoring
+// upsert would silently keep a stale-schema row in place.)
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -27,5 +29,5 @@ if (!lifecycle || lifecycle.state !== 'RESOLVED') {
 
 // markets.id is the public event slug the function is queried with.
 const marketId = config.event_slug; // 'spacex-ipo-closing-market-cap-above'
-await writeRecord(marketId, record, lifecycle, config);
+await writeRecord(marketId, record, lifecycle, config, { replace: true });
 console.log(`✓ seeded ${marketId} as RESOLVED (raw_sha256 ${record.snapshot.source.raw_sha256.slice(0, 16)}…)`);

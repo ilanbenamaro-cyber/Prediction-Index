@@ -5,6 +5,34 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## A conflict-IGNORING upsert makes "re-seed" a silent no-op when the conflict key never changes
+**Symptom (found 2026-07-06, explains weeks of red C4):** `scripts/seed-spacex.mjs` reported "✓ seeded"
+but the stored row kept the STALE pre-split schema — the documented remediation for the verify-phase2a
+C4 failure ("re-run the seed") could never have worked. **Reality:** `lib/cache.mjs writeRecord` upserts
+`market_snapshots` with `{ onConflict: 'market_id,fetched_at', ignoreDuplicates: true }`, and a frozen
+record's `fetched_at` NEVER changes — so every re-seed hit the conflict and was silently dropped. The
+seed's own comment claimed "Idempotent: re-running upserts the same row", which was false in the
+update-sense. **Lesson:** `ignoreDuplicates: true` means INSERT-or-NOTHING, not INSERT-or-UPDATE — a
+"refresh this row" path over an immutable conflict key needs update-on-conflict semantics. Fixed via a
+`writeRecord(..., { replace: true })` option used ONLY by the seed (every other caller keeps
+ignore-duplicates, preserving "a re-compute at the same instant must not duplicate"). When a documented
+remediation "doesn't take", verify the write actually LANDED (re-read the row) before re-running it.
+
+## Gamma touch events carry DUPLICATE strikes with CONTRADICTORY settlements — dedup to the current board
+**Symptom (bit live, 2026-07-06):** the rebuilt resolved record for `si-hit-jun-2026` narrated
+"touched HIGH $80…$110" right next to a table showing those same HIGH levels settled No — and its
+history chart legend read "P(touch ≥ $90) · 100%" against a current record saying 0%. **Reality:** a
+touch leg settles Yes EARLY the moment it touches (its `closedTime` = the touch date; slug gets a
+numeric suffix), and Polymarket RE-LISTS a fresh strike at the same level measuring from re-listing —
+so one gamma event legitimately carries two "hit (HIGH) $110" legs, one Yes-in-January, one
+No-at-window-end. Both settlements are "true" for their own observation windows; displaying both is
+incoherent. **Lesson:** `fetchTouchMeta` now dedups per (side, level) via `dedupTouchLegs` — a
+still-tradeable leg wins (it IS the current board); among closed legs the latest `closedTime` wins
+(matches what Polymarket's own UI reports as the final state). Live, probe, backfill, and
+resolved-no-prior paths all inherit. **Backfilled history rows written BEFORE this fix still carry the
+duplicate legs** — purge + re-backfill any affected market (si-hit was rebuilt: 187 rows, 21 unique
+strikes). If another shape ever grows early-settled re-listed legs, the same dedup posture applies.
+
 ## `raw_inputs` has a SCHEMA-WIDE `minItems:1` — it's not just a per-kind `markets`/`outcomes` constraint
 **Symptom (hit extending `buildMinimalResolvedRecord` to categorical, 2026-07-06):** assumed a categorical
 minimal record could degrade to an EMPTY distribution when every leg's settled price was unparseable —

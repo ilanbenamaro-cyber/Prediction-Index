@@ -8,21 +8,36 @@
 // LIQUIDITY (can you transact). ConfidenceBasisGroup renders one labelled basis row per dimension;
 // ConfidenceBadges renders the headline two-badge cell. A missing dimension (legacy pre-0010 data)
 // renders "—", never a fabricated tier.
+//
+// FIX 3: the mark is now PER-CHIP, not per-dimension. The pipeline's reason vocabulary uses
+// "moderate …" as its MEDIUM wording and "market resolved — …" as purely informational — under a
+// worst-of LOW dimension those specific reasons are NOT failures, so marking them ✗ alongside a
+// real failing reason (e.g. "✗ moderate order book ($29,662 depth)") reads as a false failure. A
+// reason matching /^(moderate |market resolved)/ always gets the caveat mark '·', regardless of the
+// dimension's tier; every other reason keeps the dimension mark. The chip COLOUR class stays tied
+// to the dimension tier as before — only the leading mark glyph changes per-chip.
 
 import type { Confidence, ConfidenceDimension, Tier } from './market-record';
 
 const CONF_CLASS: Record<string, string> = { high: 'conf-high', medium: 'conf-med', low: 'conf-low' };
 
+// Reasons that are caveats/informational, never a "failure", no matter which tier's chip they
+// render under — a worst-of LOW dimension must not paint these ✗.
+const CAVEAT_REASON = /^(moderate |market resolved)/;
+
 export function ConfidenceBasis({ reasons, tier, label = 'Confidence basis', field }:
   { reasons?: string[] | null; tier?: string | null; label?: string; field?: string }) {
   if (!Array.isArray(reasons) || reasons.length === 0) return null;
-  const mark = tier === 'high' ? '✓' : tier === 'low' ? '✗' : '·';
+  const dimMark = tier === 'high' ? '✓' : tier === 'low' ? '✗' : '·';
   return (
     <div className="trust-reasons" data-field={field ?? 'confidence-basis'}>
       <span className="label">{label}</span>
-      {reasons.map((r, i) => (
-        <span key={i} className={`trust-chip conf-chip-${tier ?? 'medium'}`}>{mark} {r}</span>
-      ))}
+      {reasons.map((r, i) => {
+        const mark = CAVEAT_REASON.test(r) ? '·' : dimMark;
+        return (
+          <span key={i} className={`trust-chip conf-chip-${tier ?? 'medium'}`}>{mark} {r}</span>
+        );
+      })}
     </div>
   );
 }

@@ -18,7 +18,7 @@ import { after } from 'next/server';
 import { headers } from 'next/headers';
 import { readHistoryLean, headlineValue, deriveVelocity, deriveDispersion, deriveDeltas, deriveBiggestMoves, deriveChartSeries, deriveTouchSeries, deriveCategoricalSeries, headlineChange, latestSnapshotWindow, deriveReliabilityTrend, readBackfillStatus, needsBackfill } from '@/lib/market-history.mjs';
 import { triggerBackfill } from '@/lib/trigger-backfill.mjs';
-import { unitFromLadder, fmtMoney, fmtRange, fmtEastern, impliedMedianLabel, displayTitle, fmtDeltaPp, deltaSign, meanRobustnessLabel, modeBucket, detailNarrative, daysToExpiryLabel, synthesizeSignals } from '@/lib/format-detail.mjs';
+import { unitFromLadder, fmtMoney, fmtRange, fmtEastern, impliedMedianLabel, displayTitle, fmtDeltaPp, deltaSign, meanRobustnessLabel, modeBucket, detailNarrative, daysToExpiryLabel, synthesizeSignals, platformLabel } from '@/lib/format-detail.mjs';
 import { DistributionSVG } from './DistributionSVG';
 import { SettlementConsensus } from './SettlementConsensus';
 import { TrendHistorySection, type HistoryUI, type VelocityResult, type DispersionResult } from './TrendHistory';
@@ -55,7 +55,14 @@ function resolvedBand(outcome: ResolvedLeg[] | undefined, unit: string): string 
   const lastYes = yes.length ? Math.max(...yes) : null;
   const firstNo = no.length ? Math.min(...no) : null;
   const p = unit === '%' ? '' : '$'; // percent buckets carry no '$' prefix
-  if (lastYes != null && firstNo != null) return `settled in ${p}${lastYes}–${firstNo}${unit}  (>${p}${lastYes}${unit} Yes · >${p}${firstNo}${unit} No)`;
+  if (lastYes != null && firstNo != null) {
+    // UI twin of lib/compute.mjs's ladderSettlementLabel (~line 247): lastYes >= firstNo means the
+    // settled outcomes are NOT a simple ascending survival step (a two-sided structure the shape
+    // classifier missed) — asserting a specific range there would read backwards/confusing, so fall
+    // back to an honest non-specific statement instead of inventing a misleading range.
+    if (lastYes < firstNo) return `settled in ${p}${lastYes}–${firstNo}${unit}  (>${p}${lastYes}${unit} Yes · >${p}${firstNo}${unit} No)`;
+    return 'settled (see per-threshold outcomes for the exact settlement pattern)';
+  }
   if (lastYes != null) return `settled above ${p}${lastYes}${unit}`;
   if (firstNo != null) return `settled below ${p}${firstNo}${unit}`;
   return null;
@@ -230,8 +237,9 @@ function MarketDetailView({ record, envelope, hist, deltas, movers, narrativeBit
         <div>
           <h1 className="detail-title" data-field="title">{displayTitle(asset.name, envelope?.market_id)}</h1>
           <div className="detail-sub muted">
-            {asset.platform ?? 'prediction index'}{asset.resolves ? ` · resolves ${asset.resolves}` : ''}
-            {daysToExpiryLabel(asset.resolves) && <span data-field="days-to-expiry"> · {daysToExpiryLabel(asset.resolves)}</span>}
+            {platformLabel(asset.platform)}{asset.resolves ? ` · resolves ${asset.resolves}` : ''}
+            {/* FIX 1: a RESOLVED market omits the days-to-expiry segment — it no longer applies. */}
+            {!isFinal && daysToExpiryLabel(asset.resolves) && <span data-field="days-to-expiry"> · {daysToExpiryLabel(asset.resolves)}</span>}
             {asset.market_url && <> · <a href={asset.market_url} target="_blank" rel="noopener">view market ↗</a></>}
           </div>
         </div>
@@ -274,7 +282,15 @@ function MarketDetailView({ record, envelope, hist, deltas, movers, narrativeBit
         </div>
         <div className="detail-metric">
           <span className="label">50% band</span>
-          <span className="detail-sec num" data-field="iqr">{d.iqr ? `${fmtMoney(d.iqr.p25, unit)} – ${fmtMoney(d.iqr.p75, unit)}` : '—'}</span>
+          {/* FIX 6a: both p25/p75 null used to render the degenerate "n/a – n/a" — collapse that
+              case to a single "n/a"; a genuinely one-sided band (only one side known) still shows
+              both sides so the honest partial data stays visible. No d.iqr at all keeps the
+              original "—" (distinct from "iqr present but both bounds unknown"). */}
+          <span className="detail-sec num" data-field="iqr">{
+            !d.iqr ? '—'
+              : (d.iqr.p25 == null && d.iqr.p75 == null) ? 'n/a'
+              : `${fmtMoney(d.iqr.p25, unit)} – ${fmtMoney(d.iqr.p75, unit)}`
+          }</span>
           <span className="detail-band faint">p25–p75 valuation</span>
         </div>
         <div className="detail-metric">
@@ -336,6 +352,9 @@ function MarketDetailView({ record, envelope, hist, deltas, movers, narrativeBit
         reliabilityTier: conf.reliability?.tier ?? null,
         liquidityTier: conf.liquidity?.tier ?? null,
         unit,
+        // FIX 1: a RESOLVED market gets the resolved-aware variant (reuses the banner's settled-
+        // band string) instead of live-market present-tense prose.
+        resolvedLabel: isFinal ? (band ?? 'settled') : null,
       })}${hist?.synthesis ? ` ${hist.synthesis}` : ''}`}</p>
 
       {/* TREND & HISTORY — the daily series (Phase 1). Velocity/dispersion show an explicit

@@ -36,3 +36,44 @@ test('impliedRange: null bound when a series never crosses 50% (no false precisi
   const low = [{ level: 55, prob: 0.6 }, { level: 60, prob: 0.8 }]; // already > 0.5 → no lower crossover
   assert.deepEqual(impliedRange(high, low), { low: null, high: null, confidence: 0.5 });
 });
+
+// ── dedupTouchLegs: one gamma event can carry DUPLICATE strikes with contradictory settlements ──
+// A touch leg settles Yes EARLY the moment it touches, and the board re-lists a fresh strike at
+// the same level measuring from re-listing (observed live: si-hit-jun-2026 "hit (HIGH) $110" both
+// Yes-in-January and No-at-window-end). Keep the CURRENT board: tradeable beats closed; among
+// closed, the latest closedTime wins.
+
+const leg = (side, level, over = {}) => ({
+  side, level, token_id: `${side}-${level}-${over.closed_time ?? 'open'}`,
+  closed: true, accepting_orders: false, closed_time: null,
+  outcomes: '["Yes", "No"]', outcome_prices: '["0", "1"]', ...over,
+});
+
+test('dedupTouchLegs: contradictory duplicate strike → the latest-closedTime leg wins', async () => {
+  const { dedupTouchLegs } = await import('../core/fetch.js');
+  const early = leg('HIGH', 110, { closed_time: '2026-01-27T00:00:00Z', outcome_prices: '["1", "0"]' });
+  const relisted = leg('HIGH', 110, { closed_time: '2026-07-01T00:00:00Z', outcome_prices: '["0", "1"]' });
+  assert.deepEqual(dedupTouchLegs([early, relisted]), [relisted]);
+  assert.deepEqual(dedupTouchLegs([relisted, early]), [relisted]); // order-independent
+});
+
+test('dedupTouchLegs: a still-tradeable leg beats any closed duplicate', async () => {
+  const { dedupTouchLegs } = await import('../core/fetch.js');
+  const closed = leg('LOW', 60, { closed_time: '2026-06-30T00:00:00Z' });
+  const open = leg('LOW', 60, { closed: false, accepting_orders: true });
+  assert.deepEqual(dedupTouchLegs([closed, open]), [open]);
+});
+
+test('dedupTouchLegs: no duplicates → identity (stable order, distinct sides kept apart)', async () => {
+  const { dedupTouchLegs } = await import('../core/fetch.js');
+  const legs = [leg('HIGH', 90), leg('LOW', 90), leg('HIGH', 100)]; // same level, different side = distinct
+  assert.deepEqual(dedupTouchLegs(legs), legs);
+});
+
+test('dedupTouchLegs: missing closedTime never beats a dated duplicate', async () => {
+  const { dedupTouchLegs } = await import('../core/fetch.js');
+  const undated = leg('HIGH', 80);
+  const dated = leg('HIGH', 80, { closed_time: '2026-01-07T00:00:00Z' });
+  assert.deepEqual(dedupTouchLegs([undated, dated]), [dated]);
+  assert.deepEqual(dedupTouchLegs([dated, undated]), [dated]);
+});

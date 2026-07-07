@@ -52,9 +52,13 @@ function VelocityCard({ v, unit }: { v: VelocityResult; unit: string }) {
   } else if (v.status === 'ok') {
     value = v.trend ?? '—';
     const ch = v.change ?? 0;
+    // FIX 6c: this card's trend WORD is the fitted regression slope's direction (distinct from a
+    // key-metrics "Momentum" card elsewhere, which reports the raw net move — the two can disagree
+    // in direction word on a noisy series) — the "fitted trend ·" prefix disambiguates which
+    // measurement produced this number.
     sub = isProb
-      ? `${ch >= 0 ? '+' : ''}${(ch * 100).toFixed(1)}pp over ${v.period ?? '7d'}`
-      : `${ch >= 0 ? '+' : ''}${ch.toFixed(2)} ${pfx}${unit} over ${v.period ?? '7d'}`;
+      ? `fitted trend · ${ch >= 0 ? '+' : ''}${(ch * 100).toFixed(1)}pp over ${v.period ?? '7d'}`
+      : `fitted trend · ${ch >= 0 ? '+' : ''}${ch.toFixed(2)} ${pfx}${unit} over ${v.period ?? '7d'}`;
   }
   return (
     <div className="acard" data-field="velocity-card">

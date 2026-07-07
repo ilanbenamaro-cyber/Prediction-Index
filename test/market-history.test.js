@@ -364,6 +364,42 @@ test('deriveVelocity: gradual series with no jump keeps the linreg trend', () =>
   assert.equal(v.jump, undefined);
 });
 
+// Window clip (the labeled "7d" period must bound the post-jump regression, never the jump itself):
+// a jump 15 days ago must NOT regress over all 15 post-jump points — it must match the plain 7-day
+// window a no-jump series with the same last-7-day values would produce.
+test('deriveVelocity: jump 15d ago clips the post-jump slope to the last 7 days (matches a no-jump 7d series)', () => {
+  const rows = [];
+  for (let i = 0; i <= 14; i++) rows.push(mkRow(i, { kind: 'binary', probability: 0.30 }));
+  rows.push(mkRow(15, { kind: 'binary', probability: 0.50 })); // jump +0.20
+  for (let i = 16; i <= 29; i++) rows.push(mkRow(i, { kind: 'binary', probability: 0.50 + (i - 15) * 0.005 })); // steady +0.5pp/day drift
+  const v = deriveVelocity(rows);
+  assert.equal(v.status, 'ok');
+  assert.equal(v.jump.hasRecentJump, true);
+
+  // A no-jump series carrying the SAME last-7-day values (days 23–29 of the above): its plain
+  // 7-day linreg window is the ground truth the clipped post-jump window must match.
+  const noJump = [0, 1, 2, 3, 4, 5, 6].map((i) => mkRow(i, { kind: 'binary', probability: 0.50 + (23 + i - 15) * 0.005 }));
+  const v2 = deriveVelocity(noJump);
+  assert.equal(v2.jump, undefined);
+  assert.ok(Math.abs(v.slope - v2.slope) < 1e-9, `clipped slope ${v.slope} must equal the last-7d-only slope ${v2.slope}`);
+});
+
+test('deriveVelocity: jump 3d ago uses only the post-jump points (shorter than 7d, no clipping needed)', () => {
+  const rows = [0, 1, 2, 3, 4, 5].map((i) => mkRow(i, { kind: 'binary', probability: 0.30 }));
+  rows.push(mkRow(6, { kind: 'binary', probability: 0.55 })); // jump +0.25
+  rows.push(mkRow(7, { kind: 'binary', probability: 0.60 }));
+  rows.push(mkRow(8, { kind: 'binary', probability: 0.65 }));
+  rows.push(mkRow(9, { kind: 'binary', probability: 0.70 })); // maxX=9, jumpDate day 6 → daysSinceJump=3
+  const v = deriveVelocity(rows);
+  assert.equal(v.status, 'ok');
+  assert.equal(v.jump.daysSinceJump, 3);
+  // window start = max(jumpDay=6, maxX-6=3) = 6 → post-jump points are days 6..9 only (4 points).
+  const expected = linregSlope([{ x: 6, y: 0.55 }, { x: 7, y: 0.60 }, { x: 8, y: 0.65 }, { x: 9, y: 0.70 }]);
+  assert.ok(Math.abs(v.slope - expected) < 1e-9);
+  assert.ok(v.jump);
+  assert.ok(v.trend === 'converged' || v.trend === 'volatile');
+});
+
 // ── Increment 5: confidence trend (feeds the narrative synthesis) ─────────────
 test('deriveConfidenceTrend: rising / falling / steady / null from the confidence_score series', () => {
   const row = (i, score) => ({ snapshot_date: dateAt(i), confidence_score: score, kind: 'survival', record: { snapshot: { derived: {} } } });
