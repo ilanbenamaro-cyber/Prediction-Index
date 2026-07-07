@@ -5,6 +5,52 @@ Newest at top. If you're about to change one of these, read the entry first.
 
 ---
 
+## Hard-stop resolutions: monoScore carve-out, LOW-tier window naming, PM TERMINAL → PREDICTION INDEX
+**Decided (2026-07-07):** the four HARD-STOP items carried from the perfection pass (H1-H4) are
+resolved — 3 code fixes + 1 documented deferral, each individually test-gated.
+- **H1 — `core/confidence.js` monoScore honors R2's own immateriality carve-out.** R2's TIER logic
+  already treats a sub-`MATERIAL_ADJUSTMENT` (0.5%) isotonic tweak as immaterial noise (tier stays
+  'high' regardless of `rawViolations` count), but the SCORE formula penalized the same adjustment's
+  magnitude/count unconditionally — a tier=high market could carry an unexplained, violations-
+  penalized reliability score (as low as ~0.6-0.8) with no reason string accounting for the gap.
+  `monoScore` now short-circuits to 1 (pre-adjustment) whenever `maxAdjustment < MATERIAL_ADJUSTMENT`,
+  mirroring R2's branch exactly. **Threshold value and tier logic untouched — only the score
+  formula's guard changed.** SpaceX unaffected: `rawViolations===0` there (confirmed via its
+  reliability reasons being the empty-list fallback, not a violation-count reason) so
+  `maxAdjustment===0` too — old formula `(1-0/4)*(1-0/0.1)=1` and the new guard
+  `maxAdjustment<0.005→1` agree; Gate 2's byte-identical deep-equal confirms this structurally.
+- **H2 — `windowedVolumeSignal`'s LOW-tier reason names the qualifying window.** The MEDIUM-tier fix
+  (`250e4af`) named whichever window ACTUALLY crossed its threshold instead of whichever field was
+  merely present — but that commit's own message explicitly left LOW "already self-consistent,
+  untouched." It wasn't: LOW still named by presence (`v24 != null ? '24h' : '7d'`), so a
+  present-but-exactly-zero 24h figure beside a real (if sub-threshold) 7d number reported the
+  misleading "thin 24h volume ($0)" instead of the more representative week-long figure. **The MEDIUM
+  pattern (checking which window crosses ITS OWN threshold) can't apply verbatim to LOW — by
+  definition nothing crosses a threshold there** (that's what makes it LOW); the closest faithful
+  analog implemented: prefer 24h only when it's genuinely informative (present AND nonzero), else
+  fall back to 7d when present, else 24h. This preserves the pre-existing US-recession regression
+  case (`v24=$478`, real nonzero → still reports 24h) while fixing the actual misleading-zero case.
+  No threshold or tier logic touched; reason strings aren't in the raw_inputs hash path, and SpaceX
+  carries no windowed liquidity data at all (resolved markets omit it) → parity unaffected either way.
+- **H3 — DEFERRED, documented only.** `core/touch-record.js boundLabel` hardcodes `$` in both its
+  finite-value and out-of-range branches; a %-unit touch market would render `"$5%"`-style labels.
+  No live %-unit touch market currently exists → zero current impact. A TODO comment at the exact
+  line + a gotchas.md entry ("touch-record boundLabel hardcodes $…") record the deferral; fix when
+  the percent-bucket pattern (`unit_prefix`-aware formatting) is ported to this builder.
+- **H4 — brand string normalized.** `components/zones/CommandBar.tsx`'s header still read
+  "PM TERMINAL" (split `<span className="num">PM</span> TERMINAL`) after the Prediction-Index
+  rebrand — every other surface (login/signup pages, `app/layout.tsx` metadata, loading/backfill
+  copy) already used "Prediction Index". Matched the EXACT `<span className="num">PREDICTION
+  INDEX</span>` pattern the login/signup pages had already established (one unsplit accent span),
+  rather than inventing a new split — the 2-letter-ticker + wordmark pattern ("PM"+"TERMINAL")
+  doesn't carry over cleanly to the longer brand name. Browser-verified 0 console errors.
+**Constrains:** any future confidence-score change must re-check whether R2's tier branches and the
+score formula still agree (the H1 class of bug — a tier carve-out with no matching score carve-out).
+Any future window-naming logic added to a NEW confidence signal should default to "prefer the
+informative/present window, not merely the first-checked field" from the start. **458/458 (+4 over
+the 454 baseline: 2 from H1, 2 from H2); parity 4/4 byte-identical unaffected by any of the four.**
+Merged to main (`--no-ff` `b805f17`; branch `fix/hardstops-h1h2h3h4`), pushed.
+
 ## Touch strikes dedup to the CURRENT BOARD — tradeable wins, else latest closedTime
 **Decided (2026-07-06):** one gamma touch event can carry duplicate (side, level) legs with
 contradictory settlements — a leg that touches settles Yes EARLY (closedTime = touch date) and the

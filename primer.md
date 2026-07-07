@@ -8,15 +8,30 @@
 > There is **no `.workflows/_system/` dir, no `codebase.md`/`MEMORY.md`** — the global `/sync`
 > skill tolerates their absence (updated 2026-06-18); don't be alarmed when it skips them.
 
-## ⮕ DIRECTION (2026-07-06, latest): PERFECTION PASS — 14 gated fixes on `fix/perfection-pass-2026-07-06` — **PR #1 OPEN, AWAITING OPERATOR MERGE**
-- **PR: https://github.com/ilanbenamaro-cyber/Prediction-Index/pull/1** (branch pushed; a direct
-  push to main was DENIED by the permission classifier → PR-review flow; local main was reset back
-  to `origin/main` @ `7c9b08f`, nothing lost — the branch carries everything). **Gates on the branch
-  tip (== the merge tree, main hasn't moved): 454/454 (+22 over the 432 baseline); parity 4/4
-  byte-identical (`c1be52e4…b89003`); tsc + clean `next build`; verify-phase2a vs the PRODUCTION
-  build ALL GREEN — including C4, green for the first time since the confidence split.** Full-system
-  audit (Opus math + Opus security + adversarial probes): **no P0 anywhere**; Playwright sweep of
-  every view/state: **0 console errors**.
+## ⮕ DIRECTION (2026-07-07, latest): HARD-STOPS H1-H4 RESOLVED — MERGED to main + PUSHED (`main` @ `b805f17`)
+- **`main` is at `b805f17`, in sync with `origin/main`.** PR #1 (the perfection pass, previous entry
+  below) was merged first (`--no-ff` `407bb92`); this session then closed all four HARD-STOP items
+  it left open, on `fix/hardstops-h1h2h3h4` (4 commits), merged `--no-ff` `b805f17`, pushed directly
+  (operator-run, no classifier block this time). **458/458 (+4 over the 454 baseline); parity 4/4
+  byte-identical (`c1be52e4…b89003`); tsc 0 errors; clean `next build`.**
+- **H1 (confidence.js monoScore) + H2 (LOW-tier window naming) + H4 (PM TERMINAL → PREDICTION
+  INDEX) FIXED; H3 (touch-record boundLabel $) DEFERRED + documented** (TODO at the exact line +
+  gotchas entry — no live %-unit touch market exists yet). Full detail + exact fix design (why the
+  MEDIUM window-naming pattern couldn't apply verbatim to H2's LOW branch, why H1 doesn't move
+  SpaceX's frozen score) in [[decisions]] "Hard-stop resolutions: monoScore carve-out, LOW-tier
+  window naming, PM TERMINAL → PREDICTION INDEX".
+- **NEXT:** nothing pending on H1-H4. Still open from the prior entry: prod standup checks prod cron
+  rows land at hours 2/18 UTC; optional `git branch -d fix/resolved-no-prior-all-shapes` (carried,
+  stale). `git branch -d fix/hardstops-h1h2h3h4` (fully merged, safe to delete).
+
+## ⮕ DIRECTION (2026-07-06): PERFECTION PASS — 14 gated fixes — MERGED to main + PUSHED (PR #1, `main` @ `407bb92`)
+- **PR: https://github.com/ilanbenamaro-cyber/Prediction-Index/pull/1 — MERGED.** (A direct push to
+  main was DENIED by the permission classifier when this was first attempted → PR-review flow used
+  instead; the operator then reviewed and merged via `gh pr merge`.) **Gates at merge: 454/454 (+22
+  over the 432 baseline); parity 4/4 byte-identical (`c1be52e4…b89003`); tsc + clean `next build`;
+  verify-phase2a vs the PRODUCTION build ALL GREEN — including C4, green for the first time since the
+  confidence split.** Full-system audit (Opus math + Opus security + adversarial probes): **no P0
+  anywhere**; Playwright sweep of every view/state: **0 console errors**.
 - **Why C4 is finally green (P1):** `seed-spacex.mjs` was a SILENT NO-OP — `writeRecord` upserts with
   `ignoreDuplicates` on `(market_id, fetched_at)` and a frozen record's fetched_at never changes, so
   the documented "re-run the seed" remediation could never work. `writeRecord` gained a `replace`
@@ -36,16 +51,7 @@
 - **CLOSED carried items:** si-hit 422 (above); cron snapshot_hour 15/19 = dev-DB manual runs, NOT a
   bug (see [[decisions]] "Cron snapshot_hour…"; prod-hours check = operator standup); Bitcoin
   two-sided confirmed serving 200 RESOLVED on prod (classifier-gap note stands, no code change).
-- **⚠ HARD-STOP items awaiting operator (untouched):** (H1) `core/confidence.js` monoScore ignores
-  the MATERIAL_ADJUSTMENT carve-out the tier honors → tier=high can carry an unexplained ~0.6 score;
-  (H2) LOW-tier windowed-volume reason names the window by field-presence (the MEDIUM naming fix was
-  never carried to LOW); (H3) `core/touch-record.js boundLabel` hardcodes `$` at 5 sites (no live
-  %-unit touch market exists → zero current impact); (H4, brand call) the header still reads
-  "PM TERMINAL" post-rebrand — repo was renamed Prediction-Index, so likely stale, but brand identity
-  is the operator's decision.
-- **NEXT:** operator reviews + merges PR #1; decides H1–H4; prod standup checks prod cron rows land
-  at hours 2/18; optional `git branch -d fix/resolved-no-prior-all-shapes` (carried). Dev-DB state
-  changed this session: SpaceX re-seeded (current shape), si-hit purged+rebuilt.
+- **The four HARD-STOP items this pass left open (H1-H4) are now resolved** — see the entry above.
 
 ## ⮕ DIRECTION (2026-07-06): RESOLVED-NO-PRIOR 409 FIX — ALL 5 SHAPES — MERGED to main + PUSHED (`main` @ `40e5855`)
 - **`main` is at `40e5855`, in sync with `origin/main`.** Two branches, sequential passes on the same fix:
