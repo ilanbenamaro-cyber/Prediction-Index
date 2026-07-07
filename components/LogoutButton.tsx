@@ -16,11 +16,11 @@ export function LogoutButton() {
     <button className="logout-btn" type="button" onClick={onLogout}>
       sign out
       <style>{`
-        .logout-btn { background:transparent; border:1px solid var(--border); color:var(--text-muted);
-          border-radius:var(--radius-sm); padding:4px 10px; font-size:var(--fs-micro);
+        .logout-btn { background:transparent; border:none; color:var(--text-muted);
+          padding:4px 0; font-family:var(--font-mono); font-size:var(--fs-micro);
           text-transform:uppercase; letter-spacing:var(--track-label); cursor:pointer;
-          transition:color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease); }
-        .logout-btn:hover { color:var(--text); border-color:var(--border-strong); }
+          transition:color var(--t-fast) var(--ease); }
+        .logout-btn:hover { color:var(--text); }
       `}</style>
     </button>
   );

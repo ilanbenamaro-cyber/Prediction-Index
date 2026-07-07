@@ -61,7 +61,7 @@
 
   /* ── layout ── */
   --rail-w: 264px;
-  --cmdbar-h: 48px;
+  --cmdbar-h: 40px;
   /* LEDGER: corners are for data, not aesthetics — every surface, chip, and button is
    * square. The vars stay (dozens of consumers) but resolve to 0; circle dots (50%) are
    * geometry, not decoration, and keep their literal values. */
@@ -506,12 +506,13 @@ a:hover { text-decoration: underline; }
 .cmdbar-search-wrap { flex: 1; position: relative; max-width: 520px; }
 .cmdbar-search { display: flex; align-items: center; gap: var(--sp-2);
   background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px var(--sp-3); }
-.cmdbar-input { flex: 1; min-width: 0; background: transparent; border: none; color: var(--text); font-size: var(--fs-tiny); outline: none; }
+.cmdbar-input { flex: 1; min-width: 0; background: transparent; border: none; color: var(--text);
+  font-family: var(--font-mono); font-size: var(--fs-tiny); outline: none; }
 .cmdbar-input::placeholder { color: var(--text-faint); }
 
 .search-overlay { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
-  background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-  max-height: 60vh; overflow-y: auto; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
+  background: var(--bg-elev); border: 1px solid var(--border-strong);
+  max-height: 60vh; overflow-y: auto; } /* edge contrast from --bg-elev, no drop shadow (LEDGER) */
 .search-state { padding: var(--sp-3) var(--sp-4); font-size: var(--fs-tiny); }
 .search-error { padding: var(--sp-3) var(--sp-4); font-size: var(--fs-tiny); color: var(--c-low); }
 .search-row { display: flex; align-items: center; gap: var(--sp-2); width: 100%; text-align: left;
@@ -521,11 +522,10 @@ a:hover { text-decoration: underline; }
 .search-row:disabled { opacity: 0.6; cursor: default; }
 .search-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-tiny); }
 .search-vol { flex: 0 0 auto; font-size: var(--fs-micro); }
-/* Enh 5: market-type chip + category tag in search results */
+/* Enh 5: market-type tag + category tag in search results — plain coloured mono text (LEDGER) */
 .search-type { flex: 0 0 auto; font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 600;
-  letter-spacing: var(--track-label); color: var(--text-muted); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: 0 5px; }
-.search-type.is-categorical { color: var(--accent-amber); border-color: var(--accent-amber); }
+  letter-spacing: var(--track-label); color: var(--text-muted); padding: 0; }
+.search-type.is-categorical { color: var(--accent-amber); }
 .search-cat { flex: 0 0 auto; font-size: var(--fs-micro); }
 
 /* remove-from-rail (×) — hover-revealed, right-aligned over the row */
@@ -551,9 +551,8 @@ a:hover { text-decoration: underline; }
 }
 
 /* ── directional-touch detail view ───────────────────────────────────────── */
-.touch-tag { display: inline-block; font-size: var(--fs-micro); font-weight: 700; letter-spacing: var(--track-label);
-  text-transform: uppercase; color: var(--accent-amber); border: 1px solid var(--accent-amber);
-  border-radius: var(--radius-sm); padding: 0 6px; }
+.touch-tag { display: inline-block; font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 700;
+  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--accent-amber); padding: 0; }
 .touch-explainer { font-size: var(--fs-tiny); line-height: var(--lh-prose); margin: var(--sp-3) 0 0; max-width: 70ch; }
 .detail-metric-wide { grid-column: span 2; }
 .touch-rangebar { width: 100%; height: auto; margin-top: var(--sp-3); display: block; }
@@ -588,9 +587,8 @@ a:hover { text-decoration: underline; }
 .settle-note { font-size: var(--fs-tiny); line-height: var(--lh-prose); margin: var(--sp-3) 0 0; max-width: 70ch; }
 
 /* ── categorical detail view ─────────────────────────────────────────────── */
-.cat-tag { display: inline-block; font-size: var(--fs-micro); font-weight: 700; letter-spacing: var(--track-label);
-  text-transform: uppercase; color: var(--accent-amber); border: 1px solid var(--accent-amber);
-  border-radius: var(--radius-sm); padding: 0 6px; }
+.cat-tag { display: inline-block; font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 700;
+  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--accent-amber); padding: 0; }
 .cat-bars { width: 100%; height: auto; margin-top: var(--sp-3); display: block; }
 .cat-bar { fill: var(--accent-blue); opacity: 0.42; }
 .cat-bar-top { fill: var(--accent-amber); opacity: 1; }
