@@ -99,8 +99,14 @@ export function windowedVolumeSignal(liquidity) {
     const usd = `$${Math.round(via24 ? v24n : v7n).toLocaleString('en-US')}`;
     return { tier: 'medium', reason: `moderate ${window} volume (${usd})` };
   }
-  const window = v24 != null ? '24h' : '7d';
-  const usd = `$${Math.round(v24 ?? v7 ?? 0).toLocaleString('en-US')}`;
+  // H2: mirror the MEDIUM path's "name whichever window actually earned it" (250e4af) — a
+  // present-but-exactly-zero 24h figure beside a real (if sub-threshold) 7d number would otherwise
+  // report the misleading "$0" instead of the more representative week-long figure. Prefer 24h
+  // only when it's genuinely informative (present AND nonzero); fall back to 7d when present,
+  // else 24h (the only field available, even if zero).
+  const via24 = v24 != null && v24n > 0;
+  const window = via24 ? '24h' : (v7 != null ? '7d' : '24h');
+  const usd = `$${Math.round(window === '24h' ? v24n : v7n).toLocaleString('en-US')}`;
   return { tier: 'low', reason: `thin ${window} volume (${usd})` };
 }
 
