@@ -242,6 +242,45 @@ test('detailNarrative: full paragraph with history; omits Δ/band sentences with
   assert.match(noHist, /Moderate confidence in both/);
 });
 
+// ── FIX 1: resolved-aware narratives (RESOLVED markets speak in the past tense) ──
+test('detailNarrative: resolvedLabel returns the resolved variant, no live clauses', () => {
+  const s = detailNarrative({ medianLabel: '$2.10T', resolvedLabel: 'settled in $2–2.2T', change30: -0.07, unit: 'T' });
+  assert.match(s, /^This market has resolved — settled in \$2–2\.2T\./);
+  assert.match(s, /implied valuation moved down \$0\.07T over its final month\./);
+  assert.doesNotMatch(s, /trade at/);
+  assert.doesNotMatch(s, /trustworthy/);
+  // no change30 → no final-month sentence, still no live clauses
+  const noMove = detailNarrative({ medianLabel: '$2.10T', resolvedLabel: 'settled', reliabilityTier: 'high', liquidityTier: 'low', unit: 'T' });
+  assert.equal(noMove, 'This market has resolved — settled.');
+});
+
+test('binaryNarrative: resolvedLabel returns the resolved variant, no live clauses', () => {
+  const s = binaryNarrative({ prob: 0.5, resolvedLabel: 'resolved YES', change30: -0.149 });
+  assert.match(s, /^This market has resolved — resolved YES\./);
+  assert.match(s, /moved down 14\.9pp over its final month\./);
+  assert.doesNotMatch(s, /trade at/);
+  assert.doesNotMatch(s, /trustworthy/);
+  const noMove = binaryNarrative({ prob: 1, resolvedLabel: 'resolved NO', reliabilityTier: 'high', liquidityTier: 'low' });
+  assert.equal(noMove, 'This market has resolved — resolved NO.');
+});
+
+test('touchNarrative: resolvedLabel returns the resolved variant, no tradability/range clauses', () => {
+  const s = touchNarrative({ lowLabel: '$66.73', highLabel: '$90.00', resolvedLabel: 'touched HIGH $90.00', reliabilityTier: 'high', liquidityTier: 'low' });
+  assert.equal(s, 'This market has resolved — touched HIGH $90.00. This was a barrier-option market: each leg priced the probability of touching a level before expiry, not a settlement value.');
+  assert.doesNotMatch(s, /trade at/);
+  assert.doesNotMatch(s, /implied barrier range runs/);
+});
+
+test('categoricalNarrative: resolvedLabel returns the resolved variant, no live clauses', () => {
+  const s = categoricalNarrative({ dominantOutcome: '0 (0 bps)', dominantProb: 0.80, resolvedLabel: 'resolved 0 (0 bps)', change30: 0.03, reliabilityTier: 'high', liquidityTier: 'low' });
+  assert.match(s, /^This market has resolved — resolved 0 \(0 bps\)\./);
+  assert.match(s, /moved up 3\.0pp over its final month\./);
+  assert.doesNotMatch(s, /trade at/);
+  assert.doesNotMatch(s, /trustworthy/);
+  const noMove = categoricalNarrative({ dominantOutcome: 'Yes', dominantProb: 1, resolvedLabel: 'resolved Yes' });
+  assert.equal(noMove, 'This market has resolved — resolved Yes.');
+});
+
 // ── confidenceSentence (the 3×3 reliability×liquidity synthesis) ──────────────
 test('confidenceSentence: all 9 cells produce a distinct sentence; divergent cells are bespoke', () => {
   const tiers = ['high', 'medium', 'low'];

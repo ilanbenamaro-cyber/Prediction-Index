@@ -68,7 +68,9 @@ export function BinaryDetailView({ record, envelope, hist, addControl }: { recor
           <h1 className="detail-title" data-field="title">{displayTitle(asset.name, envelope?.market_id)}</h1>
           <div className="detail-sub muted">
             {asset.platform ?? 'prediction index'}{asset.resolves ? ` · resolves ${asset.resolves}` : ''}
-            {daysToExpiryLabel(asset.resolves) && <span data-field="days-to-expiry"> · {daysToExpiryLabel(asset.resolves)}</span>}
+            {/* FIX 1: a RESOLVED market omits the days-to-expiry segment — "days to expiry" reads
+                as live-market present tense on a market that has already settled. */}
+            {!isFinal && daysToExpiryLabel(asset.resolves) && <span data-field="days-to-expiry"> · {daysToExpiryLabel(asset.resolves)}</span>}
             {asset.market_url && <> · <a href={asset.market_url} target="_blank" rel="noopener">view market ↗</a></>}
             <> · binary (Yes/No)</>
           </div>
@@ -167,8 +169,10 @@ export function BinaryDetailView({ record, envelope, hist, addControl }: { recor
       </section>
 
       {/* NARRATIVE (v1 ITEM 1) — probability + 30d/7d move + consensus + confidence, built
-          display-side; Δ sentences omit gracefully when history is absent (never a dash). */}
-      <p className="detail-narrative" data-field="narrative">{`${binaryNarrative({ prob: p ?? undefined, change30, change7, reliabilityTier: conf.reliability?.tier ?? null, liquidityTier: conf.liquidity?.tier ?? null }) || d.narrative || ''}${hist?.synthesis ? ` ${hist.synthesis}` : ''}`}</p>
+          display-side; Δ sentences omit gracefully when history is absent (never a dash). FIX 1:
+          a RESOLVED market gets the resolved-aware variant (reuses the banner's outcome string)
+          instead of live-market present-tense prose. */}
+      <p className="detail-narrative" data-field="narrative">{`${binaryNarrative({ prob: p ?? undefined, change30, change7, reliabilityTier: conf.reliability?.tier ?? null, liquidityTier: conf.liquidity?.tier ?? null, resolvedLabel: isFinal ? (outcome ?? 'settled') : null }) || d.narrative || ''}${hist?.synthesis ? ` ${hist.synthesis}` : ''}`}</p>
 
       {/* TREND & HISTORY — YES-probability series (Phase 1); collecting until 7 days accrue */}
       {hist && <TrendHistorySection hist={hist} unit="" label="YES probability" />}

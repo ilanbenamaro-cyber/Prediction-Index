@@ -238,7 +238,8 @@ function MarketDetailView({ record, envelope, hist, deltas, movers, narrativeBit
           <h1 className="detail-title" data-field="title">{displayTitle(asset.name, envelope?.market_id)}</h1>
           <div className="detail-sub muted">
             {asset.platform ?? 'prediction index'}{asset.resolves ? ` · resolves ${asset.resolves}` : ''}
-            {daysToExpiryLabel(asset.resolves) && <span data-field="days-to-expiry"> · {daysToExpiryLabel(asset.resolves)}</span>}
+            {/* FIX 1: a RESOLVED market omits the days-to-expiry segment — it no longer applies. */}
+            {!isFinal && daysToExpiryLabel(asset.resolves) && <span data-field="days-to-expiry"> · {daysToExpiryLabel(asset.resolves)}</span>}
             {asset.market_url && <> · <a href={asset.market_url} target="_blank" rel="noopener">view market ↗</a></>}
           </div>
         </div>
@@ -343,6 +344,9 @@ function MarketDetailView({ record, envelope, hist, deltas, movers, narrativeBit
         reliabilityTier: conf.reliability?.tier ?? null,
         liquidityTier: conf.liquidity?.tier ?? null,
         unit,
+        // FIX 1: a RESOLVED market gets the resolved-aware variant (reuses the banner's settled-
+        // band string) instead of live-market present-tense prose.
+        resolvedLabel: isFinal ? (band ?? 'settled') : null,
       })}${hist?.synthesis ? ` ${hist.synthesis}` : ''}`}</p>
 
       {/* TREND & HISTORY — the daily series (Phase 1). Velocity/dispersion show an explicit
