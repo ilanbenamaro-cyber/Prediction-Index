@@ -9,21 +9,24 @@
 // ConfidenceBadges renders the headline two-badge cell. A missing dimension (legacy pre-0010 data)
 // renders "—", never a fabricated tier.
 //
-// FIX 3: the mark is now PER-CHIP, not per-dimension. The pipeline's reason vocabulary uses
+// FIX 3: the mark is PER-REASON, not per-dimension. The pipeline's reason vocabulary uses
 // "moderate …" as its MEDIUM wording and "market resolved — …" as purely informational — under a
 // worst-of LOW dimension those specific reasons are NOT failures, so marking them ✗ alongside a
-// real failing reason (e.g. "✗ moderate order book ($29,662 depth)") reads as a false failure. A
-// reason matching /^(moderate |market resolved)/ always gets the caveat mark '·', regardless of the
-// dimension's tier; every other reason keeps the dimension mark. The chip COLOUR class stays tied
-// to the dimension tier as before — only the leading mark glyph changes per-chip.
+// real failing reason reads as a false failure. A reason matching /^(moderate |market resolved)/
+// always gets the caveat mark '·', regardless of the dimension's tier; every other reason keeps
+// the dimension mark. LEDGER: the glyph carries the tier colour (✓ green / ✗ red / · muted) and
+// the reasons render as one plain separated text line — the glyph IS the chip; boxing it was
+// double-encoding.
 
 import type { Confidence, ConfidenceDimension, Tier } from './market-record';
 
 const CONF_CLASS: Record<string, string> = { high: 'conf-high', medium: 'conf-med', low: 'conf-low' };
 
-// Reasons that are caveats/informational, never a "failure", no matter which tier's chip they
-// render under — a worst-of LOW dimension must not paint these ✗.
+// Reasons that are caveats/informational, never a "failure", no matter which tier they render
+// under — a worst-of LOW dimension must not paint these ✗.
 const CAVEAT_REASON = /^(moderate |market resolved)/;
+
+const MARK_CLASS: Record<string, string> = { '✓': 'conf-high', '✗': 'conf-low', '·': 'muted' };
 
 export function ConfidenceBasis({ reasons, tier, label = 'Confidence basis', field }:
   { reasons?: string[] | null; tier?: string | null; label?: string; field?: string }) {
@@ -35,7 +38,9 @@ export function ConfidenceBasis({ reasons, tier, label = 'Confidence basis', fie
       {reasons.map((r, i) => {
         const mark = CAVEAT_REASON.test(r) ? '·' : dimMark;
         return (
-          <span key={i} className={`trust-chip conf-chip-${tier ?? 'medium'}`}>{mark} {r}</span>
+          <span key={i} className="trust-reason">
+            <span className={`trust-mark ${MARK_CLASS[mark]}`} aria-hidden="true">{mark}</span> {r}
+          </span>
         );
       })}
     </div>

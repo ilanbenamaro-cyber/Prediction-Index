@@ -346,11 +346,13 @@ a:hover { text-decoration: underline; }
 
 .detail-trust { margin-top: var(--sp-3); padding: var(--sp-3) var(--sp-4); background: var(--bg-card-2);
   border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; gap: var(--sp-2); }
-.trust-reasons, .trust-prov { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; font-size: var(--fs-tiny); }
-.trust-chip { background: var(--bg-card); border: 1px solid var(--border); border-radius: 0; padding: 2px var(--sp-2); color: var(--text-muted); }
-/* v1 ITEM 11: tier-marked confidence-basis chips (✓ passed · caveat · ✗ failed). */
-.conf-chip-high { color: var(--c-high); border-color: color-mix(in srgb, var(--c-high) 40%, var(--border)); }
-.conf-chip-low { color: var(--c-low); border-color: color-mix(in srgb, var(--c-low) 40%, var(--border)); }
+.trust-reasons, .trust-prov { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  font-family: var(--font-mono); font-size: var(--fs-tiny); font-variant-numeric: tabular-nums; }
+/* v1 ITEM 11 restyled (LEDGER): tier-marked basis reasons as one plain separated text line —
+ * the ✓/✗/· glyph carries the tier colour; no chip boxes. */
+.trust-reason { color: var(--text-muted); }
+.trust-reason + .trust-reason::before { content: '·'; color: var(--text-faint); margin-right: var(--sp-2); }
+.trust-mark { font-weight: 700; }
 .trust-sep { color: var(--text-faint); }
 .hashverify { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .prov-hash { font-family: var(--font-mono); background: var(--bg-card); padding: 1px var(--sp-2); border-radius: var(--radius-sm); color: var(--text); }
