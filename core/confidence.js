@@ -333,7 +333,14 @@ export function scoreConfidence({
 
   // ── reliability score (0..1) ──
   const countScore = Math.min(1, count / ladderSize);
-  const monoScore = nearSettled ? 1 : Math.max(0, 1 - rawViolations / 4) * Math.max(0, 1 - maxAdjustment / 0.1);
+  // Mirror R2's own immateriality carve-out (H1): a sub-MATERIAL_ADJUSTMENT isotonic tweak is
+  // "negligible" for the TIER regardless of rawViolations count — monoScore must agree, or a
+  // tier=high market can carry an unexplained, violations-penalized score (~0.6-0.8) with no
+  // reason string accounting for the gap. Threshold and tier logic are UNCHANGED; only the score
+  // formula's guard is added.
+  const monoScore = nearSettled || maxAdjustment < MATERIAL_ADJUSTMENT
+    ? 1
+    : Math.max(0, 1 - rawViolations / 4) * Math.max(0, 1 - maxAdjustment / 0.1);
   const spreadScore = priceOnly ? 0.6 : Math.max(0, Math.min(1, 1 - spread / 0.1));
   let relScore = (countScore + monoScore + spreadScore) / 3;
   if (anomalies && anomalies.stale) relScore -= 0.15;

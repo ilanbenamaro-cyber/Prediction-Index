@@ -179,3 +179,37 @@ test('narrative asserts nothing absent from narrative_components', () => {
   assert.ok(/Confidence is medium/.test(narrative)); // caveat backed by tier
   assert.ok(narrative_components.change_7d && narrative_components.change_30d);
 });
+
+// ── H1: monoScore honors the SAME immateriality carve-out the TIER already does ──
+// R2's tier logic treats a sub-0.5% max isotonic adjustment as immaterial noise (tier stays
+// 'high' regardless of rawViolations count) — but monoScore computed the SAME adjustment's
+// magnitude/count penalty unconditionally, so a tier=high market could carry a depressed,
+// unexplained reliability score (e.g. ~0.6) with no reason string accounting for the gap.
+// monoScore must now ALSO short-circuit to 1 (full, pre-adjustment) whenever the adjustment is
+// immaterial — mirroring R2's own branch, not a new threshold.
+function monoTestLadder() {
+  const markets = Array.from({ length: 16 }, (_, i) => ({ threshold: i, prob: 0.5, adjusted_prob: 0.5 }));
+  return { markets, rawInputs: markets.map(() => ({ best_bid: '0.49', best_ask: '0.51' })) };
+}
+
+test('scoreConfidence: an IMMATERIAL adjustment (<0.5%) keeps monoScore at the pre-adjustment 1, not a violations-penalized value', () => {
+  const base = monoTestLadder();
+  // rawViolations=1, maxAdjustment=0.2% (< MATERIAL_ADJUSTMENT=0.5%) — R2's own "negligible" branch.
+  const c = scoreConfidence({ ...base, rawViolations: 1, maxAdjustment: 0.002 });
+  assert.equal(c.reliability.tier, 'high'); // regression: R2's existing immateriality tier carve-out
+  // countScore=1 (16/16), spreadScore=0.8 (spread 0.02 → 1-0.02/0.1), monoScore=1 (the fix) →
+  // relScore = (1 + 1 + 0.8) / 3 = 0.933. Pre-fix this would have been (1+0.485+0.8)/3 ≈ 0.762 —
+  // asserting the exact value locks the fix, not just "some higher number".
+  assert.equal(c.reliability.score, 0.933);
+});
+
+test('scoreConfidence: a MATERIAL adjustment (≥0.5%) still penalizes monoScore by count + magnitude (unchanged)', () => {
+  const base = monoTestLadder();
+  // rawViolations=1, maxAdjustment=2% (≥ MATERIAL_ADJUSTMENT) — R2's "medium" branch (rawViolations<=2).
+  const c = scoreConfidence({ ...base, rawViolations: 1, maxAdjustment: 0.02 });
+  assert.equal(c.reliability.tier, 'medium'); // regression: existing tier behavior, untouched
+  // monoScore = (1 - 1/4) * (1 - 0.02/0.1) = 0.75 * 0.8 = 0.6 (same formula as before the fix —
+  // the guard only bypasses the formula when the adjustment is immaterial).
+  // relScore = (1 + 0.6 + 0.8) / 3 = 0.8.
+  assert.equal(c.reliability.score, 0.8);
+});
