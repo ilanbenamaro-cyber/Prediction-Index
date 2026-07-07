@@ -282,7 +282,15 @@ function MarketDetailView({ record, envelope, hist, deltas, movers, narrativeBit
         </div>
         <div className="detail-metric">
           <span className="label">50% band</span>
-          <span className="detail-sec num" data-field="iqr">{d.iqr ? `${fmtMoney(d.iqr.p25, unit)} – ${fmtMoney(d.iqr.p75, unit)}` : '—'}</span>
+          {/* FIX 6a: both p25/p75 null used to render the degenerate "n/a – n/a" — collapse that
+              case to a single "n/a"; a genuinely one-sided band (only one side known) still shows
+              both sides so the honest partial data stays visible. No d.iqr at all keeps the
+              original "—" (distinct from "iqr present but both bounds unknown"). */}
+          <span className="detail-sec num" data-field="iqr">{
+            !d.iqr ? '—'
+              : (d.iqr.p25 == null && d.iqr.p75 == null) ? 'n/a'
+              : `${fmtMoney(d.iqr.p25, unit)} – ${fmtMoney(d.iqr.p75, unit)}`
+          }</span>
           <span className="detail-band faint">p25–p75 valuation</span>
         </div>
         <div className="detail-metric">

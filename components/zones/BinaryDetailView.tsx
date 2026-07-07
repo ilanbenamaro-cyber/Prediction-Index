@@ -166,7 +166,10 @@ export function BinaryDetailView({ record, envelope, hist, addControl }: { recor
           <div className="acard" data-field="pcard-momentum">
             <div className="label">Momentum (7d)</div>
             <div className="acard-v">{change7 == null ? 'collecting' : change7 > 0.01 ? 'rising' : change7 < -0.01 ? 'falling' : 'steady'}</div>
-            <div className={`acard-s ${deltaSign(change7)}`}>{change7 == null ? <span className="faint">requires ≥7 days</span> : <>{fmtDeltaPp(change7)} pp · 7d</>}</div>
+            {/* FIX 6c: MOMENTUM measures the NET move (today − 7d ago), which can disagree in
+                direction word from the VELOCITY (7d) card below (a fitted regression slope) — the
+                "net move ·" prefix disambiguates which measurement produced this number. */}
+            <div className={`acard-s ${deltaSign(change7)}`}>{change7 == null ? <span className="faint">requires ≥7 days</span> : <>net move · {fmtDeltaPp(change7)} pp · 7d</>}</div>
           </div>
           <VolumeCard liquidity={d.liquidity} allTimeVolume={d.total_volume} />
         </div>

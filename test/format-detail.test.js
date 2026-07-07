@@ -57,6 +57,13 @@ test('fmtRange formats a {low,high} band or returns null', () => {
   assert.equal(fmtRange({ low: 1 }, 'T'), null); // missing high
 });
 
+// ── FIX 6b: a degenerate lo===hi range collapses to a single value ──────────────
+test('fmtRange: lo === hi renders the single value, not "$X–$X"', () => {
+  assert.equal(fmtRange({ low: 100, high: 100 }, ''), '$100.00');
+  assert.equal(fmtRange({ low: 2.1, high: 2.1 }, 'T'), '$2.10T');
+  assert.equal(fmtRange({ low: 1, high: 1 }, '%'), '1.00%');
+});
+
 test('end-to-end: a billions market formats its headline in $B', () => {
   const markets = [{ label: '>$16B' }, { label: '>$20B' }, { label: '>$28B' }];
   const unit = unitFromLadder(markets);
