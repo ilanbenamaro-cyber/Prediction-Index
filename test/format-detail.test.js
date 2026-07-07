@@ -158,6 +158,16 @@ test('displayTitle: prefers the stored name, falls back to a cleaned slug', () =
   assert.equal(displayTitle('wti-crude-oil', 'wti-crude-oil'), 'Wti Crude Oil');
 });
 
+// ── FIX 4: gamma's trailing numeric uniquifier is stripped before title-casing ──
+test('titleFromSlug: strips a trailing 13+-digit gamma uniquifier', () => {
+  assert.equal(titleFromSlug('strc-hits-100-by-20260618001620693'), 'Strc Hits 100 By');
+  assert.equal(titleFromSlug('world-cup-golden-ball-winner-20260603194031758'), 'World Cup Golden Ball Winner');
+});
+
+test('titleFromSlug: a trailing 4-digit year is untouched (not a uniquifier)', () => {
+  assert.equal(titleFromSlug('how-many-fed-rate-cuts-in-2026'), 'How Many Fed Rate Cuts In 2026');
+});
+
 // ── date-range repair in titles (the Bitcoin "June 22 28 2026" bug) ──────────────
 import { humanizeDateRange } from '../lib/format-detail.mjs';
 test('humanizeDateRange: inserts an em-dash + comma into a stripped date range', () => {
@@ -171,6 +181,15 @@ test('humanizeDateRange: inserts an em-dash + comma into a stripped date range',
 test('titleFromSlug + displayTitle repair date ranges end-to-end', () => {
   assert.equal(titleFromSlug('bitcoin-june-22-28-2026'), 'Bitcoin June 22–28, 2026');
   assert.equal(displayTitle('Will Bitcoin dip June 22 28 2026?', 'x'), 'Will Bitcoin dip June 22–28, 2026?');
+});
+
+// ── FIX 4: platform label normalization (stored 'polymarket' predates the rebrand) ──
+import { platformLabel } from '../lib/format-detail.mjs';
+test('platformLabel: null/undefined/polymarket render as "prediction index"; other values pass through', () => {
+  assert.equal(platformLabel(null), 'prediction index');
+  assert.equal(platformLabel(undefined), 'prediction index');
+  assert.equal(platformLabel('polymarket'), 'prediction index');
+  assert.equal(platformLabel('kalshi'), 'kalshi');
 });
 
 // ── Enh 5: human-readable volume ────────────────────────────────────────────────
