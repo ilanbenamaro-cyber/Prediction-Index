@@ -46,10 +46,18 @@ export function MarketSearch() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // FIX 5: close the overlay AND clear the query — every close path (click-outside, both Escape
+  // handlers, selecting a result) must leave the search line empty. Previously only open_() (result
+  // selection) cleared it, so Escape (or any other close) left the typed text sitting in the input;
+  // the next ⌘K session then appended to that stale text ("bitcoin" + "kraken" → "bitcoinkraken").
+  function closeSearch() {
+    setOpen(false); setQuery(''); setResults([]);
+  }
+
   // Click-outside closes the overlay.
   useEffect(() => {
     function onDown(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) closeSearch();
     }
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
@@ -58,7 +66,7 @@ export function MarketSearch() {
   // Enh 8: the global Esc handler closes the overlay even when the input isn't focused
   // (the input's own onKeyDown still handles Esc while typing).
   useEffect(() => {
-    function onEsc() { setOpen(false); }
+    function onEsc() { closeSearch(); }
     window.addEventListener(KBD.escape, onEsc);
     return () => window.removeEventListener(KBD.escape, onEsc);
   }, []);
@@ -86,7 +94,7 @@ export function MarketSearch() {
 
   /** Open a result: navigate to its detail (compute-then-serve). Does NOT add to any watchlist. */
   function open_(r: SearchResult) {
-    setOpen(false); setQuery(''); setResults([]);
+    closeSearch();
     router.push(`/?m=${encodeURIComponent(r.slug)}`);
   }
 
@@ -94,7 +102,7 @@ export function MarketSearch() {
     if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight((h) => Math.min(h + 1, results.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight((h) => Math.max(h - 1, 0)); }
     else if (e.key === 'Enter') { e.preventDefault(); const r = results[highlight]; if (r) open_(r); }
-    else if (e.key === 'Escape') { setOpen(false); inputRef.current?.blur(); }
+    else if (e.key === 'Escape') { closeSearch(); inputRef.current?.blur(); }
   }
 
   const showOverlay = open && (loading || results.length > 0 || (query.trim().length >= MIN_Q));
