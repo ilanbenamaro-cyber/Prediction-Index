@@ -1,56 +1,58 @@
-/* app/globals.css — the 2c design system: "institutional terminal".
+/* app/globals.css — the LEDGER design system: "institutional terminal".
  *
+ * Rules, not cards; text, not badges; signal, not decoration.
  * Density via HIERARCHY, color via MEANING. Tokens only here; zones consume them.
- * Fonts (IBM Plex Sans / Mono) are injected by app/layout.tsx via next/font as the
- * CSS variables --font-sans / --font-mono.
+ * Fonts (Archivo for titles/prose, IBM Plex Mono for data/labels/chrome) are injected
+ * by app/layout.tsx via next/font as the CSS variables --font-sans / --font-mono.
  */
 
 :root {
   /* ── type ── */
-  --font-sans: var(--font-plex-sans), system-ui, sans-serif;
+  --font-sans: var(--font-archivo), system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", monospace;
 
-  /* dense modular scale (px) */
-  --fs-micro: 10.5px;   /* uppercase labels, +tracking */
+  /* dense modular scale (px) — LEDGER pass: tightened one notch at the top end */
+  --fs-micro: 10px;     /* uppercase labels, +tracking */
   --fs-tiny: 11.5px;    /* secondary / captions */
   --fs-body: 13px;      /* body + most data */
   --fs-emph: 15px;      /* emphasis */
-  --fs-sec: 18px;       /* section values */
-  --fs-lg: 21px;        /* sub-headlines */
-  --fs-hero: 30px;      /* hero metric */
+  --fs-sec: 17px;       /* section values */
+  --fs-lg: 20px;        /* sub-headlines */
+  --fs-hero: 26px;      /* hero metric */
   --lh-tight: 1.2;
   --lh-data: 1.35;
   --lh-prose: 1.55;
-  --track-label: 0.5px; /* letter-spacing on uppercase micro-labels */
+  --track-label: 0.6px; /* letter-spacing on uppercase micro-labels */
 
   /* ── spacing (4px base grid) ── */
   --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;  --sp-4: 16px;  --sp-6: 24px;  --sp-8: 32px;
 
-  /* ── surfaces (warm dark) ── */
-  --bg: #111110;
-  --bg-card: #1a1a18;
-  --bg-card-2: #201f1c;
-  --bg-elev: #232220;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
+  /* ── surfaces (warm dark, deepened base for contrast headroom) ── */
+  --bg: #0d0d0b;
+  --bg-card: #141412;
+  --bg-card-2: #181815;
+  --bg-elev: #1e1d1a;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-focus: var(--accent-amber);
 
   /* ── text ── */
-  --text: #e8e6df;
-  --text-muted: #9a9890;
-  --text-faint: #6b6860;
+  --text: #eceae3;
+  --text-muted: #98948a;
+  --text-faint: #676359;
 
   /* ── color = MEANING (never decorative) ──
    * confidence: high/med/low · delta: up/down/flat · freshness: stale
    * resolution: open(neutral) / closed_pending(amber) / resolved(settled green)
-   * accent: blue (links/interactive) + amber (primary highlight) */
-  --c-high: #4ade80;      /* confidence high · delta up · resolved */
-  --c-med: #c47f3a;       /* confidence medium · closed_pending */
-  --c-low: #f87171;       /* confidence low · delta down · stale */
+   * accent: blue (links/interactive ONLY — never a data value) + amber (highlight) */
+  --c-high: #4cc38a;      /* confidence high · delta up · resolved */
+  --c-med: #d08a3e;       /* confidence medium · closed_pending */
+  --c-low: #e5484d;       /* confidence low · delta down · stale */
   --c-flat: var(--text-muted);
   --accent-blue: #5b9bd5; /* links, interactive, lifecycle OPEN */
-  --accent-amber: #c47f3a;/* primary highlight */
+  --accent-amber: #d08a3e;/* primary highlight (single amber, = --c-med) */
   --accent-violet: #9d8cd6; /* 4th data-series colour (multi-series charts only) */
-  --tier1: #2dd4bf;       /* Tier-1 analytics tag */
+  --tier1: #2dd4bf;       /* chart data series ONLY (median line) — not a UI tag colour */
 
   /* semantic aliases */
   --up: var(--c-high);
@@ -59,9 +61,12 @@
 
   /* ── layout ── */
   --rail-w: 264px;
-  --cmdbar-h: 48px;
-  --radius: 10px;
-  --radius-sm: 6px;
+  --cmdbar-h: 40px;
+  /* LEDGER: corners are for data, not aesthetics — every surface, chip, and button is
+   * square. The vars stay (dozens of consumers) but resolve to 0; circle dots (50%) are
+   * geometry, not decoration, and keep their literal values. */
+  --radius: 0;
+  --radius-sm: 0;
 
   /* ── motion ── */
   --ease: cubic-bezier(0.2, 0.6, 0.2, 1);
@@ -84,6 +89,11 @@ html, body {
 
 /* tabular numerics everywhere data lives */
 .mono, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+/* LEDGER: the terminal speaks mono. Every data value, label, and piece of chrome renders
+ * in the data font; the UI font (Archivo) is reserved for market titles and narrative
+ * prose. These selectors sweep the numeric surfaces that predate the .num convention. */
+.acard-v, .acard-s, .detail-table, .search-vol, .settle-zone, .detail-resolved-band,
+.detail-sub, .detail-fresh { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 a { color: var(--accent-blue); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -91,8 +101,9 @@ a:hover { text-decoration: underline; }
 .muted { color: var(--text-muted); }
 .faint { color: var(--text-faint); }
 
-/* micro-label: the dense uppercase caption used across zones */
+/* micro-label: the dense uppercase caption used across zones — mono, per LEDGER */
 .label {
+  font-family: var(--font-mono);
   font-size: var(--fs-micro);
   text-transform: uppercase;
   letter-spacing: var(--track-label);
@@ -129,6 +140,7 @@ a:hover { text-decoration: underline; }
 
 /* hairline section header reused by zones */
 .zone-head {
+  font-family: var(--font-mono);
   font-size: var(--fs-micro);
   text-transform: uppercase;
   letter-spacing: var(--track-label);
@@ -173,17 +185,32 @@ a:hover { text-decoration: underline; }
 
 .wl-row {
   display: block;
-  padding: var(--sp-2) var(--sp-4);
+  position: relative;
+  padding: 6px var(--sp-3) 6px 13px; /* 3px signal bar + 10px gutter on the left */
   border-bottom: 1px solid var(--border);
-  border-left: 2px solid transparent; /* selection marker rail */
   color: var(--text);
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+  transition: background var(--t-fast) var(--ease);
 }
+/* SIGNATURE ELEMENT: the split signal bar — 3px, reliability (top half) / liquidity (bottom
+ * half), tier-coloured via the row's --sig-rel/--sig-liq custom props. An absolutely-
+ * positioned pseudo-element, NOT border-left: a border enters the box model and would shift
+ * the row's flex layout. Stale data attenuates the signal (opacity); a resolved market's bar
+ * is set faint-gray by the component (no live signal). */
+.wl-row::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(to bottom,
+    var(--sig-rel, var(--border-strong)) 0 50%,
+    var(--sig-liq, var(--border-strong)) 50% 100%);
+}
+.wl-row.is-stale-row::before { opacity: 0.4; }
 .wl-row:hover { background: var(--bg-card); text-decoration: none; }
-.wl-selected { background: var(--bg-elev); border-left-color: var(--border-strong); }
-/* keyboard focus cursor (Enh 8) — distinct from selection: an amber left rail + inset ring */
-.wl-focused { border-left-color: var(--accent-amber); box-shadow: inset 0 0 0 1px var(--accent-amber); }
+/* selection: elevated ground + amber title — the left edge belongs to the signal bar */
+.wl-selected { background: var(--bg-elev); }
+.wl-selected .wl-title { color: var(--accent-amber); }
+/* keyboard focus cursor (Enh 8) — distinct from selection: an inset amber ring */
+.wl-focused { box-shadow: inset 0 0 0 1px var(--accent-amber); }
 
 /* keyboard-shortcut legend (Enh 8) */
 .kbd-legend-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 50;
@@ -209,16 +236,17 @@ a:hover { text-decoration: underline; }
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
   overflow: hidden; text-overflow: ellipsis;
 }
+/* kind/scope tags: plain faint mono text — no box (LEDGER: text, not badges) */
 .wl-chip {
   flex: 0 0 auto;
-  padding: 0 var(--sp-1);
-  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  padding: 0;
+  border: none;
   color: var(--text-faint);
 }
 
 .wl-row-data {
   display: flex; align-items: baseline; gap: var(--sp-2);
-  margin-top: var(--sp-1);
+  margin-top: 2px;
   font-size: var(--fs-tiny); line-height: var(--lh-data);
 }
 .wl-median { font-size: var(--fs-emph); color: var(--text); }
@@ -226,23 +254,12 @@ a:hover { text-decoration: underline; }
 .wl-conf { font-size: var(--fs-micro); letter-spacing: var(--track-label); font-weight: 600; }
 .wl-fresh { margin-left: auto; flex: 0 0 auto; font-size: var(--fs-micro); }
 .wl-stale-pill { text-transform: uppercase; letter-spacing: var(--track-label); }
-/* RESOLVED badge: a terminal state, NOT a freshness warning — muted/neutral (done, archived),
-   deliberately distinct from the amber/red STALE pill. Uses only existing surface/text tokens. */
-.wl-resolved-pill { text-transform: uppercase; letter-spacing: var(--track-label); color: var(--text-muted);
-  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 5px; background: var(--bg-card); }
+/* RESOLVED state: a terminal state, NOT a freshness warning — plain muted mono text (done,
+   archived); the signal bar goes faint-gray alongside. No box (LEDGER: text, not badges). */
+.wl-resolved-pill { text-transform: uppercase; letter-spacing: var(--track-label); color: var(--text-muted); }
 
-/* Enh 2: rail row polish — volume tint, confidence dot, near-settlement clock, binary chip */
-.wl-row { background-image: linear-gradient(to right, transparent 55%, rgba(196, 127, 58, calc(var(--vol-tint, 0) * 0.13))); }
-.wl-conf-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
-.wl-conf-dot.conf-high { background: var(--c-high); }
-.wl-conf-dot.conf-med { background: var(--c-med); opacity: 0.85; }
-.wl-conf-dot.conf-low { background: transparent; box-shadow: inset 0 0 0 1px var(--c-low); } /* empty ring = lowest */
-.wl-conf-dot.conf-none { background: transparent; box-shadow: inset 0 0 0 1px var(--border); opacity: 0.5; } /* unknown half */
-/* Confidence split (0010): two adjacent dots in the rail — reliability then liquidity. */
-.wl-conf2 { display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto; }
-.wl-conf2 .wl-conf-dot { margin-right: 0; }
+/* near-settlement clock (the split signal bar replaced the dots + volume tint) */
 .wl-near { color: var(--accent-amber); flex: 0 0 auto; font-size: var(--fs-tiny); line-height: 1; }
-.wl-chip-kind { color: var(--accent-blue); border-color: var(--accent-blue); }
 
 .wl-error { color: var(--c-low); }
 
@@ -275,8 +292,9 @@ a:hover { text-decoration: underline; }
 .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-4); }
 .detail-title { font-size: var(--fs-lg); margin: 0 0 var(--sp-1); line-height: var(--lh-tight); }
 .detail-sub { font-size: var(--fs-tiny); }
-.detail-lifecycle { flex: 0 0 auto; font-size: var(--fs-micro); letter-spacing: var(--track-label);
-  font-weight: 600; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: var(--sp-1) var(--sp-2); }
+/* lifecycle state: plain coloured mono text — the colour is the signal, no box (LEDGER) */
+.detail-lifecycle { flex: 0 0 auto; font-family: var(--font-mono); font-size: var(--fs-micro);
+  letter-spacing: var(--track-label); font-weight: 600; padding: var(--sp-1) 0; }
 .detail-head-actions { display: flex; align-items: center; gap: var(--sp-2); flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
 /* Item 2: detail-header "Add to Watchlist" control */
 .detail-add { display: inline-flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); }
@@ -292,31 +310,42 @@ a:hover { text-decoration: underline; }
 .detail-add-btn.is-primary:hover { background: var(--accent-amber); color: var(--bg-base); }
 .detail-add-btn:disabled { opacity: 0.5; cursor: default; }
 .detail-add-btn:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 1px; }
-.detail-added { flex: 0 0 auto; font-size: var(--fs-micro); font-weight: 600; letter-spacing: var(--track-label);
-  color: var(--c-high); border: 1px solid var(--c-high); border-radius: var(--radius-sm); padding: var(--sp-1) var(--sp-2); }
+.detail-added { flex: 0 0 auto; font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 600;
+  letter-spacing: var(--track-label); color: var(--c-high); padding: var(--sp-1) 0; }
 .detail-add-error { font-size: var(--fs-micro); color: var(--c-low); display: inline-flex; align-items: center; gap: 4px; }
 .detail-add-retry { background: none; border: none; color: var(--accent-blue); cursor: pointer; font: inherit;
   text-decoration: underline; padding: 0; }
 .detail-refresh-wrap { display: inline-flex; align-items: center; gap: var(--sp-2); }
-.detail-refresh { background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--accent-blue);
-  border-radius: var(--radius-sm); padding: var(--sp-1) var(--sp-2); font-size: var(--fs-micro);
-  font-family: var(--font-mono); cursor: pointer; transition: background var(--t-fast) var(--ease); }
-.detail-refresh:hover { background: var(--bg-elev); }
+/* refresh: a text action, not a boxed button — one primary bordered control per header (Add) */
+.detail-refresh { background: none; border: none; color: var(--accent-blue);
+  padding: var(--sp-1) 0; font-size: var(--fs-micro); letter-spacing: var(--track-label);
+  font-family: var(--font-mono); cursor: pointer; transition: color var(--t-fast) var(--ease); }
+.detail-refresh:hover { color: var(--text); }
 .detail-refresh:disabled { opacity: 0.6; cursor: default; }
 .detail-refresh-err { color: var(--c-low); font-size: var(--fs-micro); }
 
+/* resolved banner: a settled statement, not a card — square green rule + text (LEDGER) */
 .detail-resolved { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
-  margin-top: var(--sp-4); padding: var(--sp-3) var(--sp-4); background: var(--bg-card-2);
-  border: 1px solid var(--border); border-left: 3px solid var(--c-high); border-radius: var(--radius); }
-.detail-resolved-tag { font-size: var(--fs-micro); font-weight: 700; letter-spacing: var(--track-label);
-  color: var(--c-high); border: 1px solid var(--c-high); border-radius: var(--radius-sm); padding: var(--sp-1) var(--sp-2); }
+  margin-top: var(--sp-4); padding: var(--sp-2) var(--sp-3); border-left: 3px solid var(--c-high); }
+.detail-resolved-tag { font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 700;
+  letter-spacing: var(--track-label); color: var(--c-high); }
 .detail-resolved-band { font-size: var(--fs-body); font-weight: 600; }
 .detail-resolved-note { font-size: var(--fs-tiny); margin-left: auto; }
 
+/* headline band: carries the SAME split signal bar as the rail rows (rail <-> detail tie) */
 .detail-headline { display: flex; gap: var(--sp-8); flex-wrap: wrap; align-items: baseline;
-  margin-top: var(--sp-4); padding: var(--sp-4); background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+  position: relative; margin-top: var(--sp-4); padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-card); border: 1px solid var(--border); }
+.detail-headline::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(to bottom,
+    var(--sig-rel, var(--border-strong)) 0 50%,
+    var(--sig-liq, var(--border-strong)) 50% 100%);
+}
 .detail-metric { display: flex; flex-direction: column; gap: var(--sp-1); }
-.detail-hero { font-size: var(--fs-hero); font-weight: 700; color: var(--accent-blue); line-height: 1; }
+/* hero value is neutral text — blue means interactive/OPEN, never a data value (LEDGER) */
+.detail-hero { font-size: var(--fs-hero); font-weight: 700; color: var(--text); line-height: 1; }
 .detail-sec { font-size: var(--fs-sec); font-weight: 700; }
 .detail-conf { font-size: var(--fs-emph); font-weight: 700; letter-spacing: var(--track-label); }
 .detail-band { font-size: var(--fs-micro); }
@@ -327,13 +356,15 @@ a:hover { text-decoration: underline; }
 .detail-conf-badge-label { font-size: var(--fs-micro); letter-spacing: var(--track-label); text-transform: uppercase; color: var(--text-muted); }
 .detail-conf-badge .detail-conf { font-size: var(--fs-sec); }
 
-.detail-trust { margin-top: var(--sp-3); padding: var(--sp-3) var(--sp-4); background: var(--bg-card-2);
-  border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; gap: var(--sp-2); }
-.trust-reasons, .trust-prov { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; font-size: var(--fs-tiny); }
-.trust-chip { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 2px var(--sp-2); color: var(--text-muted); }
-/* v1 ITEM 11: tier-marked confidence-basis chips (✓ passed · caveat · ✗ failed). */
-.conf-chip-high { color: var(--c-high); border-color: color-mix(in srgb, var(--c-high) 40%, var(--border)); }
-.conf-chip-low { color: var(--c-low); border-color: color-mix(in srgb, var(--c-low) 40%, var(--border)); }
+.detail-trust { margin-top: var(--sp-3); padding: var(--sp-2) var(--sp-3); background: var(--bg-card-2);
+  border: 1px solid var(--border); display: flex; flex-direction: column; gap: var(--sp-2); }
+.trust-reasons, .trust-prov { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  font-family: var(--font-mono); font-size: var(--fs-tiny); font-variant-numeric: tabular-nums; }
+/* v1 ITEM 11 restyled (LEDGER): tier-marked basis reasons as one plain separated text line —
+ * the ✓/✗/· glyph carries the tier colour; no chip boxes. */
+.trust-reason { color: var(--text-muted); }
+.trust-reason + .trust-reason::before { content: '·'; color: var(--text-faint); margin-right: var(--sp-2); }
+.trust-mark { font-weight: 700; }
 .trust-sep { color: var(--text-faint); }
 .hashverify { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .prov-hash { font-family: var(--font-mono); background: var(--bg-card); padding: 1px var(--sp-2); border-radius: var(--radius-sm); color: var(--text); }
@@ -346,40 +377,51 @@ a:hover { text-decoration: underline; }
 .detail-fresh { font-size: var(--fs-tiny); }
 .detail-stale-pill { color: var(--c-low); font-weight: 700; letter-spacing: var(--track-label); }
 
-.detail-narrative { margin-top: var(--sp-4); padding: var(--sp-3) var(--sp-4); background: var(--bg-card-2);
-  border-left: 3px solid var(--accent-amber); border-radius: var(--radius); font-size: var(--fs-emph);
+/* narrative: an annotated paragraph, not a callout card — square amber rule, prose font */
+.detail-narrative { margin-top: var(--sp-4); padding: 2px 0 2px var(--sp-3);
+  border-left: 2px solid var(--accent-amber); font-size: var(--fs-body);
   line-height: var(--lh-prose); max-width: 80ch; }
 
-.detail-section { margin-top: var(--sp-6); }
-.detail-h2 { font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: var(--track-label);
-  color: var(--text-muted); margin: 0 0 var(--sp-3); font-weight: 600; }
-.tier1-tag { display: inline-block; font-size: var(--fs-micro); font-weight: 600; text-transform: none;
-  letter-spacing: 0; padding: 1px var(--sp-2); border-radius: 10px; background: rgba(45, 212, 191, 0.14); color: var(--tier1); }
+/* ledger sections: a hairline rule owns each separation */
+.detail-section { margin-top: var(--sp-4); border-top: 1px solid var(--border); padding-top: var(--sp-3); }
+.detail-h2 { font-family: var(--font-mono); font-size: var(--fs-micro); text-transform: uppercase;
+  letter-spacing: var(--track-label); color: var(--text-muted); margin: 0 0 var(--sp-3); font-weight: 600; }
+/* Tier-1 provenance tag: plain faint mono text — teal is a chart data series, not a UI tag */
+.tier1-tag { display: inline-block; font-family: var(--font-mono); font-size: var(--fs-micro);
+  font-weight: 400; text-transform: none; letter-spacing: 0; padding: 0; color: var(--text-faint); }
 
 /* distribution SVG */
 .dist-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
 .dist-panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--sp-3); }
 .dist-svg { width: 100%; height: auto; margin-top: var(--sp-2); }
-.dist-grid { stroke: var(--text); stroke-opacity: 0.15; stroke-width: 1; } /* thin gridlines, 0.15 per design spec */
-.dist-ref { stroke: var(--text-faint); stroke-width: 1; stroke-dasharray: 5 4; }
-.dist-cdf-line { stroke: var(--accent-blue); stroke-width: 1.5; }
+/* LEDGER chart recalibration: the 480 viewBox renders ~2.4x, so viewBox strokes/type must be
+ * lighter than they look here — 1.1 strokes render ~2.5px; 7px axis type renders ~17px. */
+.dist-grid { stroke: var(--text); stroke-opacity: 0.10; stroke-width: 0.75; }
+.dist-ref { stroke: var(--text-faint); stroke-width: 0.75; stroke-dasharray: 5 4; }
+.dist-cdf-line { stroke: var(--accent-blue); stroke-width: 1.1; }
 .dist-cdf-dot { fill: var(--accent-blue); }
 /* Enh 1: gradient area under the CDF + a dot on the median crossing */
 .dist-cdf-grad-top { stop-color: var(--accent-blue); stop-opacity: 0.28; }
 .dist-cdf-grad-bot { stop-color: var(--accent-blue); stop-opacity: 0; }
 .dist-median-dot { fill: var(--accent-amber); }
-.dist-median { stroke: var(--accent-amber); stroke-width: 1.5; stroke-dasharray: 5 4; }
-.dist-median-lbl { fill: var(--accent-amber); font-family: var(--font-mono); font-size: 9px; }
-.dist-axis { fill: var(--text-faint); font-family: var(--font-mono); font-size: 9px; }
-.dist-tick { fill: var(--text-faint); font-family: var(--font-mono); font-size: 6.5px; }
+.dist-median { stroke: var(--accent-amber); stroke-width: 1.1; stroke-dasharray: 5 4; }
+.dist-median-lbl { fill: var(--accent-amber); font-family: var(--font-mono); font-size: 7px; }
+.dist-axis { fill: var(--text-faint); font-family: var(--font-mono); font-size: 7px; }
+.dist-tick { fill: var(--text-faint); font-family: var(--font-mono); font-size: 6px; }
 .dist-bar { fill: var(--accent-blue); opacity: 0.38; }
 .dist-bar-median { fill: var(--accent-amber); opacity: 1; }
 
-/* analytics */
-.detail-analytics { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-3); }
-.acard { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--sp-3); }
+/* analytics: ONE bordered field strip per section — cells divided by hairline rules, no
+ * per-cell background/border/radius (LEDGER: a Bloomberg field grid, not SaaS metric tiles).
+ * Cells use the -1px margin trick so adjacent borders collapse and edge borders hide under
+ * the container's own border; wrapped rows self-rule via border-top. */
+.detail-analytics { display: flex; flex-wrap: wrap; border: 1px solid var(--border);
+  background: var(--bg-card); overflow: hidden; }
+.acard { flex: 1 1 200px; min-width: 0; background: none; border: none;
+  border-left: 1px solid var(--border); border-top: 1px solid var(--border);
+  margin: -1px 0 0 -1px; padding: var(--sp-2) var(--sp-3); }
 .acard-v { font-size: var(--fs-emph); font-weight: 700; margin-top: var(--sp-1); }
-.acard-s { font-size: var(--fs-micro); margin-top: var(--sp-1); }
+.acard-s { font-size: var(--fs-micro); margin-top: 2px; }
 .detail-analytics-desc { font-size: var(--fs-tiny); margin-top: var(--sp-2); max-width: 80ch; }
 
 /* history chart (Phase 1) */
@@ -397,18 +439,19 @@ a:hover { text-decoration: underline; }
 /* v1 ITEM 7: multi-line dual-axis trend chart — per-threshold P(>X) lines (left % axis) +
    implied median/mean (right value axis). Deliberate hierarchy: median brightest/thickest,
    threshold probs supporting, mean a faint dashed reference. Low-confidence days are dashed. */
-.hist-line { fill: none; stroke-width: 2; } /* 2px series strokes per design spec */
+.hist-line { fill: none; stroke-width: 1.1; } /* LEDGER: viewBox renders ~2.4x — keep strokes light */
 .hist-line-p0 { stroke: var(--accent-amber); }
 .hist-line-p1 { stroke: var(--accent-blue); }
 .hist-line-p2 { stroke: var(--text-muted); }
-.hist-line-median { stroke: var(--tier1); stroke-width: 2.6; }
-.hist-line-mean { stroke: var(--tier1); stroke-width: 1.2; opacity: 0.4; stroke-dasharray: 5 4; }
+.hist-line-median { stroke: var(--tier1); stroke-width: 1.6; }
+.hist-line-mean { stroke: var(--tier1); stroke-width: 0.9; opacity: 0.4; stroke-dasharray: 5 4; }
 .hist-line.is-low { stroke-dasharray: 4 3; opacity: 0.45; }
-.hist-band { fill: var(--tier1); opacity: 0.10; stroke: none; } /* P25–P75 IQR region behind the median */
+.hist-band { fill: var(--tier1); opacity: 0.07; stroke: none; } /* P25–P75 IQR region behind the median */
 .hist-swatch-band { border-top-color: var(--tier1); opacity: 0.35; }
-.hist-axis-r { fill: var(--text-faint); font-family: var(--font-mono); font-size: 9px; }
+.hist-axis-r { fill: var(--text-faint); font-family: var(--font-mono); font-size: 7px; }
 .hist-legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-1) var(--sp-3);
-  margin-bottom: var(--sp-1); font-size: var(--fs-tiny); color: var(--text-muted); } /* compact, top-right of the chart area */
+  margin-bottom: var(--sp-1); font-family: var(--font-mono); font-size: var(--fs-micro);
+  color: var(--text-muted); } /* compact mono, top-right of the chart area */
 .hist-leg { display: inline-flex; align-items: center; gap: 5px; }
 .hist-swatch { width: 14px; height: 0; border-top-width: 2px; border-top-style: solid; display: inline-block; }
 .hist-note { margin-top: var(--sp-1); font-size: var(--fs-micro); color: var(--text-faint); }
@@ -425,15 +468,15 @@ a:hover { text-decoration: underline; }
   font-size: var(--fs-micro); line-height: 1.35; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); }
 .chart-tip-title { font-weight: 700; color: var(--text); margin-bottom: 3px; white-space: nowrap; }
 .chart-tip-row { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
-.chart-tip-swatch { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 auto; }
+.chart-tip-swatch { width: 9px; height: 9px; border-radius: 0; flex: 0 0 auto; }
 .chart-tip-label { color: var(--text-muted); }
 .chart-tip-value { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; }
 
-/* ladder table */
-.detail-table-wrap { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; }
+/* ladder table: flush ledger — no card wrap; 2px rule under the header row, hairlines between */
+.detail-table-wrap { background: none; border: none; overflow-x: auto; }
 .detail-table { width: 100%; border-collapse: collapse; }
-.detail-table th, .detail-table td { padding: var(--sp-2) var(--sp-3); font-size: var(--fs-tiny); text-align: right; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
-.detail-table th { color: var(--text-muted); font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: var(--track-label); font-weight: 600; }
+.detail-table th, .detail-table td { padding: var(--sp-1) var(--sp-3); font-size: var(--fs-tiny); text-align: right; border-bottom: 1px solid var(--border); }
+.detail-table th { color: var(--text-muted); font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: var(--track-label); font-weight: 600; border-bottom: 2px solid var(--border-strong); }
 .detail-table .tl { text-align: left; }
 .detail-table tr.thin td { opacity: 0.5; }
 /* v1 ITEM 9: the at-the-money rung (P nearest 50%) — the threshold that matters most. */
@@ -452,23 +495,24 @@ a:hover { text-decoration: underline; }
 .mover-card .acard-v { font-variant-numeric: tabular-nums; }
 .mover-pp { font-size: var(--fs-micro); font-weight: 400; }
 
-.detail-method { margin-top: var(--sp-6); background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--sp-3) var(--sp-4); }
+.detail-method { margin-top: var(--sp-4); background: none; border: none; border-top: 1px solid var(--border); padding: var(--sp-3) 0 0; }
 .detail-method summary { cursor: pointer; font-size: var(--fs-body); }
 .detail-method ul { margin: var(--sp-3) 0 var(--sp-1); padding-left: var(--sp-4); color: var(--text-muted); font-size: var(--fs-tiny); line-height: var(--lh-prose); }
 
-@media (max-width: 1280px) { .dist-grid2 { grid-template-columns: 1fr; } .detail-analytics { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 1280px) { .dist-grid2 { grid-template-columns: 1fr; } } /* analytics strip wraps via flex */
 
 /* ── Zone 3: command-bar search + add (2c.4) ─────────────────────────────────
  * STRUCTURAL only — existing tokens, no new color/semantic tokens. */
 .cmdbar-search-wrap { flex: 1; position: relative; max-width: 520px; }
 .cmdbar-search { display: flex; align-items: center; gap: var(--sp-2);
   background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px var(--sp-3); }
-.cmdbar-input { flex: 1; min-width: 0; background: transparent; border: none; color: var(--text); font-size: var(--fs-tiny); outline: none; }
+.cmdbar-input { flex: 1; min-width: 0; background: transparent; border: none; color: var(--text);
+  font-family: var(--font-mono); font-size: var(--fs-tiny); outline: none; }
 .cmdbar-input::placeholder { color: var(--text-faint); }
 
 .search-overlay { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
-  background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-  max-height: 60vh; overflow-y: auto; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
+  background: var(--bg-elev); border: 1px solid var(--border-strong);
+  max-height: 60vh; overflow-y: auto; } /* edge contrast from --bg-elev, no drop shadow (LEDGER) */
 .search-state { padding: var(--sp-3) var(--sp-4); font-size: var(--fs-tiny); }
 .search-error { padding: var(--sp-3) var(--sp-4); font-size: var(--fs-tiny); color: var(--c-low); }
 .search-row { display: flex; align-items: center; gap: var(--sp-2); width: 100%; text-align: left;
@@ -478,11 +522,10 @@ a:hover { text-decoration: underline; }
 .search-row:disabled { opacity: 0.6; cursor: default; }
 .search-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-tiny); }
 .search-vol { flex: 0 0 auto; font-size: var(--fs-micro); }
-/* Enh 5: market-type chip + category tag in search results */
+/* Enh 5: market-type tag + category tag in search results — plain coloured mono text (LEDGER) */
 .search-type { flex: 0 0 auto; font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 600;
-  letter-spacing: var(--track-label); color: var(--text-muted); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: 0 5px; }
-.search-type.is-categorical { color: var(--accent-amber); border-color: var(--accent-amber); }
+  letter-spacing: var(--track-label); color: var(--text-muted); padding: 0; }
+.search-type.is-categorical { color: var(--accent-amber); }
 .search-cat { flex: 0 0 auto; font-size: var(--fs-micro); }
 
 /* remove-from-rail (×) — hover-revealed, right-aligned over the row */
@@ -508,27 +551,26 @@ a:hover { text-decoration: underline; }
 }
 
 /* ── directional-touch detail view ───────────────────────────────────────── */
-.touch-tag { display: inline-block; font-size: var(--fs-micro); font-weight: 700; letter-spacing: var(--track-label);
-  text-transform: uppercase; color: var(--accent-amber); border: 1px solid var(--accent-amber);
-  border-radius: var(--radius-sm); padding: 0 6px; }
+.touch-tag { display: inline-block; font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 700;
+  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--accent-amber); padding: 0; }
 .touch-explainer { font-size: var(--fs-tiny); line-height: var(--lh-prose); margin: var(--sp-3) 0 0; max-width: 70ch; }
 .detail-metric-wide { grid-column: span 2; }
 .touch-rangebar { width: 100%; height: auto; margin-top: var(--sp-3); display: block; }
-.touch-track { stroke: var(--border-strong); stroke-width: 2; }
+.touch-track { stroke: var(--border-strong); stroke-width: 1.5; }
 .touch-band { fill: var(--accent-blue); fill-opacity: 0.18; stroke: var(--accent-blue); stroke-opacity: 0.5; stroke-width: 1; }
 /* Item 4: a band with an OPEN bound uses a gradient fill (faded toward the open edge) + no hard border */
 .touch-band-open { stroke: none; }
 /* RESOLVED bound marker: SOLID amber line at the boundary (e.g. the $1.70T upper bound). */
-.touch-mark { stroke: var(--accent-amber); stroke-width: 1.5; }
+.touch-mark { stroke: var(--accent-amber); stroke-width: 1.1; }
 /* UNRESOLVED bound marker: same amber, same position/weight, but DASHED — distinguishes an
    anchored "beyond the quoted strikes" edge from a resolved one. Same treatment on both sides. */
-.touch-mark-unresolved { stroke: var(--accent-amber); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.touch-mark-unresolved { stroke: var(--accent-amber); stroke-width: 1.1; stroke-dasharray: 4 3; }
 .touch-range-note { font-size: var(--fs-micro); color: var(--text-faint); margin-top: var(--sp-2); max-width: 72ch; line-height: var(--lh-prose); }
 /* Item 4: bound labels sized for the padded 480×150 viewBox (were 26px in an 80-tall box → clipped);
    the axis baseline + ticks reuse the dist-tick/dist-grid tokens for visual parity with the CDF. */
-.touch-axislabel { fill: var(--accent-amber); font-family: var(--font-mono); font-size: 12px; font-weight: 600; }
-.touch-axis { stroke: var(--border-strong); stroke-width: 1; }
-.touch-axisend { fill: var(--text-faint); font-family: var(--font-mono); font-size: 22px; } /* still used by SettlementConsensus */
+.touch-axislabel { fill: var(--accent-amber); font-family: var(--font-mono); font-size: 8px; font-weight: 600; }
+.touch-axis { stroke: var(--border-strong); stroke-width: 0.75; }
+.touch-axisend { fill: var(--text-faint); font-family: var(--font-mono); font-size: 12px; } /* still used by SettlementConsensus */
 .touch-hot { color: var(--accent-amber); font-weight: 700; }
 /* Bug B: settled-leg filtering — footer note + "show all" toggle, and the collapsed 0%-run row. */
 .touch-table-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
@@ -545,14 +587,13 @@ a:hover { text-decoration: underline; }
 .settle-note { font-size: var(--fs-tiny); line-height: var(--lh-prose); margin: var(--sp-3) 0 0; max-width: 70ch; }
 
 /* ── categorical detail view ─────────────────────────────────────────────── */
-.cat-tag { display: inline-block; font-size: var(--fs-micro); font-weight: 700; letter-spacing: var(--track-label);
-  text-transform: uppercase; color: var(--accent-amber); border: 1px solid var(--accent-amber);
-  border-radius: var(--radius-sm); padding: 0 6px; }
+.cat-tag { display: inline-block; font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 700;
+  letter-spacing: var(--track-label); text-transform: uppercase; color: var(--accent-amber); padding: 0; }
 .cat-bars { width: 100%; height: auto; margin-top: var(--sp-3); display: block; }
 .cat-bar { fill: var(--accent-blue); opacity: 0.42; }
 .cat-bar-top { fill: var(--accent-amber); opacity: 1; }
-.cat-bar-label { fill: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
-.cat-bar-pct { fill: var(--text-faint); font-family: var(--font-mono); font-size: 10px; }
+.cat-bar-label { fill: var(--text-muted); font-family: var(--font-mono); font-size: 7.5px; }
+.cat-bar-pct { fill: var(--text-faint); font-family: var(--font-mono); font-size: 7px; }
 .cat-bar-hoverbg { fill: var(--text); opacity: 0.06; }
 .cat-row-top td { color: var(--accent-amber); }
 /* Bug A item 2: "N more outcomes" toggle under the distribution bars. */

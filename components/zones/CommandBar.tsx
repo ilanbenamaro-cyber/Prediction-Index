@@ -22,10 +22,16 @@ export function CommandBar({ userEmail }: { userEmail: string }) {
 
       <style>{`
         .cmdbar-row { display:flex; align-items:center; gap:var(--sp-4); padding:0 var(--sp-4); }
-        .cmdbar-brand { font-size:var(--fs-body); font-weight:700; letter-spacing:0.5px; white-space:nowrap; }
+        .cmdbar-brand { display:flex; align-items:center; font-size:var(--fs-tiny); font-weight:600;
+          letter-spacing:1.2px; white-space:nowrap; }
+        /* the brand mark echoes the split signal bar: two 3x12 bars, amber + blue */
+        .cmdbar-brand::before { content:''; display:inline-block; width:8px; height:12px;
+          margin-right:var(--sp-2); flex:0 0 auto;
+          background:linear-gradient(to right,
+            var(--accent-amber) 0 3px, transparent 3px 5px, var(--accent-blue) 5px 8px); }
         .cmdbar-brand .num { color:var(--accent-amber); font-family:var(--font-mono); }
         .cmdbar-user { display:flex; align-items:center; gap:var(--sp-3); margin-left:auto;
-          font-size:var(--fs-tiny); max-width:40vw; overflow:hidden; }
+          font-size:var(--fs-micro); max-width:40vw; overflow:hidden; }
         .cmdbar-user span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       `}</style>
     </header>

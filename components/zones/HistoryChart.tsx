@@ -196,7 +196,7 @@ function Plot({ points, kind, unit, label }: { points: HistoryPoint[]; kind: str
       ))}
       <polyline className="dist-cdf-line" points={line} fill="none" />
       {points.map((p, i) => (
-        <circle key={i} className="dist-cdf-dot" cx={xScale(xs[i])} cy={yScale(p.value)} r={2.2}>
+        <circle key={i} className="dist-cdf-dot" cx={xScale(xs[i])} cy={yScale(p.value)} r={1.6}>
           <title>{`${fmtDateShort(p.date, { year: true })} · ${fmtVal(p.value, kind, unit)}`}</title>
         </circle>
       ))}

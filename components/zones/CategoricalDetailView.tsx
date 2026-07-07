@@ -10,7 +10,7 @@
 import { canonicalizeRawInputs } from '@/core/fetch.js';
 import { isPlaceholderLeg } from '@/core/categorical.js';
 import { fmtEastern, displayTitle, pointChange, categoricalNarrative, fmtDeltaPp, deltaSign, daysToExpiryLabel, platformLabel } from '@/lib/format-detail.mjs';
-import { ConfidenceBadges, ConfidenceBasisGroup } from './ConfidenceBasis';
+import { ConfidenceBadges, ConfidenceBasisGroup, signalBarStyle } from './ConfidenceBasis';
 import { VolumeCard } from './VolumeCard';
 import { CategoricalOutcomeBars } from './CategoricalOutcomeBars';
 import { HashVerify } from './HashVerify';
@@ -105,7 +105,7 @@ export function CategoricalDetailView({ record, envelope, hist, addControl }: { 
       )}
 
       {/* HEADLINE — the dominant outcome */}
-      <div className="detail-headline">
+      <div className="detail-headline" style={signalBarStyle(conf, isFinal)}>
         <div className="detail-metric detail-metric-wide">
           <span className="label">Most likely outcome</span>
           <span className="detail-hero num" data-field="dominant">

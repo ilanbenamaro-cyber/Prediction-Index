@@ -25,7 +25,7 @@ import { TrendHistorySection, type HistoryUI, type VelocityResult, type Dispersi
 import { HashVerify } from './HashVerify';
 import { DetailFreshness } from './DetailFreshness';
 import { RefreshButton } from './RefreshButton';
-import { ConfidenceBadges, ConfidenceBasisGroup } from './ConfidenceBasis';
+import { ConfidenceBadges, ConfidenceBasisGroup, signalBarStyle } from './ConfidenceBasis';
 import { VolumeCard } from './VolumeCard';
 import { LadderThresholdTable } from './LadderThresholdTable';
 import { BinaryDetailView } from './BinaryDetailView';
@@ -268,7 +268,7 @@ function MarketDetailView({ record, envelope, hist, deltas, movers, narrativeBit
       )}
 
       {/* HEADLINE */}
-      <div className="detail-headline">
+      <div className="detail-headline" style={signalBarStyle(conf, isFinal)}>
         <div className="detail-metric">
           <span className="label">Implied median</span>
           <span className="detail-hero num" data-field="median">{impliedMedianLabel(d.markets, d.implied_median ?? null, unit)}</span>
