@@ -386,8 +386,9 @@ a:hover { text-decoration: underline; }
 .detail-section { margin-top: var(--sp-4); border-top: 1px solid var(--border); padding-top: var(--sp-3); }
 .detail-h2 { font-family: var(--font-mono); font-size: var(--fs-micro); text-transform: uppercase;
   letter-spacing: var(--track-label); color: var(--text-muted); margin: 0 0 var(--sp-3); font-weight: 600; }
-.tier1-tag { display: inline-block; font-size: var(--fs-micro); font-weight: 600; text-transform: none;
-  letter-spacing: 0; padding: 1px var(--sp-2); border-radius: 0; background: rgba(45, 212, 191, 0.14); color: var(--tier1); }
+/* Tier-1 provenance tag: plain faint mono text — teal is a chart data series, not a UI tag */
+.tier1-tag { display: inline-block; font-family: var(--font-mono); font-size: var(--fs-micro);
+  font-weight: 400; text-transform: none; letter-spacing: 0; padding: 0; color: var(--text-faint); }
 
 /* distribution SVG */
 .dist-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
@@ -408,11 +409,17 @@ a:hover { text-decoration: underline; }
 .dist-bar { fill: var(--accent-blue); opacity: 0.38; }
 .dist-bar-median { fill: var(--accent-amber); opacity: 1; }
 
-/* analytics */
-.detail-analytics { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-3); }
-.acard { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--sp-3); }
+/* analytics: ONE bordered field strip per section — cells divided by hairline rules, no
+ * per-cell background/border/radius (LEDGER: a Bloomberg field grid, not SaaS metric tiles).
+ * Cells use the -1px margin trick so adjacent borders collapse and edge borders hide under
+ * the container's own border; wrapped rows self-rule via border-top. */
+.detail-analytics { display: flex; flex-wrap: wrap; border: 1px solid var(--border);
+  background: var(--bg-card); overflow: hidden; }
+.acard { flex: 1 1 200px; min-width: 0; background: none; border: none;
+  border-left: 1px solid var(--border); border-top: 1px solid var(--border);
+  margin: -1px 0 0 -1px; padding: var(--sp-2) var(--sp-3); }
 .acard-v { font-size: var(--fs-emph); font-weight: 700; margin-top: var(--sp-1); }
-.acard-s { font-size: var(--fs-micro); margin-top: var(--sp-1); }
+.acard-s { font-size: var(--fs-micro); margin-top: 2px; }
 .detail-analytics-desc { font-size: var(--fs-tiny); margin-top: var(--sp-2); max-width: 80ch; }
 
 /* history chart (Phase 1) */
@@ -462,11 +469,11 @@ a:hover { text-decoration: underline; }
 .chart-tip-label { color: var(--text-muted); }
 .chart-tip-value { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; }
 
-/* ladder table */
-.detail-table-wrap { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; }
+/* ladder table: flush ledger — no card wrap; 2px rule under the header row, hairlines between */
+.detail-table-wrap { background: none; border: none; overflow-x: auto; }
 .detail-table { width: 100%; border-collapse: collapse; }
-.detail-table th, .detail-table td { padding: var(--sp-2) var(--sp-3); font-size: var(--fs-tiny); text-align: right; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
-.detail-table th { color: var(--text-muted); font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: var(--track-label); font-weight: 600; }
+.detail-table th, .detail-table td { padding: var(--sp-1) var(--sp-3); font-size: var(--fs-tiny); text-align: right; border-bottom: 1px solid var(--border); }
+.detail-table th { color: var(--text-muted); font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: var(--track-label); font-weight: 600; border-bottom: 2px solid var(--border-strong); }
 .detail-table .tl { text-align: left; }
 .detail-table tr.thin td { opacity: 0.5; }
 /* v1 ITEM 9: the at-the-money rung (P nearest 50%) — the threshold that matters most. */
@@ -485,11 +492,11 @@ a:hover { text-decoration: underline; }
 .mover-card .acard-v { font-variant-numeric: tabular-nums; }
 .mover-pp { font-size: var(--fs-micro); font-weight: 400; }
 
-.detail-method { margin-top: var(--sp-6); background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--sp-3) var(--sp-4); }
+.detail-method { margin-top: var(--sp-4); background: none; border: none; border-top: 1px solid var(--border); padding: var(--sp-3) 0 0; }
 .detail-method summary { cursor: pointer; font-size: var(--fs-body); }
 .detail-method ul { margin: var(--sp-3) 0 var(--sp-1); padding-left: var(--sp-4); color: var(--text-muted); font-size: var(--fs-tiny); line-height: var(--lh-prose); }
 
-@media (max-width: 1280px) { .dist-grid2 { grid-template-columns: 1fr; } .detail-analytics { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 1280px) { .dist-grid2 { grid-template-columns: 1fr; } } /* analytics strip wraps via flex */
 
 /* ── Zone 3: command-bar search + add (2c.4) ─────────────────────────────────
  * STRUCTURAL only — existing tokens, no new color/semantic tokens. */
