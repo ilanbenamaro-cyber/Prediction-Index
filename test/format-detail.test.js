@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { unitFromLadder, fmtMoney, fmtRange, fmtEastern, settlementZone, settlementZoneLabel,
-  pointChange, binaryNarrative, touchNarrative, categoricalNarrative, confidenceSentence } from '../lib/format-detail.mjs';
+  pointChange, binaryNarrative, touchNarrative, categoricalNarrative, confidenceSentence, noProbLabel } from '../lib/format-detail.mjs';
 
 test('derives T from a trillions ladder (SpaceX-style)', () => {
   assert.equal(unitFromLadder([{ label: '>$1T' }, { label: '>$1.8T' }]), 'T');
@@ -240,6 +240,26 @@ test('detailNarrative: full paragraph with history; omits Δ/band sentences with
   assert.doesNotMatch(noHist, /band is/);  // no band sentence
   assert.doesNotMatch(noHist, /—/);        // never a dash in prose
   assert.match(noHist, /Moderate confidence in both/);
+});
+
+// ── FIX 2: binary NO label complements YES when quotes are consistent ───────────
+test('noProbLabel: independent rounding does not fabricate a false 101%/99% sum', () => {
+  // YES 0.605 / NO 0.395 sum to exactly 1.000, but round(60.5)=61 and round(39.5)=40 → 101 raw.
+  // Consistent quotes → NO complements the rounded YES (61% → 39%), never a fabricated 101%.
+  assert.equal(noProbLabel(0.605, 0.395), '39%');
+  // YES 0.601 / NO 0.399 → round(60.1)=60, round(39.9)=40 → already sums to 100; complement agrees.
+  assert.equal(noProbLabel(0.601, 0.399), '40%');
+});
+
+test('noProbLabel: a genuine overround stays visible (quotes disagree beyond tolerance)', () => {
+  // YES 0.55 + NO 0.50 = 1.05 — a real overround, more than 0.5pp off 1 — show the true NO.
+  assert.equal(noProbLabel(0.55, 0.50), '50%');
+});
+
+test('noProbLabel: null when either quote is missing', () => {
+  assert.equal(noProbLabel(null, 0.4), null);
+  assert.equal(noProbLabel(0.6, null), null);
+  assert.equal(noProbLabel(undefined, undefined), null);
 });
 
 // ── FIX 1: resolved-aware narratives (RESOLVED markets speak in the past tense) ──

@@ -6,7 +6,7 @@
 // ladder detail (reusing HashVerify + DetailFreshness), and the RESOLVED banner shows the
 // settled Yes/No outcome. Server component; canonicalizes raw_inputs server-side for verify.
 import { canonicalizeRawInputs } from '@/core/fetch.js';
-import { fmtEastern, displayTitle, pointChange, binaryNarrative, fmtDeltaPp, deltaSign, daysToExpiryLabel } from '@/lib/format-detail.mjs';
+import { fmtEastern, displayTitle, pointChange, binaryNarrative, fmtDeltaPp, deltaSign, daysToExpiryLabel, noProbLabel } from '@/lib/format-detail.mjs';
 import { ConfidenceBadges, ConfidenceBasisGroup } from './ConfidenceBasis';
 import { VolumeCard } from './VolumeCard';
 import { HashVerify } from './HashVerify';
@@ -48,6 +48,10 @@ export function BinaryDetailView({ record, envelope, hist, addControl }: { recor
   const spread = yesRaw?.best_bid != null && yesRaw?.best_ask != null
     ? Number(yesRaw.best_ask) - Number(yesRaw.best_bid) : null;
   const p = d.probability ?? null;
+  // FIX 2: independent rounding of YES/NO can fabricate a false 101%/99% sum on quotes that were
+  // actually consistent — complement off the rounded YES when the two agree; show the true
+  // rounded NO (a genuine overround) when they don't. Falls back to pctStr's own dash on absence.
+  const noLabel = noProbLabel(d.probability ?? null, d.probability_no ?? null) ?? pctStr(d.probability_no);
   const consensus = p == null ? null
     : p >= 0.8 ? { label: 'STRONG · YES', cls: 'conf-high' }
     : p <= 0.2 ? { label: 'STRONG · NO', cls: 'conf-high' }
@@ -97,7 +101,7 @@ export function BinaryDetailView({ record, envelope, hist, addControl }: { recor
         <div className="detail-metric">
           <span className="label">Implied probability · YES</span>
           <span className="detail-hero num" data-field="probability">{pctStr(d.probability)}</span>
-          <span className="detail-band faint">NO {pctStr(d.probability_no)}</span>
+          <span className="detail-band faint">NO {noLabel}</span>
         </div>
         <div className="detail-metric">
           <span className="label">Confidence</span>
@@ -128,7 +132,7 @@ export function BinaryDetailView({ record, envelope, hist, addControl }: { recor
         <div className="bin-meter-legend">
           <span className="faint">YES {pctStr(d.probability)}</span>
           {consensus && <span className={`bin-consensus ${consensus.cls}`} data-field="consensus">{consensus.label}</span>}
-          <span className="faint">NO {pctStr(d.probability_no)}</span>
+          <span className="faint">NO {noLabel}</span>
         </div>
       </div>
 
