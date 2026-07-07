@@ -5,6 +5,13 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## touch-record boundLabel hardcodes $ — will break on %-unit touch markets
+core/touch-record.js hardcodes the '$' prefix in boundLabel construction.
+No live %-unit touch market currently exists so there is zero current impact.
+When the first %-unit touch market is added: fix boundLabel to read the
+market's unit_prefix (same as the percent-bucket fix pattern).
+Detection: a touch market whose labels display '$' when % is expected.
+
 ## A conflict-IGNORING upsert makes "re-seed" a silent no-op when the conflict key never changes
 **Symptom (found 2026-07-06, explains weeks of red C4):** `scripts/seed-spacex.mjs` reported "✓ seeded"
 but the stored row kept the STALE pre-split schema — the documented remediation for the verify-phase2a
