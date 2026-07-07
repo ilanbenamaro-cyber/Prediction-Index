@@ -40,7 +40,6 @@ export interface ScanRow {
   has_scan: boolean;
 }
 
-const CONF_CLASS: Record<string, string> = { high: 'conf-high', medium: 'conf-med', low: 'conf-low' };
 const CONF_LABEL: Record<string, string> = { high: 'HIGH', medium: 'MED', low: 'LOW' };
 
 /** Compact 24h volume for the rail liquidity chip ($52K / $1.2M / $478). */
@@ -58,22 +57,13 @@ function ageLabel(hours: number): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-/** Freshness is time-dependent → compute on the client (live `now`) to stay honest and
- *  avoid a hydration mismatch. A RESOLVED market is DONE, not stale: it shows a neutral RESOLVED
- *  badge and is excluded from the stale calc entirely. The lifecycle check takes PRIORITY over
- *  stale_after — a resolved market can never be stale, even if a stale_after somehow lingers or
- *  is_final wasn't set (defence against the two diverging). */
-function Freshness({ staleAfter, fetchedAt, isFinal, lifecycleState }:
-  { staleAfter: string | null; fetchedAt: string | null; isFinal: boolean; lifecycleState: ScanRow['lifecycle_state'] }) {
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => {
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 60_000); // keep the stale pill current
-    return () => clearInterval(id);
-  }, []);
-
-  // Terminal state — resolved (or otherwise frozen-final). NOT a freshness issue, so no stale
-  // pill, ever. Distinct muted badge (done, archived), visually apart from the amber/red STALE.
+/** Freshness is time-dependent → computed from the PARENT's single client clock (live `now`,
+ *  null pre-mount) to stay honest and avoid a hydration mismatch. A RESOLVED market is DONE,
+ *  not stale: it shows muted plain text and is excluded from the stale calc entirely. The
+ *  lifecycle check takes PRIORITY over stale_after — a resolved market can never be stale,
+ *  even if a stale_after somehow lingers or is_final wasn't set (defence against divergence). */
+function Freshness({ now, staleAfter, fetchedAt, isFinal, lifecycleState }:
+  { now: number | null; staleAfter: string | null; fetchedAt: string | null; isFinal: boolean; lifecycleState: ScanRow['lifecycle_state'] }) {
   if (lifecycleState === 'RESOLVED' || isFinal) {
     return <span className="wl-fresh"><span className="wl-resolved-pill" title="market resolved — final record">resolved</span></span>;
   }
@@ -87,12 +77,32 @@ function Freshness({ staleAfter, fetchedAt, isFinal, lifecycleState }:
   );
 }
 
+/** Signature element: the split signal bar's per-segment colors. Reliability (top) and
+ *  liquidity (bottom) tier → semantic token; unknown half → structural border gray; a
+ *  RESOLVED/final market carries no live signal → both segments go faint gray. */
+const TIER_VAR: Record<string, string> = { high: 'var(--c-high)', medium: 'var(--c-med)', low: 'var(--c-low)' };
+function signalBarVars(r: ScanRow): { rel: string; liq: string } {
+  if (r.lifecycle_state === 'RESOLVED' || r.is_final) return { rel: 'var(--text-faint)', liq: 'var(--text-faint)' };
+  return {
+    rel: r.reliability_tier ? TIER_VAR[r.reliability_tier] : 'var(--border-strong)',
+    liq: r.liquidity_tier ? TIER_VAR[r.liquidity_tier] : 'var(--border-strong)',
+  };
+}
+
 type View = { mode: 'personal' } | { mode: 'org'; orgId: string };
 
 export function WatchlistRows({ rows, orgs = [] }: { rows: ScanRow[]; orgs?: Array<{ id: string; name: string }> }) {
   const router = useRouter();
   const selected = useSearchParams().get('m');
   const [removing, startRemove] = useTransition();
+  // ONE client clock for the whole rail (staleness both fades the signal bar and drives the
+  // freshness text) — null until mount so SSR and first client render agree (no hydration skew).
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
   // A failed remove (expired session, RLS denial) must be visible — silently doing nothing
   // teaches the user the × is broken. Cleared on the next attempt.
   const [removeError, setRemoveError] = useState<string | null>(null);
@@ -165,7 +175,6 @@ export function WatchlistRows({ rows, orgs = [] }: { rows: ScanRow[]; orgs?: Arr
   }
 
   const orgName = (id: string | null) => orgs.find((o) => o.id === id)?.name ?? 'Org';
-  const maxVol = Math.max(1, ...filtered.map((r) => r.volume ?? 0)); // Enh 2: normalize the volume tint
   return (
     <>
       {orgs.length > 0 && (
@@ -213,29 +222,36 @@ export function WatchlistRows({ rows, orgs = [] }: { rows: ScanRow[]; orgs?: Arr
       {filtered.map((r, i) => {
         const isSel = r.market_id === selected;
         const isFocus = i === focus;
-        const relClass = r.reliability_tier ? CONF_CLASS[r.reliability_tier] : 'conf-none';
-        const liqClass = r.liquidity_tier ? CONF_CLASS[r.liquidity_tier] : 'conf-none';
         const relLabel = r.reliability_tier ? CONF_LABEL[r.reliability_tier] : '—';
         const liqLabel = r.liquidity_tier ? CONF_LABEL[r.liquidity_tier] : '—';
         const lifeClass = r.lifecycle_state ? LIFECYCLE_CLASS[r.lifecycle_state] : 'is-flat';
-        const volTint = (r.volume ?? 0) / maxVol; // 0..1 relative liquidity
+        // Signature element: the split signal bar (reliability top / liquidity bottom) replaces
+        // the two confidence dots, the volume-tint gradient, and the state pill boxes. Rendered
+        // as an absolutely-positioned ::before (NOT border-left — that would enter the box model
+        // and shift the row layout). Staleness fades the bar: aged data = attenuated signal.
+        const bar = signalBarVars(r);
+        const resolved = r.lifecycle_state === 'RESOLVED' || r.is_final;
+        const stale = !resolved && now != null && r.stale_after != null && now > Date.parse(r.stale_after);
         return (
           <li key={r.market_id} className="wl-li">
             <Link
               href={`/?m=${encodeURIComponent(r.market_id)}`}
               scroll={false}
-              className={`wl-row${isSel ? ' wl-selected' : ''}${isFocus ? ' wl-focused' : ''}`}
-              style={{ ['--vol-tint' as string]: volTint.toFixed(3) }}
+              className={`wl-row${isSel ? ' wl-selected' : ''}${isFocus ? ' wl-focused' : ''}${stale ? ' is-stale-row' : ''}`}
+              style={{ ['--sig-rel' as string]: bar.rel, ['--sig-liq' as string]: bar.liq }}
+              title={`Reliability ${relLabel} · Liquidity ${liqLabel}`}
               aria-current={isSel ? 'true' : undefined}
               data-market-id={r.market_id}
               data-selected={isSel ? 'true' : undefined}
               data-focused={isFocus ? 'true' : undefined}
+              data-reliability={r.reliability_tier ?? undefined}
+              data-liquidity={r.liquidity_tier ?? undefined}
             >
               <div className="wl-row-top">
                 <span className={`wl-dot ${lifeClass}`} title={r.lifecycle_state ?? 'unknown'} aria-hidden="true" />
                 {r.near_settlement && <span className="wl-near" title="near settlement" aria-label="near settlement">◐</span>}
                 <span className="wl-title" title={r.title}>{r.title}</span>
-                {r.kind === 'binary' && <span className="wl-chip wl-chip-kind label" title="binary (Yes/No) market">Y/N</span>}
+                {r.kind === 'binary' && <span className="wl-chip label" title="binary (Yes/No) market">Y·N</span>}
                 {r.scopes.includes('org') && <span className="wl-chip label" title="shared org watchlist">ORG</span>}
               </div>
               <div className="wl-row-data num">
@@ -245,16 +261,7 @@ export function WatchlistRows({ rows, orgs = [] }: { rows: ScanRow[]; orgs?: Arr
                 {fmtVol24(r.volume_24hr) && (
                   <span className="wl-vol24 faint" data-field="volume-24h" title="24h volume (recent liquidity)">{fmtVol24(r.volume_24hr)}/24h</span>
                 )}
-                {/* Two-dimension confidence (0010): two small tier-colored dots — reliability then
-                    liquidity. Compact for the rail; the detail view carries the full split + reasons. */}
-                {(r.reliability_tier || r.liquidity_tier) && (
-                  <span className="wl-conf2" data-field="confidence"
-                    title={`Reliability ${relLabel} · Liquidity ${liqLabel}`}>
-                    <span className={`wl-conf-dot ${relClass}`} data-field="reliability" aria-hidden="true" />
-                    <span className={`wl-conf-dot ${liqClass}`} data-field="liquidity" aria-hidden="true" />
-                  </span>
-                )}
-                <Freshness staleAfter={r.stale_after} fetchedAt={r.fetched_at} isFinal={r.is_final} lifecycleState={r.lifecycle_state} />
+                <Freshness now={now} staleAfter={r.stale_after} fetchedAt={r.fetched_at} isFinal={r.is_final} lifecycleState={r.lifecycle_state} />
               </div>
             </Link>
             <button

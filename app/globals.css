@@ -185,17 +185,32 @@ a:hover { text-decoration: underline; }
 
 .wl-row {
   display: block;
-  padding: var(--sp-2) var(--sp-4);
+  position: relative;
+  padding: 6px var(--sp-3) 6px 13px; /* 3px signal bar + 10px gutter on the left */
   border-bottom: 1px solid var(--border);
-  border-left: 2px solid transparent; /* selection marker rail */
   color: var(--text);
   cursor: pointer;
-  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+  transition: background var(--t-fast) var(--ease);
 }
+/* SIGNATURE ELEMENT: the split signal bar — 3px, reliability (top half) / liquidity (bottom
+ * half), tier-coloured via the row's --sig-rel/--sig-liq custom props. An absolutely-
+ * positioned pseudo-element, NOT border-left: a border enters the box model and would shift
+ * the row's flex layout. Stale data attenuates the signal (opacity); a resolved market's bar
+ * is set faint-gray by the component (no live signal). */
+.wl-row::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(to bottom,
+    var(--sig-rel, var(--border-strong)) 0 50%,
+    var(--sig-liq, var(--border-strong)) 50% 100%);
+}
+.wl-row.is-stale-row::before { opacity: 0.4; }
 .wl-row:hover { background: var(--bg-card); text-decoration: none; }
-.wl-selected { background: var(--bg-elev); border-left-color: var(--border-strong); }
-/* keyboard focus cursor (Enh 8) — distinct from selection: an amber left rail + inset ring */
-.wl-focused { border-left-color: var(--accent-amber); box-shadow: inset 0 0 0 1px var(--accent-amber); }
+/* selection: elevated ground + amber title — the left edge belongs to the signal bar */
+.wl-selected { background: var(--bg-elev); }
+.wl-selected .wl-title { color: var(--accent-amber); }
+/* keyboard focus cursor (Enh 8) — distinct from selection: an inset amber ring */
+.wl-focused { box-shadow: inset 0 0 0 1px var(--accent-amber); }
 
 /* keyboard-shortcut legend (Enh 8) */
 .kbd-legend-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 50;
@@ -221,16 +236,17 @@ a:hover { text-decoration: underline; }
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
   overflow: hidden; text-overflow: ellipsis;
 }
+/* kind/scope tags: plain faint mono text — no box (LEDGER: text, not badges) */
 .wl-chip {
   flex: 0 0 auto;
-  padding: 0 var(--sp-1);
-  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  padding: 0;
+  border: none;
   color: var(--text-faint);
 }
 
 .wl-row-data {
   display: flex; align-items: baseline; gap: var(--sp-2);
-  margin-top: var(--sp-1);
+  margin-top: 2px;
   font-size: var(--fs-tiny); line-height: var(--lh-data);
 }
 .wl-median { font-size: var(--fs-emph); color: var(--text); }
@@ -238,23 +254,12 @@ a:hover { text-decoration: underline; }
 .wl-conf { font-size: var(--fs-micro); letter-spacing: var(--track-label); font-weight: 600; }
 .wl-fresh { margin-left: auto; flex: 0 0 auto; font-size: var(--fs-micro); }
 .wl-stale-pill { text-transform: uppercase; letter-spacing: var(--track-label); }
-/* RESOLVED badge: a terminal state, NOT a freshness warning — muted/neutral (done, archived),
-   deliberately distinct from the amber/red STALE pill. Uses only existing surface/text tokens. */
-.wl-resolved-pill { text-transform: uppercase; letter-spacing: var(--track-label); color: var(--text-muted);
-  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 5px; background: var(--bg-card); }
+/* RESOLVED state: a terminal state, NOT a freshness warning — plain muted mono text (done,
+   archived); the signal bar goes faint-gray alongside. No box (LEDGER: text, not badges). */
+.wl-resolved-pill { text-transform: uppercase; letter-spacing: var(--track-label); color: var(--text-muted); }
 
-/* Enh 2: rail row polish — volume tint, confidence dot, near-settlement clock, binary chip */
-.wl-row { background-image: linear-gradient(to right, transparent 55%, rgba(196, 127, 58, calc(var(--vol-tint, 0) * 0.13))); }
-.wl-conf-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
-.wl-conf-dot.conf-high { background: var(--c-high); }
-.wl-conf-dot.conf-med { background: var(--c-med); opacity: 0.85; }
-.wl-conf-dot.conf-low { background: transparent; box-shadow: inset 0 0 0 1px var(--c-low); } /* empty ring = lowest */
-.wl-conf-dot.conf-none { background: transparent; box-shadow: inset 0 0 0 1px var(--border); opacity: 0.5; } /* unknown half */
-/* Confidence split (0010): two adjacent dots in the rail — reliability then liquidity. */
-.wl-conf2 { display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto; }
-.wl-conf2 .wl-conf-dot { margin-right: 0; }
+/* near-settlement clock (the split signal bar replaced the dots + volume tint) */
 .wl-near { color: var(--accent-amber); flex: 0 0 auto; font-size: var(--fs-tiny); line-height: 1; }
-.wl-chip-kind { color: var(--accent-blue); border-color: var(--accent-blue); }
 
 .wl-error { color: var(--c-low); }
 
