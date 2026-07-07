@@ -292,8 +292,9 @@ a:hover { text-decoration: underline; }
 .detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-4); }
 .detail-title { font-size: var(--fs-lg); margin: 0 0 var(--sp-1); line-height: var(--lh-tight); }
 .detail-sub { font-size: var(--fs-tiny); }
-.detail-lifecycle { flex: 0 0 auto; font-size: var(--fs-micro); letter-spacing: var(--track-label);
-  font-weight: 600; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: var(--sp-1) var(--sp-2); }
+/* lifecycle state: plain coloured mono text — the colour is the signal, no box (LEDGER) */
+.detail-lifecycle { flex: 0 0 auto; font-family: var(--font-mono); font-size: var(--fs-micro);
+  letter-spacing: var(--track-label); font-weight: 600; padding: var(--sp-1) 0; }
 .detail-head-actions { display: flex; align-items: center; gap: var(--sp-2); flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
 /* Item 2: detail-header "Add to Watchlist" control */
 .detail-add { display: inline-flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); }
@@ -309,31 +310,42 @@ a:hover { text-decoration: underline; }
 .detail-add-btn.is-primary:hover { background: var(--accent-amber); color: var(--bg-base); }
 .detail-add-btn:disabled { opacity: 0.5; cursor: default; }
 .detail-add-btn:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 1px; }
-.detail-added { flex: 0 0 auto; font-size: var(--fs-micro); font-weight: 600; letter-spacing: var(--track-label);
-  color: var(--c-high); border: 1px solid var(--c-high); border-radius: var(--radius-sm); padding: var(--sp-1) var(--sp-2); }
+.detail-added { flex: 0 0 auto; font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 600;
+  letter-spacing: var(--track-label); color: var(--c-high); padding: var(--sp-1) 0; }
 .detail-add-error { font-size: var(--fs-micro); color: var(--c-low); display: inline-flex; align-items: center; gap: 4px; }
 .detail-add-retry { background: none; border: none; color: var(--accent-blue); cursor: pointer; font: inherit;
   text-decoration: underline; padding: 0; }
 .detail-refresh-wrap { display: inline-flex; align-items: center; gap: var(--sp-2); }
-.detail-refresh { background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--accent-blue);
-  border-radius: var(--radius-sm); padding: var(--sp-1) var(--sp-2); font-size: var(--fs-micro);
-  font-family: var(--font-mono); cursor: pointer; transition: background var(--t-fast) var(--ease); }
-.detail-refresh:hover { background: var(--bg-elev); }
+/* refresh: a text action, not a boxed button — one primary bordered control per header (Add) */
+.detail-refresh { background: none; border: none; color: var(--accent-blue);
+  padding: var(--sp-1) 0; font-size: var(--fs-micro); letter-spacing: var(--track-label);
+  font-family: var(--font-mono); cursor: pointer; transition: color var(--t-fast) var(--ease); }
+.detail-refresh:hover { color: var(--text); }
 .detail-refresh:disabled { opacity: 0.6; cursor: default; }
 .detail-refresh-err { color: var(--c-low); font-size: var(--fs-micro); }
 
+/* resolved banner: a settled statement, not a card — square green rule + text (LEDGER) */
 .detail-resolved { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
-  margin-top: var(--sp-4); padding: var(--sp-3) var(--sp-4); background: var(--bg-card-2);
-  border: 1px solid var(--border); border-left: 3px solid var(--c-high); border-radius: var(--radius); }
-.detail-resolved-tag { font-size: var(--fs-micro); font-weight: 700; letter-spacing: var(--track-label);
-  color: var(--c-high); border: 1px solid var(--c-high); border-radius: var(--radius-sm); padding: var(--sp-1) var(--sp-2); }
+  margin-top: var(--sp-4); padding: var(--sp-2) var(--sp-3); border-left: 3px solid var(--c-high); }
+.detail-resolved-tag { font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 700;
+  letter-spacing: var(--track-label); color: var(--c-high); }
 .detail-resolved-band { font-size: var(--fs-body); font-weight: 600; }
 .detail-resolved-note { font-size: var(--fs-tiny); margin-left: auto; }
 
+/* headline band: carries the SAME split signal bar as the rail rows (rail <-> detail tie) */
 .detail-headline { display: flex; gap: var(--sp-8); flex-wrap: wrap; align-items: baseline;
-  margin-top: var(--sp-4); padding: var(--sp-4); background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+  position: relative; margin-top: var(--sp-4); padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-card); border: 1px solid var(--border); }
+.detail-headline::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(to bottom,
+    var(--sig-rel, var(--border-strong)) 0 50%,
+    var(--sig-liq, var(--border-strong)) 50% 100%);
+}
 .detail-metric { display: flex; flex-direction: column; gap: var(--sp-1); }
-.detail-hero { font-size: var(--fs-hero); font-weight: 700; color: var(--accent-blue); line-height: 1; }
+/* hero value is neutral text — blue means interactive/OPEN, never a data value (LEDGER) */
+.detail-hero { font-size: var(--fs-hero); font-weight: 700; color: var(--text); line-height: 1; }
 .detail-sec { font-size: var(--fs-sec); font-weight: 700; }
 .detail-conf { font-size: var(--fs-emph); font-weight: 700; letter-spacing: var(--track-label); }
 .detail-band { font-size: var(--fs-micro); }
@@ -344,8 +356,8 @@ a:hover { text-decoration: underline; }
 .detail-conf-badge-label { font-size: var(--fs-micro); letter-spacing: var(--track-label); text-transform: uppercase; color: var(--text-muted); }
 .detail-conf-badge .detail-conf { font-size: var(--fs-sec); }
 
-.detail-trust { margin-top: var(--sp-3); padding: var(--sp-3) var(--sp-4); background: var(--bg-card-2);
-  border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; gap: var(--sp-2); }
+.detail-trust { margin-top: var(--sp-3); padding: var(--sp-2) var(--sp-3); background: var(--bg-card-2);
+  border: 1px solid var(--border); display: flex; flex-direction: column; gap: var(--sp-2); }
 .trust-reasons, .trust-prov { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
   font-family: var(--font-mono); font-size: var(--fs-tiny); font-variant-numeric: tabular-nums; }
 /* v1 ITEM 11 restyled (LEDGER): tier-marked basis reasons as one plain separated text line —
@@ -365,11 +377,13 @@ a:hover { text-decoration: underline; }
 .detail-fresh { font-size: var(--fs-tiny); }
 .detail-stale-pill { color: var(--c-low); font-weight: 700; letter-spacing: var(--track-label); }
 
-.detail-narrative { margin-top: var(--sp-4); padding: var(--sp-3) var(--sp-4); background: var(--bg-card-2);
-  border-left: 3px solid var(--accent-amber); border-radius: var(--radius); font-size: var(--fs-emph);
+/* narrative: an annotated paragraph, not a callout card — square amber rule, prose font */
+.detail-narrative { margin-top: var(--sp-4); padding: 2px 0 2px var(--sp-3);
+  border-left: 2px solid var(--accent-amber); font-size: var(--fs-body);
   line-height: var(--lh-prose); max-width: 80ch; }
 
-.detail-section { margin-top: var(--sp-6); }
+/* ledger sections: a hairline rule owns each separation */
+.detail-section { margin-top: var(--sp-4); border-top: 1px solid var(--border); padding-top: var(--sp-3); }
 .detail-h2 { font-family: var(--font-mono); font-size: var(--fs-micro); text-transform: uppercase;
   letter-spacing: var(--track-label); color: var(--text-muted); margin: 0 0 var(--sp-3); font-weight: 600; }
 .tier1-tag { display: inline-block; font-size: var(--fs-micro); font-weight: 600; text-transform: none;

@@ -28,6 +28,19 @@ const CAVEAT_REASON = /^(moderate |market resolved)/;
 
 const MARK_CLASS: Record<string, string> = { '✓': 'conf-high', '✗': 'conf-low', '·': 'muted' };
 
+/** LEDGER signature element: the split signal bar's inline custom props (--sig-rel/--sig-liq)
+ *  for a detail headline band — same visual language as the rail rows. Resolved/final markets
+ *  carry no live signal → both segments faint gray; an unknown half → structural border gray. */
+const TIER_VAR: Record<string, string> = { high: 'var(--c-high)', medium: 'var(--c-med)', low: 'var(--c-low)' };
+export function signalBarStyle(confidence?: Confidence | null, resolved = false): React.CSSProperties {
+  const seg = (t?: string | null) =>
+    resolved ? 'var(--text-faint)' : (t && TIER_VAR[t]) ? TIER_VAR[t] : 'var(--border-strong)';
+  return {
+    ['--sig-rel' as string]: seg(confidence?.reliability?.tier),
+    ['--sig-liq' as string]: seg(confidence?.liquidity?.tier),
+  };
+}
+
 export function ConfidenceBasis({ reasons, tier, label = 'Confidence basis', field }:
   { reasons?: string[] | null; tier?: string | null; label?: string; field?: string }) {
   if (!Array.isArray(reasons) || reasons.length === 0) return null;

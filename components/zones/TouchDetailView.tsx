@@ -11,7 +11,7 @@ import { fmtEastern, displayTitle, pointChange, touchNarrative, daysToExpiryLabe
 import { rangeBarLayout, niceTicks, buildAxisSamples, resolveBound } from '@/lib/touch-rangebar.mjs';
 import { ChartCrosshair, type InterpConfig, type InterpChannel } from './ChartCrosshair';
 import { interpSeriesAtLevel } from '@/lib/chart-hover.mjs';
-import { ConfidenceBadges, ConfidenceBasisGroup } from './ConfidenceBasis';
+import { ConfidenceBadges, ConfidenceBasisGroup, signalBarStyle } from './ConfidenceBasis';
 import { VolumeCard } from './VolumeCard';
 import { TouchProbabilityTable } from './TouchProbabilityTable';
 import { HashVerify } from './HashVerify';
@@ -263,7 +263,7 @@ export function TouchDetailView({ record, envelope, hist, addControl }: { record
       </p>
 
       {/* HEADLINE — the implied range */}
-      <div className="detail-headline">
+      <div className="detail-headline" style={signalBarStyle(conf, isFinal)}>
         <div className="detail-metric detail-metric-wide">
           <span className="label">Implied barrier range <span className="faint">({Math.round((range.confidence ?? 0.5) * 100)}% confidence)</span></span>
           <span className="detail-hero num" data-field="implied-range">{range.low_label ?? '—'} <span className="faint">–</span> {range.high_label ?? '—'}</span>

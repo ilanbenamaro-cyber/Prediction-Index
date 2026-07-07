@@ -7,7 +7,7 @@
 // settled Yes/No outcome. Server component; canonicalizes raw_inputs server-side for verify.
 import { canonicalizeRawInputs } from '@/core/fetch.js';
 import { fmtEastern, displayTitle, pointChange, binaryNarrative, fmtDeltaPp, deltaSign, daysToExpiryLabel, noProbLabel, platformLabel } from '@/lib/format-detail.mjs';
-import { ConfidenceBadges, ConfidenceBasisGroup } from './ConfidenceBasis';
+import { ConfidenceBadges, ConfidenceBasisGroup, signalBarStyle } from './ConfidenceBasis';
 import { VolumeCard } from './VolumeCard';
 import { HashVerify } from './HashVerify';
 import { DetailFreshness } from './DetailFreshness';
@@ -97,7 +97,7 @@ export function BinaryDetailView({ record, envelope, hist, addControl }: { recor
       )}
 
       {/* HEADLINE — the single probability, large */}
-      <div className="detail-headline">
+      <div className="detail-headline" style={signalBarStyle(conf, isFinal)}>
         <div className="detail-metric">
           <span className="label">Implied probability · YES</span>
           <span className="detail-hero num" data-field="probability">{pctStr(d.probability)}</span>
