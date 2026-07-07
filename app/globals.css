@@ -1,13 +1,14 @@
-/* app/globals.css — the 2c design system: "institutional terminal".
+/* app/globals.css — the LEDGER design system: "institutional terminal".
  *
+ * Rules, not cards; text, not badges; signal, not decoration.
  * Density via HIERARCHY, color via MEANING. Tokens only here; zones consume them.
- * Fonts (IBM Plex Sans / Mono) are injected by app/layout.tsx via next/font as the
- * CSS variables --font-sans / --font-mono.
+ * Fonts (Archivo for titles/prose, IBM Plex Mono for data/labels/chrome) are injected
+ * by app/layout.tsx via next/font as the CSS variables --font-sans / --font-mono.
  */
 
 :root {
   /* ── type ── */
-  --font-sans: var(--font-plex-sans), system-ui, sans-serif;
+  --font-sans: var(--font-archivo), system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", monospace;
 
   /* dense modular scale (px) — LEDGER pass: tightened one notch at the top end */
@@ -85,6 +86,11 @@ html, body {
 
 /* tabular numerics everywhere data lives */
 .mono, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+/* LEDGER: the terminal speaks mono. Every data value, label, and piece of chrome renders
+ * in the data font; the UI font (Archivo) is reserved for market titles and narrative
+ * prose. These selectors sweep the numeric surfaces that predate the .num convention. */
+.acard-v, .acard-s, .detail-table, .search-vol, .settle-zone, .detail-resolved-band,
+.detail-sub, .detail-fresh { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 a { color: var(--accent-blue); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -92,8 +98,9 @@ a:hover { text-decoration: underline; }
 .muted { color: var(--text-muted); }
 .faint { color: var(--text-faint); }
 
-/* micro-label: the dense uppercase caption used across zones */
+/* micro-label: the dense uppercase caption used across zones — mono, per LEDGER */
 .label {
+  font-family: var(--font-mono);
   font-size: var(--fs-micro);
   text-transform: uppercase;
   letter-spacing: var(--track-label);
@@ -130,6 +137,7 @@ a:hover { text-decoration: underline; }
 
 /* hairline section header reused by zones */
 .zone-head {
+  font-family: var(--font-mono);
   font-size: var(--fs-micro);
   text-transform: uppercase;
   letter-spacing: var(--track-label);
@@ -352,8 +360,8 @@ a:hover { text-decoration: underline; }
   line-height: var(--lh-prose); max-width: 80ch; }
 
 .detail-section { margin-top: var(--sp-6); }
-.detail-h2 { font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: var(--track-label);
-  color: var(--text-muted); margin: 0 0 var(--sp-3); font-weight: 600; }
+.detail-h2 { font-family: var(--font-mono); font-size: var(--fs-micro); text-transform: uppercase;
+  letter-spacing: var(--track-label); color: var(--text-muted); margin: 0 0 var(--sp-3); font-weight: 600; }
 .tier1-tag { display: inline-block; font-size: var(--fs-micro); font-weight: 600; text-transform: none;
   letter-spacing: 0; padding: 1px var(--sp-2); border-radius: 10px; background: rgba(45, 212, 191, 0.14); color: var(--tier1); }
 

@@ -1,14 +1,14 @@
-// app/layout.tsx — root layout. Loads the two-font system (IBM Plex Sans for
-// labels/UI, IBM Plex Mono for all numerics/tabular data) and exposes them as the
-// CSS variables the design system (globals.css) consumes.
+// app/layout.tsx — root layout. Loads the two-font system (Archivo for titles/prose,
+// IBM Plex Mono for all numerics/labels/chrome — the terminal's dominant voice) and
+// exposes them as the CSS variables the design system (globals.css) consumes.
 import type { Metadata } from 'next';
-import { IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google';
+import { Archivo, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
 
-const plexSans = IBM_Plex_Sans({
+const archivo = Archivo({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
-  variable: '--font-plex-sans',
+  variable: '--font-archivo',
   display: 'swap',
 });
 const plexMono = IBM_Plex_Mono({
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
+    <html lang="en" className={`${archivo.variable} ${plexMono.variable}`}>
       <body>{children}</body>
     </html>
   );
