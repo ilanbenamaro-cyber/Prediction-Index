@@ -8,7 +8,28 @@
 > There is **no `.workflows/_system/` dir, no `codebase.md`/`MEMORY.md`** — the global `/sync`
 > skill tolerates their absence (updated 2026-06-18); don't be alarmed when it skips them.
 
-## ⮕ DIRECTION (2026-07-07, latest): HARD-STOPS H1-H4 RESOLVED — MERGED to main + PUSHED (`main` @ `b805f17`)
+## ⮕ DIRECTION (2026-07-07, latest): "LEDGER" UI DESIGN OVERHAUL — MERGED to main + PUSHED (`main` @ `e9badfd`)
+- **`main` is at `e9badfd`, in sync with `origin/main`.** Full visual redesign ("AI-SaaS → institutional
+  terminal"), operator-approved Phase-1 proposal then 10 gated commits on `feat/ui-design-overhaul`
+  (`969cd6d..99028ec`), merged `--no-ff`. **Display-only — zero data/derivation/architecture change:
+  458/458; parity 4/4 byte-identical; tsc 0; clean `next build`; Playwright console sweep of all 5
+  market types on the PRODUCTION build: 0 errors.**
+- **What shipped:** recalibrated design tokens (de-Tailwinded signal colors, 0-radius everywhere,
+  hairline borders); Archivo (UI) + IBM Plex Mono promoted to all data/labels/chrome; the **split
+  signal bar** signature element (3px, reliability-top/liquidity-bottom, on rail rows + detail
+  headline bands, stale = 40% opacity, resolved = faint gray) replacing the rail's dots/pills/
+  volume-tint; confidence basis pills → glyph-marked text lines; metric-tile grids → single
+  bordered **field strips**; charts re-weighted for the ~2.4x viewBox scale; 40px command bar with
+  a twin-bar brand mark. Full rationale + constraints in [[decisions]] "LEDGER design system".
+- **Post-merge-request fix included (`99028ec`):** the touch detail view was the ONE view rendering
+  the trust band BELOW a content section (the barrier-range chart) — reported on the Anthropic
+  valuation market; moved above, matching every other view's headline → trust order.
+- **NEXT:** nothing pending on the overhaul. Optional follow-ups (flagged in the design report, not
+  scheduled): compress the touch range-bar's vertical whitespace (geometry is test-locked in
+  `lib/touch-rangebar.mjs`, needs its own pass); crisp SVG axis type on very wide monitors
+  (viewBox scaling is inherent — would need vector-effect/fixed overlays).
+
+## ⮕ DIRECTION (2026-07-07): HARD-STOPS H1-H4 RESOLVED — MERGED to main + PUSHED (`main` @ `b805f17`)
 - **`main` is at `b805f17`, in sync with `origin/main`.** PR #1 (the perfection pass, previous entry
   below) was merged first (`--no-ff` `407bb92`); this session then closed all four HARD-STOP items
   it left open, on `fix/hardstops-h1h2h3h4` (4 commits), merged `--no-ff` `b805f17`, pushed directly

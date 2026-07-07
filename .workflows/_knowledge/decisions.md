@@ -5,6 +5,48 @@ Newest at top. If you're about to change one of these, read the entry first.
 
 ---
 
+## LEDGER design system — rules not cards, text not badges, signal not decoration
+**Decided (2026-07-07, operator-approved proposal then implemented):** the product's visual language
+moved from rounded-card/pill-badge "SaaS dashboard" to an institutional-terminal system. Display-only:
+no data, derivation, or chart-architecture change (458/458, parity 4/4, 0 console errors on all 5
+market types, production build). The durable rules a future UI change must respect:
+- **The split signal bar is the signature element** — 3px, RELIABILITY top half / LIQUIDITY bottom
+  half, tier-coloured, on every rail row and every detail headline band. It is rendered as an
+  absolutely-positioned `::before` with a two-stop `linear-gradient`, driven by the `--sig-rel`/
+  `--sig-liq` custom props (rail rows set them inline; detail views via the shared
+  `signalBarStyle()` in `ConfidenceBasis.tsx`). **Never border-left** — a border enters the box
+  model and shifts the flex layout. STALE fades the bar to 40% (aged data = attenuated signal);
+  RESOLVED sets both segments `--text-faint` (no live signal). A single-colour bar was explicitly
+  rejected: it would visually re-collapse the reliability/liquidity split (migration 0010).
+- **Colour = meaning, strictly:** signal tiers are `--c-high #4cc38a` / `--c-med = --accent-amber
+  #d08a3e` (ONE amber) / `--c-low #e5484d`; **blue (`--accent-blue`) means interactive/link/OPEN and
+  is banned from data values** (hero numbers are `--text`); **`--tier1` teal is a chart data series
+  only** (the median line), never a UI tag colour.
+- **0 border-radius everywhere** — `--radius`/`--radius-sm` resolve to 0 but the VARS STAY (dozens
+  of consumers incl. the auth pages); never reintroduce a literal radius on a surface/chip/button.
+  Circle dots (50%) are geometry, not decoration, and keep literal values.
+- **Typography:** Archivo (next/font/google, `--font-archivo` → `--font-sans`) for market titles +
+  narrative prose ONLY; IBM Plex Mono is the dominant voice — every numeric value, label, table,
+  axis, and piece of chrome. Numbers inline in narrative sentences deliberately stay in the prose
+  font (a mid-sentence font switch reads ransom-note). Both fonts load via next/font — never a CDN
+  `<link>` (don't mix mechanisms).
+- **Sections are hairline-ruled ledgers, not cards:** `.detail-section` carries `border-top`; every
+  metric grid is ONE bordered **field strip** whose cells divide by collapsed hairlines (the -1px
+  margin technique in `.detail-analytics`/`.acard`) — never per-cell background/border. The
+  threshold table sits flush (2px header rule). Trust/basis reasons are glyph-marked TEXT lines
+  (✓ green / ✗ red / · muted caveat — FIX 3 semantics preserved per-reason), not pill chips.
+- **Charts render ~2.4x their 480 viewBox** — stroke widths and font sizes in chart CSS/constants
+  are calibrated for that scale (series 1.1 / median 1.6, axis 7px, ticks 6px, grid 0.10 opacity,
+  categorical rowH 17). Any new chart must account for the multiplier or it draws cartoon-weight.
+  Geometry stayed untouched (`touch-rangebar.mjs` / `chart-hover.mjs` are test-locked).
+- **Render order rule re-affirmed:** every detail view is headline → TRUST band → content sections.
+  The touch view violated this (trust below the barrier-range chart) and was fixed (`99028ec`) —
+  don't re-bury the trust band under a full-height section in any future view.
+**Constrains:** the rail's confidence dots, volume-tint gradient, and pill classes are GONE — the
+signal bar + plain text carry that information; rail rows keep `data-reliability`/`data-liquidity`
+attrs for audits. One lifted clock in `WatchlistRows` drives both freshness text and bar fade.
+Merged `--no-ff` `e9badfd` (branch `feat/ui-design-overhaul`, 10 commits), pushed.
+
 ## Hard-stop resolutions: monoScore carve-out, LOW-tier window naming, PM TERMINAL → PREDICTION INDEX
 **Decided (2026-07-07):** the four HARD-STOP items carried from the perfection pass (H1-H4) are
 resolved — 3 code fixes + 1 documented deferral, each individually test-gated.

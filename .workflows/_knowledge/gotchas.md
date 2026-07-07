@@ -5,6 +5,21 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## Playwright MCP: browser_close drops the auth session; fullPage misses the detail pane; no `npm run start`
+**Symptom (bit the design-overhaul session, 2026-07-07):** three small traps in the browser/verify loop.
+1. **`browser_close` wipes the Playwright context's Supabase session** — every later navigation
+   307s to `/login`, and there are no credentials a session may enter (hard rule). Keep the tab/
+   context open for the whole session if authenticated verification is still needed; once closed,
+   visual verification of authed pages becomes an OPERATOR step (structural/code verification only).
+2. **`fullPage: true` screenshots do NOT capture the detail pane** — `.terminal` is a 100vh grid and
+   `.detail` is its own `overflow-y: auto` scroll container, so "full page" is just the viewport.
+   Scroll the inner container instead (`browser_evaluate` →
+   `document.querySelector('[data-field="…"]').scrollIntoView()`), then screenshot the viewport.
+3. **There is no `start` npm script** — `npm run start` errors "Missing script"; use
+   `npx next start -p 3000` after `next build` (and remember the shared-`.next` rule: never while
+   `next dev` runs; a killed `next start` can leave an orphaned `next-server` worker holding :3000
+   that the predev guard then correctly flags — `pkill -f next-server` too).
+
 ## touch-record boundLabel hardcodes $ — will break on %-unit touch markets
 core/touch-record.js hardcodes the '$' prefix in boundLabel construction.
 No live %-unit touch market currently exists so there is zero current impact.
