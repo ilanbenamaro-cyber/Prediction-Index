@@ -280,15 +280,10 @@ export function TouchDetailView({ record, envelope, hist, addControl }: { record
         </div>
       </div>
 
-      {/* RANGE BAR — the band within the strike span (no CDF: there is no distribution) */}
-      <section className="detail-section">
-        <h2 className="detail-h2" data-field="barrier-range-heading">Implied barrier range</h2>
-        <RangeBar low={range.low ?? null} high={range.high ?? null} lowLabel={range.low_label ?? '—'} highLabel={range.high_label ?? '—'} levels={allLevels} unit={unit}
-          highPts={high.map((p) => ({ level: p.level, prob: p.prob })).sort((a, b) => a.level - b.level)}
-          lowPts={low.map((p) => ({ level: p.level, prob: p.prob })).sort((a, b) => a.level - b.level)} />
-      </section>
-
-      {/* TRUST BAND — identical to the ladder/binary detail (v1 ITEM 11 confidence checklist) */}
+      {/* TRUST BAND — identical to the ladder/binary detail (v1 ITEM 11 confidence checklist).
+          Directly under the headline, BEFORE the range bar: every other view puts trust co-equal
+          with the number ("can I trust this" reads before the chart), and touch was the one view
+          that buried it below a full-height section. */}
       <div className="detail-trust" data-field="trust">
         <ConfidenceBasisGroup confidence={conf} />
         <div className="trust-prov">
@@ -302,6 +297,14 @@ export function TouchDetailView({ record, envelope, hist, addControl }: { record
           {rawSha && canonical ? <HashVerify canonical={canonical} publishedHash={rawSha} /> : <span className="faint">unavailable</span>}
         </div>
       </div>
+
+      {/* RANGE BAR — the band within the strike span (no CDF: there is no distribution) */}
+      <section className="detail-section">
+        <h2 className="detail-h2" data-field="barrier-range-heading">Implied barrier range</h2>
+        <RangeBar low={range.low ?? null} high={range.high ?? null} lowLabel={range.low_label ?? '—'} highLabel={range.high_label ?? '—'} levels={allLevels} unit={unit}
+          highPts={high.map((p) => ({ level: p.level, prob: p.prob })).sort((a, b) => a.level - b.level)}
+          lowPts={low.map((p) => ({ level: p.level, prob: p.prob })).sort((a, b) => a.level - b.level)} />
+      </section>
 
       {/* KEY METRICS (v1 ITEMS 5 + 8) — the range midpoint with its 30d move + range width +
           volume, each with a plain-English sub-label. The midpoint is the touch headline scalar. */}
