@@ -131,5 +131,11 @@ revoke execute on function public.normalize_invite_code(text)    from public, an
 -- (normalize_invite_code is called only by the 0013 DEFINER hook/trigger, as owner)
 revoke execute on function public.is_org_admin(uuid)             from public, anon;
 revoke execute on function public.admin_of_pending_profile(uuid) from public, anon;
--- (these two keep authenticated EXECUTE: RLS policies evaluate them as the querying
---  role; both are auth.uid()-parameterized booleans with no data reach.)
+-- ⚠ The PUBLIC revoke above ALSO strips authenticated's IMPLICIT execute (a function's
+-- default EXECUTE lives on PUBLIC; roles rarely hold direct entries). Whether anything
+-- survives depends on the project's ALTER DEFAULT PRIVILEGES config — which DIFFERS
+-- between Supabase projects (bit prod 2026-07-10; dev only worked by accident — see
+-- gotchas). RLS policies evaluate these helpers as the QUERYING role, so authenticated
+-- needs an EXPLICIT grant; both are auth.uid()-parameterized booleans with no data reach.
+grant  execute on function public.is_org_admin(uuid)             to authenticated;
+grant  execute on function public.admin_of_pending_profile(uuid) to authenticated;
