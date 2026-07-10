@@ -8,31 +8,34 @@
 > There is **no `.workflows/_system/` dir, no `codebase.md`/`MEMORY.md`** — the global `/sync`
 > skill tolerates their absence (updated 2026-06-18); don't be alarmed when it skips them.
 
-## ⮕ DIRECTION (2026-07-10, latest): SELF-SERVICE INVITES — COMPLETE on `feat/self-service-invites`, PR OPEN (not merged)
-- **What it is:** invite codes + org join codes beside the operator-only allowlist (which is unchanged
-  and beats codes). Single-use code → solo account; org code → PENDING membership with an
-  RLS-enforced admin approve/reject state machine + rail approval panel. Full architecture +
-  constraints in [[decisions]] "Self-service invites"; design doc `docs/design/self-service-invites-design.md`.
-- **Branch state:** 10 gated commits (`4ad4956..17fcda4` + `07684a1`), every commit tsc 0 ·
-  470/470 (458+12 new) · parity 4/4. Two Opus adversarial reviews (design + line-by-line
-  implementation) — all findings dispositioned, none outstanding. Live dev gates:
-  **invite-flows 45/45 · isolation 17/17 · auth 11/11 · 2c1/2c2/2c3/2c4/watchlist/categorical ✓ ·
-  clean `next build`** · Playwright browser flows 8/8 (vision-reviewed).
-- **Migrations 0012 (schema) / 0013 (hook+trigger+rotate RPC) / 0014 (RLS sweep) are APPLIED TO DEV**
-  (operator-applied). **PROD is NOT migrated** — prod standup = apply 0012→0013→0014 in one sitting
-  (0013+0014 must land together) then confirm the dashboard hook still points at
-  `hook_restrict_signup_to_allowlist` (CREATE OR REPLACE preserves it; the auth gate's negative
-  check is the proof). Operator tooling: `scripts/create-invite-code.mjs`, `scripts/create-org-code.mjs`.
+## ⮕ DIRECTION (2026-07-10, latest): SELF-SERVICE INVITES — MERGED + LIVE ON PROD (`main` @ `aa2262f`)
+- **`main` is at `aa2262f`, in sync with origin.** Two merges: PR #2 `111b29a` (the feature — 11
+  gated commits) + PR #3 `aa2262f` (the grant-gap follow-up). Gates on merged main: tsc 0 ·
+  470/470 · parity 4/4.
+- **What it is:** invite codes + org join codes beside the operator-only allowlist (unchanged, beats
+  codes). Single-use code → solo account; org code → PENDING membership with an RLS-enforced admin
+  approve/reject state machine + rail approval panel. Architecture + constraints in [[decisions]]
+  "Self-service invites"; design doc `docs/design/self-service-invites-design.md`; two Opus
+  adversarial reviews, all findings dispositioned.
+- **BOTH environments are migrated (0012/0013/0014) and fully verified:** dev AND prod green on
+  auth 11/11 + invite-flows 45/45 (prod run proved approve/reject/pending-profile end-to-end after
+  the grant hotfix). Prod verification recipe (`TEST_EMAIL_DOMAIN=gmail.com`, Confirm-email OFF for
+  the window) is in [[gotchas]] "Running the signup verify gates against PROD".
+- **Prod initially failed 6 admin-action checks — root cause was 0012's grant-hygiene bug** (PUBLIC
+  revoke strips authenticated's implicit EXECUTE; dev passed only via its project-level default
+  privileges). Fixed: explicit grants in 0012 (PR #3) + the two-line grant applied manually to prod
+  AND dev. Full trap write-up in [[gotchas]].
 - **F1 experiment done (mandated):** GoTrue fails CLOSED when an enabled hook throws (500, no user
   row) — recorded in [[gotchas]]; the hook's exception wrapper is defense-in-depth, not the barrier.
 - **Browser verification caught a real bug** (fixed `17fcda4`): WatchlistRail's empty-state early
   return had unmounted the toggle/banner/approval panel for empty-watchlist users — see [[gotchas]].
-- **NEXT:** operator reviews + merges the PR, then prod migration per the runbook in the final
-  report. Open flags (pre-existing, NOT this branch): `verify-phase2-binary` (stale pre-0010
-  confidence shape + 2 ladder checks) and `verify-history` (crash) are red — compute-pipeline pass
-  needed; queued one-liner: `nullif(lower(email),'')` hook hardening (Opus R2) for the next
-  auth-touching migration; skipped nice-to-have: pending-count badge on the org toggle (count lives
-  in the panel header instead).
+- Operator tooling: `scripts/create-invite-code.mjs --days N --note "who"`,
+  `scripts/create-org-code.mjs --org <uuid|name> [--days N]` (re-run = rotation).
+- **NEXT: nothing pending on invites.** Open flags (pre-existing, NOT this epic):
+  `verify-phase2-binary` (stale pre-0010 confidence shape + 2 ladder checks) and `verify-history`
+  (crash) are red — compute-pipeline pass needed; queued one-liner: `nullif(lower(email),'')` hook
+  hardening (Opus R2) for the next auth-touching migration; skipped nice-to-have: pending-count
+  badge on the org toggle (count lives in the panel header).
 
 ## ⮕ DIRECTION (2026-07-07): "LEDGER" UI DESIGN OVERHAUL — MERGED to main + PUSHED (`main` @ `e9badfd`)
 - **`main` is at `e9badfd`, in sync with `origin/main`.** Full visual redesign ("AI-SaaS → institutional

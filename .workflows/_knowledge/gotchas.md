@@ -5,6 +5,18 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## Running the signup verify gates against PROD needs a real-MX domain + Confirm-email OFF for the window
+**Symptom (bit the prod standup, 2026-07-10):** all deny-path checks passed but every positive
+signup failed — `@example.com` is rejected by prod's stricter email-deliverability validation
+(no usable MX; dev only format-checks), and retries tripped "email rate limit exceeded" (each
+positive signUp SENDS a confirmation email BEFORE the scripts' service-role admin-confirm runs;
+prod's send limit is tiny on built-in SMTP). **Recipe that works:** toggle **Confirm email OFF**
+(Dashboard → Authentication → Sign In/Up → Email) for the run window → `TEST_EMAIL_DOMAIN=gmail.com`
+(passes MX validation; with autoconfirm NO emails are actually sent, so no strangers get mail and
+no rate limit) → run gates → toggle back ON. The login checks never need an inbox in ANY posture —
+both scripts admin-confirm via `svc.auth.admin.updateUserById(uid, { email_confirm: true })` before
+`signInWithPassword`. A tripped email rate limit is per-hour; with confirm OFF it doesn't apply.
+
 ## `REVOKE EXECUTE ... FROM PUBLIC` on a function strips authenticated's IMPLICIT access too — and whether anything survives is PROJECT-DEPENDENT
 **Symptom (bit prod 2026-07-10; dev passed the identical migration):** on prod, approve/reject and
 the pending-profile check all failed with `permission denied for function is_org_admin /
