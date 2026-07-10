@@ -9,23 +9,23 @@
 // with no auth.uid(). Codes print to interactive stdout only — never into
 // structured logs (design §9).
 //
-//   SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… \
-//   node scripts/create-org-code.mjs --org <uuid|exact name> [--days N]
+//   node scripts/create-org-code.mjs --org <uuid|exact name> [--days N] [--prod]
 //
 //   --org   the organization, by uuid or exact name (lists orgs when not found)
 //   --days  optional expiry in days from now (default: no expiry — product default)
+//   --prod  target the PROD project via .env.prod (see scripts/operator-env.mjs);
+//           default is dev from the shell env (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY,
+//           link base PUBLIC_APP_URL → http://localhost:3000)
 //
-// Exit: 0 created/rotated · 1 error · 2 not run (missing creds / bad args / org not found).
+// Exit: 0 created/rotated · 1 error · 2 not run (missing creds / bad args / org not found / env-link mismatch).
 
 import { createClient } from '@supabase/supabase-js';
+import { resolveTarget } from './operator-env.mjs';
 
-const URL = process.env.SUPABASE_URL;
-const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const APP_URL = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
-if (!URL || !SERVICE) {
-  console.error('Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.');
-  process.exit(2);
-}
+const target = resolveTarget(process.argv.slice(2));
+const URL = target.url;
+const SERVICE = target.serviceKey;
+const APP_URL = target.appUrl;
 
 /** Parse --org / --days from argv; reject unknown flags (fail closed on typos). */
 function parseArgs(argv) {
@@ -39,7 +39,7 @@ function parseArgs(argv) {
       if (!Number.isInteger(n) || n <= 0) { console.error('--days must be a positive integer'); process.exit(2); }
       out.days = n;
     } else {
-      console.error(`unknown argument: ${argv[i]}\nusage: node scripts/create-org-code.mjs --org <uuid|name> [--days N]`);
+      console.error(`unknown argument: ${argv[i]}\nusage: node scripts/create-org-code.mjs --org <uuid|name> [--days N] [--prod]`);
       process.exit(2);
     }
   }
@@ -51,10 +51,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** Display form: XXXX-XXXX-XXXX-XXXX (canonical stored form is dashless). */
 const dashed = (code) => code.replace(/(.{4})(?=.)/g, '$1-');
 
-const { org: orgArg, days } = parseArgs(process.argv.slice(2));
+const { org: orgArg, days } = parseArgs(target.rest);
 const svc = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 
 try {
+  console.log(`\n${target.banner}`);
   // resolve the org by uuid or exact name; on miss, list what exists (operator context)
   const q = UUID_RE.test(orgArg)
     ? svc.from('organizations').select('id, name').eq('id', orgArg)
