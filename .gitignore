@@ -16,3 +16,4 @@ polymarket.db-wal
 verify-*.png
 *-console-current.txt
 ns-console.txt
+.env.prod

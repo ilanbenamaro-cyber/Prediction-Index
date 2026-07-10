@@ -7,23 +7,23 @@
 // RLS-client-deny. Codes are printed to interactive stdout ONLY — never write
 // them into structured logs (design §9).
 //
-//   SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… \
-//   node scripts/create-invite-code.mjs [--days 7] [--note "for whom"]
+//   node scripts/create-invite-code.mjs [--days 7] [--note "for whom"] [--prod]
 //
 //   --days  expiry in days from now (default 7; must be a positive integer)
 //   --note  operator annotation stored on the row (who this invite is for)
+//   --prod  target the PROD project via .env.prod (see scripts/operator-env.mjs);
+//           default is dev from the shell env (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY,
+//           link base PUBLIC_APP_URL → http://localhost:3000)
 //
-// Exit: 0 minted · 1 error · 2 not run (missing creds / bad args).
+// Exit: 0 minted · 1 error · 2 not run (missing creds / bad args / env-link mismatch).
 
 import { createClient } from '@supabase/supabase-js';
+import { resolveTarget } from './operator-env.mjs';
 
-const URL = process.env.SUPABASE_URL;
-const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const APP_URL = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
-if (!URL || !SERVICE) {
-  console.error('Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.');
-  process.exit(2);
-}
+const target = resolveTarget(process.argv.slice(2));
+const URL = target.url;
+const SERVICE = target.serviceKey;
+const APP_URL = target.appUrl;
 
 /** Parse --days / --note from argv; reject unknown flags (fail closed on typos). */
 function parseArgs(argv) {
@@ -37,7 +37,7 @@ function parseArgs(argv) {
       out.note = argv[++i] ?? null;
       if (out.note == null) { console.error('--note requires a value'); process.exit(2); }
     } else {
-      console.error(`unknown argument: ${argv[i]}\nusage: node scripts/create-invite-code.mjs [--days 7] [--note "for whom"]`);
+      console.error(`unknown argument: ${argv[i]}\nusage: node scripts/create-invite-code.mjs [--days 7] [--note "for whom"] [--prod]`);
       process.exit(2);
     }
   }
@@ -47,10 +47,11 @@ function parseArgs(argv) {
 /** Display form: XXXX-XXXX-XXXX-XXXX (canonical stored form is dashless). */
 const dashed = (code) => code.replace(/(.{4})(?=.)/g, '$1-');
 
-const { days, note } = parseArgs(process.argv.slice(2));
+const { days, note } = parseArgs(target.rest);
 const svc = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 
 try {
+  console.log(`\n${target.banner}`);
   const gen = await svc.rpc('new_invite_token');
   if (gen.error || typeof gen.data !== 'string' || gen.data.length !== 16) {
     throw new Error(`new_invite_token rpc: ${gen.error?.message ?? `unexpected result "${gen.data}"`}`);
