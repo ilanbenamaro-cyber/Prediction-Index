@@ -30,7 +30,11 @@
 - **Browser verification caught a real bug** (fixed `17fcda4`): WatchlistRail's empty-state early
   return had unmounted the toggle/banner/approval panel for empty-watchlist users — see [[gotchas]].
 - Operator tooling: `scripts/create-invite-code.mjs --days N --note "who"`,
-  `scripts/create-org-code.mjs --org <uuid|name> [--days N]` (re-run = rotation).
+  `scripts/create-org-code.mjs --org <uuid|name> [--days N]` (re-run = rotation). Both take
+  `--prod` (reads gitignored `.env.prod`: PROD_SUPABASE_URL / PROD_SUPABASE_SERVICE_ROLE_KEY /
+  PROD_PUBLIC_APP_URL — template in `.env.example`); dev links use PUBLIC_APP_URL (default
+  localhost:3000). Every mint prints its target (project ref + env) and REFUSES an env↔link
+  mismatch (`scripts/operator-env.mjs`, merged `305a5f4`).
 - **NEXT: nothing pending on invites.** Open flags (pre-existing, NOT this epic):
   `verify-phase2-binary` (stale pre-0010 confidence shape + 2 ladder checks) and `verify-history`
   (crash) are red — compute-pipeline pass needed; queued one-liner: `nullif(lower(email),'')` hook
