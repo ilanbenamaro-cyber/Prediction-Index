@@ -157,6 +157,32 @@ async function run() {
   ok(!!r4.error && /already been used/i.test(r4.error.message), `rejected "already been used" (got "${r4.error?.message}")`);
   ok(!(await findUser(e4)), `no auth.users row`);
 
+  // ── 4b. CONCURRENT double-redeem (Opus round-2 residual): fire two signups on one
+  //    code simultaneously. Deterministic either way the race lands: if the requests
+  //    truly overlap, the trigger's atomic UPDATE...WHERE consumed_at IS NULL claims
+  //    for exactly one and the loser's RAISE rolls its user back ("Database error");
+  //    if they serialize, the hook rejects the second ("already been used"). In BOTH
+  //    worlds: exactly one success, one auth.users row, consumed_by = the winner. ──
+  console.log('4b. concurrent double-redeem — exactly one winner:');
+  const tConc = await mintToken();
+  created.inviteCodes.push(tConc);
+  const insConc = await svc.from('invite_codes').insert({ code: tConc, note: `gate ${RUN}`, expires_at: new Date(Date.now() + 86_400_000).toISOString() });
+  if (insConc.error) throw new Error(`seed concurrent code: ${insConc.error.message}`);
+  const eC1 = email('conc1'), eC2 = email('conc2');
+  const [rc1, rc2] = await Promise.all([signUpWith(eC1, tConc), signUpWith(eC2, tConc)]);
+  const winners = [rc1, rc2].filter((r) => !r.error && !!r.data?.user);
+  const losers = [rc1, rc2].filter((r) => !!r.error);
+  ok(winners.length === 1 && losers.length === 1,
+     `exactly one signup succeeded (loser got: "${losers[0]?.error?.message ?? 'NONE — both succeeded!'}")`);
+  const uWin = winners[0]?.data?.user?.id;
+  if (uWin) created.userIds.push(uWin);
+  const ghost1 = await findUser(eC1), ghost2 = await findUser(eC2);
+  if (ghost1) created.userIds.push(ghost1.id);
+  if (ghost2) created.userIds.push(ghost2.id);
+  ok([ghost1, ghost2].filter(Boolean).length === 1, `exactly one auth.users row exists across both emails`);
+  const cConc = (await svc.from('invite_codes').select('consumed_by').eq('code', tConc).single()).data;
+  ok(!!uWin && cConc?.consumed_by === uWin, `consumed_by = the single winner`);
+
   // ── 5. org join code → PENDING; pending member reaches personal-only ──
   console.log('5. org join code → pending membership; pending = personal-only reach:');
   const tOrg = await mintToken();
