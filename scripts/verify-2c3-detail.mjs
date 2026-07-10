@@ -46,7 +46,11 @@ async function run() {
   ok(!!rec.asset?.name, `asset.name present ("${rec.asset?.name}")`);
   ok(typeof d.implied_median === 'number', `implied_median present (${d.implied_median})`);
   ok(typeof d.implied_mean === 'number', `implied_mean present`);
-  ok(!!d.confidence?.tier && Array.isArray(d.confidence?.reasons), `confidence tier + reasons present (${d.confidence?.tier})`);
+  // post-0010 confidence split: {reliability, liquidity} each with {tier, reasons}
+  // (the pre-split d.confidence.tier check had been failing since 0010/0011 landed)
+  ok(!!d.confidence?.reliability?.tier && Array.isArray(d.confidence?.reliability?.reasons)
+     && !!d.confidence?.liquidity?.tier && Array.isArray(d.confidence?.liquidity?.reasons),
+     `confidence reliability+liquidity tiers + reasons present (${d.confidence?.reliability?.tier}/${d.confidence?.liquidity?.tier})`);
   ok(Array.isArray(d.markets) && d.markets.length >= 2, `ladder markets[] present (${d.markets?.length} rungs)`);
   ok(!!d.market?.analytics?.velocity, `analytics present (movement via velocity)`);
 

@@ -1,43 +1,65 @@
 'use client';
-// app/(auth)/signup/page.tsx — invite-acceptance / signup (Enh 6).
+// app/(auth)/signup/page.tsx — invite-acceptance / signup (Enh 6, extended by the
+// self-service-invites design, migrations 0012-0014).
 //
-// Access is INVITE-ONLY: the Supabase "Before User Created" auth hook (migration 0003)
-// rejects any email not on the operator allowlist BEFORE an auth.users row is created. So
-// this form just calls auth.signUp — the server-side hook is the gate, not client logic.
-// Three outcomes, all surfaced explicitly:
-//   • not allowlisted  → the hook rejects → friendly "invite-only" message;
+// Access is a THREE-PATH gate, evaluated server-side by the Before User Created auth
+// hook + handle_new_user trigger — this form never decides access, it only submits:
+//   1. allowlist match (operator override, unchanged)         → active org membership
+//   2. single-use invite code (optional "code" field)         → solo account, no org
+//   3. org join code (same field, different table)            → pending org membership
+//   4. none of the above                                      → generic invite-only 403
+// Three UI outcomes, all surfaced explicitly:
+//   • rejected (any of the three code states, or the generic gate) → mapSignupError message;
 //   • confirm-email ON (prod) → no session returned → "check your email to confirm";
 //   • confirm-email OFF (dev) → a session is returned → straight into the app.
 // Mirrors the login page (anon browser client, never the service-role key).
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { mapSignupError } from '@/lib/signup-errors.mjs';
 
-/** Map the hook's rejection to a human message; pass other errors through. */
-function mapError(message: string): string {
-  if (/invite|allow|not permitted|403|denied/i.test(message)) {
-    return 'This email isn’t on the invite list. Access is invite-only — contact your administrator.';
-  }
-  return message;
-}
-
-export default function SignupPage() {
+function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState(() => searchParams.get('code') ?? '');
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false); // confirm-email posture (prod) → check inbox
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    // URL hygiene (Opus F3): an org join code is a reusable secret. Once it has
+    // pre-filled the field, strip it from the address bar so it doesn't linger in
+    // browser history or get copy-pasted around with the URL.
+    if (searchParams.get('code')) {
+      window.history.replaceState(null, '', '/signup');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     const supabase = createClient();
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const trimmedCode = code.trim();
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          display_name: name.trim(),
+          // never store an empty invite_code key — an absent key means "no code
+          // supplied" to the hook/trigger, distinct from an empty-string code.
+          ...(trimmedCode ? { invite_code: trimmedCode } : {}),
+        },
+      },
+    });
     if (error) {
-      setError(mapError(error.message));
+      setError(mapSignupError(error.message));
       setBusy(false);
       return;
     }
@@ -67,6 +89,11 @@ export default function SignupPage() {
         ) : (
           <>
             <label className="login-field">
+              <span className="label">Name</span>
+              <input type="text" required maxLength={80} autoComplete="name" data-field="signup-name"
+                value={name} onChange={(e) => setName(e.target.value)} />
+            </label>
+            <label className="login-field">
               <span className="label">Email</span>
               <input type="email" autoComplete="email" required value={email}
                 onChange={(e) => setEmail(e.target.value)} />
@@ -75,6 +102,12 @@ export default function SignupPage() {
               <span className="label">Password</span>
               <input type="password" autoComplete="new-password" required minLength={8} value={password}
                 onChange={(e) => setPassword(e.target.value)} />
+            </label>
+            <label className="login-field">
+              <span className="label">Invite or organization code · optional</span>
+              <input type="text" autoComplete="off" spellCheck={false} placeholder="XXXX-XXXX-XXXX-XXXX"
+                data-field="signup-code" value={code}
+                onChange={(e) => setCode(e.target.value)} />
             </label>
 
             {error && <div className="login-err" data-field="signup-error">{error}</div>}
@@ -101,6 +134,7 @@ export default function SignupPage() {
         .login-field input { background:var(--bg); border:1px solid var(--border); color:var(--text);
           border-radius:var(--radius-sm); padding:9px 11px; font-size:var(--fs-body); font-family:var(--font-mono); }
         .login-field input:focus { outline:none; border-color:var(--border-strong); }
+        .login-field input[data-field="signup-code"] { text-transform:uppercase; letter-spacing:0.5px; }
         .login-err { color:var(--c-low); font-size:var(--fs-tiny); }
         .login-ok { color:var(--text); font-size:var(--fs-tiny); line-height:var(--lh-prose);
           background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); padding:11px; }
@@ -111,5 +145,13 @@ export default function SignupPage() {
         .login-foot { font-size:var(--fs-micro); text-align:center; margin-top:2px; }
       `}</style>
     </main>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupForm />
+    </Suspense>
   );
 }

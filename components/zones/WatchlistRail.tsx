@@ -41,13 +41,11 @@ async function RailData({ orgs }: { orgs: Array<{ id: string; name: string }> })
     );
   }
 
-  if (rows.length === 0) {
-    return (
-      <div className="empty" data-zone="rail-empty">
-        No markets yet.<br />Search a market, open it, and add it from its header.
-      </div>
-    );
-  }
+  // ALWAYS mount WatchlistRows, even with zero rows: it owns the org-membership UI
+  // (Personal/Org toggle, the pending-approval banner, the admin approval panel), and
+  // a brand-new pending/invited user by definition has an empty watchlist. An early
+  // empty-state return here silently hid all of that (found by browser verification).
+  // WatchlistRows renders the onboarding empty state itself when rows is empty.
   return <WatchlistRows rows={rows} orgs={orgs} />;
 }
 

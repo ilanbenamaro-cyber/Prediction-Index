@@ -5,7 +5,50 @@ Newest at top. If you're about to change one of these, read the entry first.
 
 ---
 
-## LEDGER design system — rules not cards, text not badges, signal not decoration
+## Self-service invites — three-path gate, validate-in-hook / consume-in-trigger, RLS state machine
+**Decided (2026-07-10, operator-approved design + two Opus adversarial reviews; full doc:
+`docs/design/self-service-invites-design.md`):** signup accepts three paths, evaluated in the
+Before-User-Created hook in deny-by-default order — (1) `allowed_emails` (operator override,
+unchanged, BEATS a supplied code which is then left unconsumed), (2) single-use invite code → solo
+account (profile only, NO org), (3) org join code → account + `org_membership.status='pending'`.
+Durable constraints a future auth change must respect:
+- **Validate-in-hook, consume-in-trigger.** The hook (0013) only READS and NEVER raises (body wrapped
+  `exception when others → generic 403`; GoTrue itself fails closed on a hook error — see gotchas —
+  so the wrapper is defense-in-depth/UX). Consumption + provisioning live in `handle_new_user`, same
+  transaction as the `auth.users` insert: the atomic `UPDATE … WHERE consumed_at IS NULL RETURNING`
+  claims a code exactly once; any unredeemable leftover (race loser, rotation, expiry between hook
+  and trigger) `RAISE`s → the user insert ROLLS BACK → fail closed. This split means a code is never
+  burned by a signup that fails downstream (duplicate email, deliverability).
+- **`org_membership.status` (`pending`/`active`), default `'active'`** — the default backfilled all
+  existing rows atomically (no lockout) and is safe because the ONLY client-reachable insert path is
+  the definer trigger (no INSERT policy); the trigger writes `'pending'` explicitly for org-code
+  signups. Do not change the default without re-auditing every status-less seed/verify insert.
+- **The state machine is RLS + a COLUMN-LEVEL GRANT, not policies alone:** `grant update (status)`
+  makes `role`/`org_id`/`user_id` updates a Postgres permission error (42501) for everyone including
+  admins; `orgmem_update_admin`'s WITH CHECK pins the new value to `'active'` (approve-only —
+  active→pending demotion unreachable); `user_id <> auth.uid()` kills self-approval. Reject/remove =
+  DELETE (admin, non-self) or self-DELETE (leave/cancel). Role changes stay service-role-only.
+- **`is_org_member`/`shares_org` are THE choke points** — `status='active'` lives inside those two
+  definer helpers, and every org policy, `my_visible_watchlist`, and the `readScan` firewall inherit.
+  A pending member reaches exactly: own membership row (`orgmem_select_self`) + personal watchlist.
+  Not even the org's name (the pending banner is generic ON PURPOSE — don't widen for copy).
+  Admins read pending members' profiles only via `admin_of_pending_profile`.
+- **Codes:** 16 chars, alphabet `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (~79 bits), stored dashless
+  uppercase, displayed `XXXX-XXXX-XXXX-XXXX`; ONE generator (`new_invite_token`, service_role/definer
+  execute only) + ONE normalizer (case/dash-insensitive input). Org codes: one per org (PK org_id),
+  nullable `expires_at` (no-expiry default per product design), rotation (`rotate_org_join_code` RPC,
+  admin-gated) replaces in place — the old code dies instantly. Codes are plaintext at rest
+  (service-role/admin-RLS reach; same trust level as allowed_emails) and print to interactive stdout
+  only, never structured logs. The `?code=` URL param is stripped on prefill (`history.replaceState`)
+  and the signup route sets `referrer: 'no-referrer'` (route layout — a client page can't export metadata).
+- **v1 judgment calls (operator-approved):** Name required at signup (→ `profiles.display_name`,
+  80-cap in trigger AND form); rejected users cannot re-apply from an existing account (redemption
+  exists only at signup); org-code holders CAN mint fresh-email pending rows until rotation/expiry
+  (accepted, bounded by rate limits + one-click reject).
+- **Gates:** `verify-invite-flows.mjs` (45 checks incl. a concurrent double-redeem) is the blocking
+  gate beside isolation/auth; migrations 0012/0013/0014 each have verbatim-restore `_down` files and
+  MUST travel together in both directions (0013↔0014 especially — a pending row under status-blind
+  helpers reads like an active member).
 **Decided (2026-07-07, operator-approved proposal then implemented):** the product's visual language
 moved from rounded-card/pill-badge "SaaS dashboard" to an institutional-terminal system. Display-only:
 no data, derivation, or chart-architecture change (458/458, parity 4/4, 0 console errors on all 5

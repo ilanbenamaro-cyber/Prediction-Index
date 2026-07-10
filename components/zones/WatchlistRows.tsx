@@ -14,6 +14,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { removeMarket } from '@/app/(app)/actions';
 import { KBD } from './kbd';
+import { PendingMembers } from './PendingMembers';
+import { PendingNotice } from './PendingNotice';
 
 export interface ScanRow {
   market_id: string;
@@ -208,15 +210,26 @@ export function WatchlistRows({ rows, orgs = [] }: { rows: ScanRow[]; orgs?: Arr
           )}
         </div>
       )}
+      <PendingNotice />
+      {view.mode === 'org' && <PendingMembers orgId={view.orgId} />}
       {removeError && (
         <div className="wl-error faint" role="alert" data-field="remove-error">✗ {removeError}</div>
       )}
       {filtered.length === 0 ? (
-        <div className="empty" data-zone="rail-empty-scope">
-          {view.mode === 'personal'
-            ? 'No markets in your personal watchlist.'
-            : `No markets in ${orgName(activeOrg)}'s watchlist.`}
-        </div>
+        rows.length === 0 ? (
+          // nothing watchlisted anywhere → onboarding copy (moved from WatchlistRail's
+          // old early return, which used to unmount this whole component — and with it
+          // the org toggle / pending banner / approval panel)
+          <div className="empty" data-zone="rail-empty">
+            No markets yet.<br />Search a market, open it, and add it from its header.
+          </div>
+        ) : (
+          <div className="empty" data-zone="rail-empty-scope">
+            {view.mode === 'personal'
+              ? 'No markets in your personal watchlist.'
+              : `No markets in ${orgName(activeOrg)}'s watchlist.`}
+          </div>
+        )
       ) : (
     <ul className="wl-list" data-zone="rail-list">
       {filtered.map((r, i) => {

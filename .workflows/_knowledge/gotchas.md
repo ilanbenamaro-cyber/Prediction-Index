@@ -5,6 +5,40 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## PLATFORM FACT (verified empirically 2026-07-10): a GoTrue Before-User-Created hook that ERRORS fails CLOSED
+**The F1 experiment (operator-mandated, dev project):** the hook was temporarily replaced with a
+function that unconditionally `RAISE`s; an unlisted-email signup then returned **HTTP 500, message
+`"{}"` (opaque — the exception text is NOT surfaced), no user object, no session, and NO auth.users
+row**. So the enabled-hook failure matrix is:
+- hook enabled + returns error object → **403, deny** (normal path);
+- hook enabled + throws → **500, deny** (fail CLOSED — this experiment);
+- hook **never enabled** → **fails OPEN silently** (the 0003 warning; still the only dangerous state,
+  and `verify-phase2b-auth.mjs`'s negative check is the standing proof it's enabled).
+The production hook (0013) still wraps its body in `exception when others → generic 403` — now known
+to be defense-in-depth + UX (deterministic friendly 403 instead of an opaque 500), not the sole barrier.
+
+## A rail-level "empty state" early-return silently unmounted an entire feature (pending/admin UI)
+**Symptom (caught ONLY by browser verification, 2026-07-10):** all RLS/API gates green (45/45), yet
+the pending-approval banner, Personal/Org toggle, and admin approval panel never rendered.
+**Cause:** `WatchlistRail` returned the "No markets yet" empty state when `rows.length === 0` and
+never mounted `WatchlistRows` — which owns that org-membership UI. A brand-new pending/invited user
+BY DEFINITION has an empty watchlist, so the bug hit exactly the personas the feature served, while
+every fixture-rich test path looked fine. **Lesson:** an early-return empty state must only replace
+the LIST it describes, never the component subtree carrying unrelated UI; and server-side gates can
+all be green while the UI never issues the query (the `PendingNotice` effect never mounted — network
+trace showed zero `org_membership` calls). Fixed `17fcda4`: WatchlistRows always mounts and renders
+the onboarding copy itself.
+
+## Post-0010 stale verify gates: scripts asserting the pre-split `d.confidence.tier` shape
+The 0010/0011 confidence split (`confidence.{reliability,liquidity}.{tier,reasons}`) left older
+verify scripts asserting the pre-split `d.confidence.tier` — permanently red with a "confidence
+undefined" signature against records that are actually correct. `verify-2c3-detail` was fixed
+(2026-07-10, `07684a1`); **`verify-phase2-binary` still has the same stale check (line ~40) plus two
+failing ladder-record checks, and `verify-history` crashes with an uncaught exception — both
+pre-existing, flagged and NOT fixed by the invites session (compute-pipeline surface, needs its own
+pass).** If a verify script reports missing confidence on a record the app renders fine, check the
+script's shape assumptions before suspecting the data.
+
 ## Playwright MCP: browser_close drops the auth session; fullPage misses the detail pane; no `npm run start`
 **Symptom (bit the design-overhaul session, 2026-07-07):** three small traps in the browser/verify loop.
 1. **`browser_close` wipes the Playwright context's Supabase session** — every later navigation
