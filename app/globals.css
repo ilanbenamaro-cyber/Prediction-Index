@@ -539,6 +539,34 @@ a:hover { text-decoration: underline; }
 .wl-remove:hover { color: var(--c-low); border-color: var(--border-strong); }
 .wl-remove:disabled { opacity: 0.4; cursor: default; }
 
+/* ── pending members / approval panel (self-service invites) ── */
+.wl-pending-note {
+  font-family: var(--font-mono); font-size: var(--fs-micro); text-transform: uppercase;
+  letter-spacing: var(--track-label); color: var(--accent-amber);
+  padding: var(--sp-2) var(--sp-4); border-bottom: 1px solid var(--border);
+}
+.pm-panel {
+  padding: var(--sp-2) var(--sp-4); border-bottom: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: var(--sp-1);
+  font-family: var(--font-mono); font-size: var(--fs-micro); color: var(--text-muted);
+}
+.pm-row {
+  display: flex; align-items: baseline; gap: var(--sp-2); padding: 3px 0;
+  border-top: 1px solid var(--border);
+}
+.pm-row:first-child { border-top: none; }
+.pm-name { color: var(--text); }
+.pm-email { color: var(--text-faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-date { color: var(--text-faint); }
+.pm-act {
+  background: none; border: none; padding: 0; font: inherit; font-family: var(--font-mono);
+  font-size: var(--fs-micro); color: var(--accent-blue); cursor: pointer;
+}
+.pm-act:hover { text-decoration: underline; }
+.pm-act:disabled { opacity: 0.5; cursor: default; }
+.pm-act-danger { color: var(--c-low); }
+.pm-err { color: var(--c-low); }
+
 /* ── responsive: rail collapses below 1024px (drawer wiring is 2c.2) ── */
 @media (max-width: 1024px) {
   .terminal {

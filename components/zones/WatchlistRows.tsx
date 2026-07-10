@@ -14,6 +14,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { removeMarket } from '@/app/(app)/actions';
 import { KBD } from './kbd';
+import { PendingMembers } from './PendingMembers';
+import { PendingNotice } from './PendingNotice';
 
 export interface ScanRow {
   market_id: string;
@@ -208,6 +210,8 @@ export function WatchlistRows({ rows, orgs = [] }: { rows: ScanRow[]; orgs?: Arr
           )}
         </div>
       )}
+      <PendingNotice />
+      {view.mode === 'org' && <PendingMembers orgId={view.orgId} />}
       {removeError && (
         <div className="wl-error faint" role="alert" data-field="remove-error">✗ {removeError}</div>
       )}
