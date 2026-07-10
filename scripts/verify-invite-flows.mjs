@@ -201,8 +201,13 @@ async function run() {
   ok((await cPend.from('org_watchlist').select('market_id')).data?.length === 0, `org_watchlist = []`);
   const vis5 = (await cPend.from('my_visible_watchlist').select('scope')).data ?? [];
   ok(vis5.every((r) => r.scope !== 'org'), `my_visible_watchlist has no org rows`);
-  const prof5 = (await cPend.from('profiles').select('id')).data?.map((r) => r.id) ?? [];
-  ok(prof5.length === 1 && prof5[0] === u5, `profiles = self only (no co-member reach)`);
+  // interpolate the RAW result: a permission error on a helper inside the policy
+  // expression fails the whole SELECT and is otherwise indistinguishable from "no rows"
+  // (the 2026-07-10 prod grant gap hid behind exactly that ambiguity)
+  const profRes = await cPend.from('profiles').select('id');
+  const prof5 = profRes.data?.map((r) => r.id) ?? [];
+  ok(prof5.length === 1 && prof5[0] === u5,
+     `profiles = self only (got ${prof5.length}${profRes.error ? `; error ${profRes.error.code}: ${profRes.error.message}` : ''})`);
   const own5 = (await cPend.from('org_membership').select('status')).data ?? [];
   ok(own5.length === 1 && own5[0].status === 'pending', `own pending row visible (orgmem_select_self — banner data path)`);
   const w5 = await cPend.from('org_watchlist').insert({ org_id: X, market_id: mkt, added_by: u5 });
@@ -240,7 +245,8 @@ async function run() {
   // ── 9. admin approves → org data appears ──
   console.log('9. admin approves → pending member becomes active with org reach:');
   const ap = await cAdmin.from('org_membership').update({ status: 'active' }).eq('org_id', X).eq('user_id', u5).select();
-  ok(!ap.error && (ap.data ?? []).length === 1, `approve affected exactly 1 row`);
+  ok(!ap.error && (ap.data ?? []).length === 1,
+     `approve affected exactly 1 row${ap.error ? ` — error ${ap.error.code}: ${ap.error.message}` : ` (rows: ${(ap.data ?? []).length})`}`);
   ok((await cPend.from('organizations').select('id')).data?.some((r) => r.id === X) === true, `approved member now sees the org`);
   const w9 = await cPend.from('org_watchlist').insert({ org_id: X, market_id: mkt, added_by: u5 });
   ok(!w9.error, `approved member can curate the org list`);
@@ -249,11 +255,16 @@ async function run() {
   console.log('10. admin rejects → membership gone, account + personal access intact:');
   const e6 = email('rejected');
   const r6 = await signUpWith(e6, tOrg, 'Rejected Person');
-  ok(!r6.error && !!r6.data?.user, `second org-code signup lands pending`);
   const u6 = r6.data?.user?.id;
   if (u6) created.userIds.push(u6);
+  // assert the actual PENDING ROW, not just that a user was created (the old check's
+  // label overclaimed — user creation alone doesn't prove provisioning)
+  const m6 = u6 ? (await svc.from('org_membership').select('status').eq('org_id', X).eq('user_id', u6).maybeSingle()).data : null;
+  ok(!r6.error && !!u6 && m6?.status === 'pending',
+     `second org-code signup lands pending (row status: ${m6?.status ?? 'MISSING'})`);
   const rej = await cAdmin.from('org_membership').delete().eq('org_id', X).eq('user_id', u6).select();
-  ok(!rej.error && (rej.data ?? []).length === 1, `reject deleted exactly 1 row`);
+  ok(!rej.error && (rej.data ?? []).length === 1,
+     `reject deleted exactly 1 row${rej.error ? ` — error ${rej.error.code}: ${rej.error.message}` : ` (rows: ${(rej.data ?? []).length})`}`);
   const cRej = await signedIn(e6, u6);
   ok(((await cRej.from('org_membership').select('org_id')).data ?? []).length === 0, `membership gone`);
   const pwRej = await cRej.from('personal_watchlist').insert({ user_id: u6, market_id: mkt });

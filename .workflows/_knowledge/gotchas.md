@@ -5,6 +5,29 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## `REVOKE EXECUTE ... FROM PUBLIC` on a function strips authenticated's IMPLICIT access too — and whether anything survives is PROJECT-DEPENDENT
+**Symptom (bit prod 2026-07-10; dev passed the identical migration):** on prod, approve/reject and
+the pending-profile check all failed with `permission denied for function is_org_admin /
+admin_of_pending_profile` (42501) surfacing THROUGH RLS policy evaluation — while dev ran the same
+paths green (45/45 gate + real browser flows). **Cause:** 0012 revoked EXECUTE `from public, anon`
+on the two admin helpers with a comment claiming "these keep authenticated EXECUTE" — false. A
+function's default EXECUTE lives on **PUBLIC**; `authenticated` usually has no direct ACL entry, so
+revoking PUBLIC strips it. Dev survived only because ITS project's `ALTER DEFAULT PRIVILEGES`
+config had handed `authenticated` a DIRECT grant at CREATE FUNCTION time; prod's project config
+doesn't do that. **Lessons:**
+1. **Never rely on implicit grants surviving a PUBLIC revoke — grant explicitly to every role that
+   needs access** (0013 did this for `rotate_org_join_code`, which is exactly why rotation worked
+   on prod while approve/reject died — that asymmetry was the diagnostic fingerprint).
+2. Supabase projects DIFFER in their function default-privilege config — dev passing a
+   grant-sensitive migration proves nothing about prod. The check:
+   `select has_function_privilege('authenticated', 'public.fn(sig)', 'EXECUTE')` — but note it
+   returns true via PUBLIC too; the decisive test is a real non-owner session (rpc call as
+   `authenticated`).
+3. A permission error on a function inside a POLICY expression fails the WHOLE query — a "profile
+   leak" symptom can actually be a 42501 the caller swallowed. Interpolate raw errors in gates.
+Fixed: explicit grants added to 0012 (idempotent), applied manually to prod, and to dev so it no
+longer depends on the project-level default.
+
 ## PLATFORM FACT (verified empirically 2026-07-10): a GoTrue Before-User-Created hook that ERRORS fails CLOSED
 **The F1 experiment (operator-mandated, dev project):** the hook was temporarily replaced with a
 function that unconditionally `RAISE`s; an unlisted-email signup then returned **HTTP 500, message
