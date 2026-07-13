@@ -392,7 +392,15 @@ export function ladderShapeFromMarkets(markets) {
   // some() would let one stray leg reclassify a whole categorical/survival event
   if (questions.filter((qn) => TOUCH_VERB_RE.test(qn)).length >= 2) return 'directional_touch';
   if (questions.some((qn) => BUCKET_RE.test(qn))) return 'bucket_pmf';
-  if (questions.some((qn) => THRESHOLD_RE.test(qn))) return 'survival';
+  // 5.5 (operator-approved): survival requires EVERY leg to carry a $ threshold — the
+  // observed separator (21/21 live + 5/5 stored genuine ladders are 100% $-legs). A MIXED
+  // board (some-but-not-all $-legs, e.g. one stray "hit $1m" leg in a categorical event)
+  // is 'unsupported': routing it to survival throws on the first unparseable leg, and
+  // routing it to categorical would DE-VIG non-exclusive outcomes into a fabricated PMF
+  // (core/categorical.js has no exclusivity beyond the 5.6 guard's text signals here).
+  // Honest-and-blank beats confident-and-wrong.
+  if (questions.every((qn) => THRESHOLD_RE.test(qn))) return 'survival';
+  if (questions.some((qn) => THRESHOLD_RE.test(qn))) return 'unsupported';
   return 'categorical';
 }
 

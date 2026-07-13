@@ -106,11 +106,11 @@ test('NEGATIVE: one stray "hit $" leg does not flip a categorical event to TOUCH
     'Another pandemic before GTA VI?',
     'Russia-Ukraine ceasefire before GTA VI?',
   ]);
-  // NOT touch (bare "hit" excluded) — the property this rule owns. It lands on
-  // 'survival' via the PRE-EXISTING some($-leg) survival rule: a separate, older
-  // looseness (one stray $ leg makes a categorical event survival), documented for
-  // triage 2026-07-13 — this exact-assert will flag whoever changes either behavior.
-  assert.equal(ladderShapeFromMarkets(m), 'survival');
+  // NOT touch (bare "hit" excluded). Since 5.5 (all-legs-$ survival tightening) a
+  // MIXED board is 'unsupported' — served as an explicit honest refusal, never routed
+  // to survival (throws on the unparseable leg) or categorical (would de-vig
+  // non-exclusive outcomes into a fabricated PMF).
+  assert.equal(ladderShapeFromMarkets(m), 'unsupported');
 });
 
 test('NEGATIVE: quorum — a single reach-$ leg among categorical legs does not flip the event to TOUCH', () => {
@@ -119,8 +119,8 @@ test('NEGATIVE: quorum — a single reach-$ leg among categorical legs does not 
     'Another pandemic before GTA VI?',
     'New Rihanna album before GTA VI?',
   ]);
-  // below quorum → not touch; falls to the same pre-existing some($) survival rule as above
-  assert.equal(ladderShapeFromMarkets(m), 'survival');
+  // below quorum → not touch; a mixed board is 'unsupported' since 5.5
+  assert.equal(ladderShapeFromMarkets(m), 'unsupported');
 });
 
 test('NEGATIVE: "reach" without money is not a touch verb (World Cup semifinals, stored on dev)', () => {

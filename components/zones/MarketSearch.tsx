@@ -20,6 +20,7 @@ const MIN_Q = 2;
 // Enh 5: friendly type chips so the market shape is legible BEFORE opening it.
 const TYPE_LABEL: Record<MarketType, string> = {
   binary: 'YES/NO', survival: 'LADDER', bucket_pmf: 'PMF', directional_touch: 'RANGE', categorical: 'CATEGORICAL',
+  unsupported: 'UNSUPPORTED', // 5.5: mixed $/non-$ boards — labeled honestly BEFORE opening
 };
 
 export function MarketSearch() {
