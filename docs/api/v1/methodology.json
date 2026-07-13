@@ -1,5 +1,5 @@
 {
-  "version": "1.3.0",
+  "version": "1.7.1",
   "asset": "spacex-ipo-market-cap",
   "summary": "Derived valuation metrics from Polymarket 'closing market cap above $X' YES prices. Each 'above $X' market is a separate order book, so raw midpoints are arbitrage-adjusted (volume-weighted isotonic regression) into a monotone CDF before any metric is computed. Raw values are preserved alongside the adjusted ones. Two output tiers are kept strictly separate: TIER 1 (derived.market) are pure market transforms with no assumptions; TIER 2 (derived.scenarios) require external inputs and each carries a sourced, dated, ranged assumption (see assumptions.json). A scenario with no usable assumption renders 'input_required', never a fabricated number.",
   "metrics": {
@@ -69,7 +69,24 @@
         "medium: 8-11 thresholds, OR <=2 adjustments, OR spread 0.04-0.08, OR 20-50% thin, OR price-only, OR a flagged anomaly.",
         "low: <8 thresholds, OR >2 adjustments, OR spread > 0.08, OR >50% thin, OR multiple closed markets."
       ],
-      "sensitivity_note": "Liquidity breadth is not assessed when volume is unknown (price-only history)."
+      "sensitivity_note": "Liquidity breadth is not assessed when volume is unknown (price-only history).",
+      "material_adjustment": {
+        "threshold": 0.005,
+        "rule": "An isotonic (monotonicity) adjustment whose maximum magnitude is below 0.5% (MATERIAL_ADJUSTMENT = 0.005) is treated as IMMATERIAL: the reliability tier stays 'high' with a 'negligible monotonicity tweak(s)' reason instead of dropping to 'medium'.",
+        "rationale": "A violation pooled to a sub-0.5% tweak is float-level quote noise, not a data-quality defect; penalizing it would over-penalize and make the tier oscillate on negligible price adjustments. Larger adjustments still tier down by count (<=2 -> medium, >2 -> low). Near settlement the carve-out applies instead (pinned rungs manufacture large apparent violations structurally).",
+        "reference": "core/confidence.js scoreConfidence R2 (MATERIAL_ADJUSTMENT constant)"
+      },
+      "windowed_volume_floor": {
+        "threshold_usd_24h": 2000,
+        "rule": "The 7-day-volume path to a HIGH liquidity tier (7d >= $200K) additionally requires 24h volume >= $2K (VOL24_HIGH_FLOOR). Absent 24h data counts as 0.",
+        "rationale": "Without the floor, a STALE one-week-old volume spike on a now-dormant market (24h ~ dead) read HIGH on activity that no longer exists — the red-team F1 finding of the 2026-06-30 calibration pass.",
+        "reference": "core/confidence.js windowedVolumeSignal (VOL24_HIGH_FLOOR)"
+      },
+      "book_depth_selection": {
+        "rule": "derived.liquidity.book_depth is the DOMINANT-outcome leg's resting-order depth — the leg the headline number rests on, proxied by the most-traded leg (highest all-time volume) — with a max-across-legs fallback only when the leader leg has no book data.",
+        "rationale": "The initial Increment-C selection (MAX per-leg, as described in the 1.7.0 changelog entry below) over-credited a market whose deepest book sat on an obscure low-volume longshot rather than the headline: the wrong direction for a trust signal. Corrected by red-team finding F1 (2026-06-30); this entry supersedes the 1.7.0 changelog's 'max per-leg' wording.",
+        "reference": "core/fetch.js aggregateLiquidity (leader-leg selection)"
+      }
     },
     "raw_sha256": {
       "method": "sha256 over the canonical JSON serialization of raw_inputs (fixed key order: token_id, threshold, midpoint, best_bid, best_ask, volume; ascending by threshold; literal API string values). Unchanged from 1.0.0 so archived snapshots remain verifiable.",
@@ -78,6 +95,19 @@
         "Consumers re-serialize the stored raw_inputs identically to reproduce the hash."
       ],
       "sensitivity_note": "Provenance check: proves derived numbers came from the stored, unaltered inputs. Status flags (closed/active) are deliberately excluded from the hashed inputs."
+    },
+    "categorical": {
+      "method": "A categorical event (named mutually-exclusive outcomes, e.g. 'How many Fed rate cuts in 2026?') is N Yes/No legs whose YES midpoints form a PMF. Each outcome's displayed probability is the leg's YES midpoint NORMALIZED so the distribution sums to 1 (de-vig: the market-maker overround is removed). Consensus = normalized Shannon entropy over the outcomes (0 = one outcome certain, 1 = uniform). Dominant outcome = the largest normalized probability.",
+      "robust": true,
+      "assumptions": [
+        "Legs are mutually exclusive and collectively exhaustive (a valid PMF)."
+      ],
+      "sensitivity_note": "HASH RECIPE (same as every kind): raw_sha256 is over the RAW observed YES midpoints in raw_inputs (synthetic threshold = leg index for a stable canonical sort), NOT the normalized probabilities. Normalization is a display transform only — the hash is over truth, not presentation.",
+      "placeholder_filter": {
+        "rule": "Before de-vig normalization, PLACEHOLDER legs are removed: a leg is an artifact only when it has ZERO all-time volume AND (a generic '<word> <letter>' label such as 'Candidate C', OR a midpoint still pinned within 0.02 of the 0.5 untraded listing default). Any traded leg (volume > 0) is always kept; a zero-volume leg with a genuinely divergent quote (a real long-shot) is kept too. If filtering would remove every leg, the original set is used unchanged.",
+        "rationale": "Polymarket seeds categorical events with 25+ untraded generic legs at ~0.5 each; including them in the de-vig denominator collapses the real leader (a true ~97% leader read 7%). The filter applies to the DERIVED display PMF only — every observed leg still lands in raw_inputs and the hash.",
+        "reference": "core/categorical.js isPlaceholderLeg / realCategoricalLegs (Bug Zero, 2026-06-26)"
+      }
     },
     "narrative": {
       "method": "Deterministic, template-based reading composed only from stored fields (median vs 7d/30d-ago, divergence, dominant bucket, shape, dispersion trend, confidence caveat). No language model in the data path; reproducible from narrative_components. Trend claims are suppressed on low-confidence days.",
@@ -145,6 +175,31 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.7.1",
+      "date": "2026-07-02",
+      "change": "DOCUMENTATION ONLY — no formula, threshold, or schema change. Wrote down four rules that existed only in code: (1) the 0.5% MATERIAL_ADJUSTMENT immateriality threshold on isotonic tweaks (metrics.confidence.material_adjustment); (2) the $2K 24h floor on the 7d-volume HIGH path (metrics.confidence.windowed_volume_floor); (3) the CORRECTED book_depth selection — dominant-outcome leg, max-fallback — superseding the 1.7.0 entry's 'max per-leg' wording (red-team F1) (metrics.confidence.book_depth_selection); (4) the categorical placeholder-leg filter applied before de-vig (metrics.categorical.placeholder_filter)."
+    },
+    {
+      "version": "1.7.0",
+      "date": "2026-06-30",
+      "change": "Order-book DEPTH → LIQUIDITY (Increment C), additive + parity-safe (no schema change). Gamma exposes a per-market `liquidity` field ($ of resting orders) in the SAME meta response already fetched; we record the MAX per-leg value as derived.liquidity.book_depth (max, NOT a sum — resting orders don't aggregate across mutually-exclusive legs). It is SUPPLEMENTARY (outside raw_inputs, never hashed) and OMITTED when absent (resolved markets carry no liquidity field → SpaceX frozen replay byte-identical, parity 4/4). bookDepthSignal tiers (operator-calibrated against ~150 live markets, max per-leg depth): HIGH ≥ $100K (move real size), MED ≥ $10K (usable), LOW below (thin). It feeds the LIQUIDITY dimension of all 4 scorers WORST-OF with windowed volume — so a thin book caps liquidity even when recent volume is high (e.g. $3M/24h volume + a $5K book → LIQUIDITY LOW: you can't transact at size). Depth never affects RELIABILITY. Surfaced in VolumeCard ('book $X') + the liquidity basis chips. ⚠ RED-TEAM TODO: the $100K/$10K depth cutoffs (with Increment B's entropy 0.40 / leader 0.70 / rel-spread 0.50)."
+    },
+    {
+      "version": "1.6.0",
+      "date": "2026-06-30",
+      "change": "Consensus/decisiveness → RELIABILITY (Increment B), additive (no schema change; confidence shape unchanged). CATEGORICAL: a strongly-concentrated distribution (normalized entropy ≤ 0.40 AND a ≥70% leader) LIFTS a spread-driven 'medium' reliability to 'high' — the headline outcome is a well-formed agreement, reliable even when long-tail legs have wider books (the mean-spread averaging that depressed it isn't what the headline rests on). It never overrides a genuine defect: a >8% averaged book stays 'low', and a missing/last-trade outcome still caps. BINARY: a decisive probability (≤0.02 or ≥0.98) whose spread is a MINORITY of the smaller tail (≤50%) adds a 'price well-determined' reliability basis; there is NO tier lift for binary (a single book has no wide-tail-leg averaging to correct, and a medium-band spread on an extreme line always dominates the tiny tail). Sharpens the CT-Governor case: 98% consensus now reads reliability HIGH explicitly, independent of its (low) liquidity. Ladder/touch unchanged; SpaceX parity 4/4 byte-identical (categorical/binary-only)."
+    },
+    {
+      "version": "1.5.0",
+      "date": "2026-06-30",
+      "change": "Confidence SPLIT into two independent dimensions (Increment A), NO change to the underlying signals/thresholds — they are REPARTITIONED, not retuned. derived.confidence is now { reliability, liquidity }, each a {tier,score,reasons}. RELIABILITY (is the displayed number trustworthy) owns: threshold count, monotonicity, spread (+expiry tolerance), last-trade fallback, missing rungs, stale feed. LIQUIDITY (can you transact at this price) owns: book-thin breadth, windowed volume (all-time fallback), closed/not-accepting-orders rungs, liquidity drop. The two are orthogonal — a market can be HIGH reliability + LOW liquidity (strong consensus, nobody trading) or the reverse. The old single tier is recoverable as worst(reliability, liquidity). Schema 2.0.0 (BREAKING: confidence shape). SpaceX frozen output: reliability HIGH + liquidity HIGH; the parity gate's faithfulness proof asserts reliability.tier === the frozen single tier, worst(reliability,liquidity) === it, and the two reason lists' union === the frozen reasons."
+    },
+    {
+      "version": "1.4.0",
+      "date": "2026-06-17",
+      "change": "Multi-market generalization (Phase 1), NO formula change. Every market-specific value (tail offsets, mean-sensitivity grid, liquidity floor, confidence count thresholds, dispersion/accel eps, density label unit, tracked thresholds, narrative wording, calibration date, asset metadata) moved into a per-market MarketConfig (core/markets/*.json); the pipeline now processes any threshold-ladder event, not just SpaceX. SpaceX's config pins the exact prior constants, so its output is byte-identical (proven by a blocking parity gate: raw_sha256 + full derived block + 183-day history). Added a two-stage market-resolution lifecycle (snapshot.lifecycle: OPEN / CLOSED_PENDING / RESOLVED) — a resolved market is frozen and never re-pulled, a closed-but-unconfirmed market claims no final outcome, and a non-OPEN market is final (not flagged stale). Tier-2 scenarios are now optional (attached only when a market registers an assumptions file); the firewall is unchanged. Schema 1.3.0 (additive: snapshot.lifecycle; derived.scenarios optional; assumptions_version nullable)."
+    },
     {
       "version": "1.3.0",
       "date": "2026-06-12",
