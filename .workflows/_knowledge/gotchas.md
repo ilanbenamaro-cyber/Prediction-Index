@@ -18,16 +18,29 @@ only. Related trap the gate caught at birth: the frozen record's `markets.id` is
 `spacex-ipo-closing-market-cap-above`, NOT the internal config id `spacex-ipo-market-cap` —
 HARD_EXCLUDE pins both; never "protect SpaceX" by the config id alone.
 
-## Resolved browse markets DO regenerate from live upstream (pricesmart experiment, 2026-07-13) — with a retention caveat
-The INC 6 "browse = cache" premise was UNPROVEN for resolved markets (gamma search hides them,
-and whether CLOB serves price history post-close was untested). Empirical answer via the prod
-pricesmart delete/re-browse: after deleting the fossil (markets row + 6 history rows + snapshot,
-cascade), the REAL deployed `/api/market` rebuilt the RESOLVED record from settled outcomePrices
-(`midpoint_source: resolved_settlement`), and `backfillMarket` rebuilt **all 6 history rows,
-same dates (2026-07-05→07-10), 0 failed** — CLOB still serves closed-market price history.
-CAVEAT: proven 4 days after resolution; CLOB's retention horizon for OLD resolved markets is
-untested — if a years-old resolved browse market ever matters, verify regeneration before GC'ing
-it. (Recorded so "browse = cache" doesn't silently harden into "forever, for any age".)
+## TRIPWIRE — "browse=cache" is proven at 4 days post-resolution ONLY; CLOB history has a REAL horizon and the failure is SILENT
+Do not let "browse = cache" harden into "forever, at any age". Pricesmart experiment
+(2026-07-13, prod): deleting a resolved browse market and re-browsing regenerated the record
+(deployed `/api/market`, settled outcomePrices) AND all 6 history rows, same dates, 0 failed —
+**4 days after resolution**. The horizon probe (same date): CLOB `prices-history` returns full
+curves for closed markets ending ≥ ~Nov 2023 (`ilya-still-at-openai-on-jan-1`, 46 points) and
+**HTTP 200 with ZERO points** for older ones (2011→early-2023 enders all empty) — an era
+boundary (pre-CLOB/AMM markets), not — so far — a rolling window, but rolling deletion is NOT
+disproven. **The failure mode is silent: the record regenerates, the chart comes back empty,
+nobody notices.** The guard: GC's per-market report prints `RESOLVED <n>d ago` (or `age
+UNKNOWN — regeneration not guaranteed`) so the operator sees the actual risk before typing
+--apply. If a resolved browse market older than the proven range matters, probe its legs'
+prices-history BEFORE GC'ing it.
+
+## The frozen record's `markets.id` is the EVENT SLUG, not the config id — this trap will bite again
+`markets.id` = `spacex-ipo-closing-market-cap-above` (the event slug; dev AND prod verified
+2026-07-13). The internal config id `spacex-ipo-market-cap` (core/fetch.js ASSET.id) does NOT
+exist as a markets row. INC 6's HARD_EXCLUDE was originally pinned to the config id alone —
+i.e. the guard protecting the frozen provenance anchor pointed at a row that isn't there, and
+only the watchlist check stood between GC and SpaceX. The verify gate caught it at birth
+(operator's approved design had the same blind spot). Rule: anything that must protect or
+target the frozen record BY ID uses the event slug — and any id-pinned guard gets a gate check
+that the pinned id actually EXISTS in the table it guards.
 
 ## reconstruct-guarded-history: re-run counts are NOT an idempotency check (two artifacts)
 (1) The per-row skip tests `derived.exclusivity` PRESENCE, which conflates "not yet processed"

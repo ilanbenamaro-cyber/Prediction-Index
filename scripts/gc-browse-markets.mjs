@@ -82,7 +82,7 @@ async function main() {
   const svc = createClient(target.url, target.serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
   const { data: markets, error } = await svc.from('markets')
-    .select('id, kind, resolution_status, last_checked_at');
+    .select('id, kind, resolution_status, last_checked_at, config');
   if (error) { console.error(error.message); process.exit(1); }
   const watchedIds = await watchedIdSet(svc);
 
@@ -100,7 +100,18 @@ async function main() {
       svc.from('market_history').select('*', { count: 'exact', head: true }).eq('market_id', m.id),
       svc.from('market_snapshots').select('*', { count: 'exact', head: true }).eq('market_id', m.id),
     ]);
-    console.log(`  ${m.id}: ${m.kind ?? '?'} · ${m.resolution_status ?? 'open'} · last_checked ${m.last_checked_at ?? 'never'} · history=${h.count ?? '?'} snapshots=${s.count ?? '?'}`);
+    // RESOLVED markets get their age surfaced: regeneration is proven only inside CLOB's
+    // retention horizon (2026-07-13 probe: history exists for markets ending ≥ ~Nov 2023,
+    // and is a SILENT HTTP-200-empty for older ones) — the operator must see the risk
+    // before typing --apply. See gotchas "browse=cache proven at 4 days post-resolution".
+    let life = m.resolution_status ?? 'open';
+    if (m.resolution_status === 'resolved') {
+      const resolvedAt = Date.parse(m.config?.resolves ?? '');
+      life = Number.isFinite(resolvedAt)
+        ? `RESOLVED ${Math.round((Date.now() - resolvedAt) / 86_400_000)}d ago`
+        : 'RESOLVED, age UNKNOWN — regeneration not guaranteed';
+    }
+    console.log(`  ${m.id}: ${m.kind ?? '?'} · ${life} · last_checked ${m.last_checked_at ?? 'never'} · history=${h.count ?? '?'} snapshots=${s.count ?? '?'}`);
     if (!APPLY) { deleted++; continue; }
 
     // delete-time watchlist re-check (the GC invariant: never delete a watchlisted market)
