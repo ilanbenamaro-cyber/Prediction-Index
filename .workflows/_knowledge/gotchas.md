@@ -5,6 +5,30 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## verify-history needs a RUNNING server — and its positive path TRIGGERS a real snapshot batch
+**Symptom (mis-filed as "crash" until 2026-07-13):** with no server it died on an unhandled
+`ECONNREFUSED ::1:3001` stack trace and everyone read it as broken code. It was never broken —
+it had simply NEVER BEEN RUN (needs `BASE_URL` + a live server + `CRON_SECRET`); on its first
+real run (2026-07-13, production build, fresh port 3617) it passed 22/22, including provenance
+re-hash on ALL 10 watched markets' stored history records and the market_history deny-all RLS
+check. Now preflights reachability → clean exit 2 with the recipe (the full recipe lives in the
+script header). Two standing cautions:
+1. The POS check runs a REAL `/api/snapshot` batch against whatever project the server points
+   at — only ever run it at DEV. Resolved markets (incl. frozen SpaceX) are skipped by the
+   route (verified: SpaceX snapshot fetched_at unchanged after the run).
+2. Fresh, never-used port + `rm -rf .next` first — the stale-build trap has produced false
+   green in this repo before.
+
+## verify-phase2-binary's fixtures are LIVE gamma markets — check gamma before suspecting code
+The LADDER no-regression fixture is the resolved SpaceX event (`spacex-ipo-closing-market-cap-above`,
+chosen 2026-07-13 after the previous fixture rotted: `will-wti-hit-week-of-june-22-2026` was BOTH a
+dated weekly slug AND a directional_touch market by construction — "hit (HIGH)/(LOW)" wording —
+so the survival assertions could never pass). The gate therefore depends on gamma continuing to
+serve that resolved event. Stable since inception; `seed-spacex.mjs` shares the dependency and
+fails loudly first; `LADDER_SLUG`/`BINARY_SLUG` overrides exist. **If this gate goes red, check
+gamma BEFORE suspecting code.** (All verify-* gates are integration gates by construction — a
+hermetic recorded-fixture design is a parked future item, not this pass.)
+
 ## Running the signup verify gates against PROD needs a real-MX domain + Confirm-email OFF for the window
 **Symptom (bit the prod standup, 2026-07-10):** all deny-path checks passed but every positive
 signup failed — `@example.com` is rejected by prod's stricter email-deliverability validation
