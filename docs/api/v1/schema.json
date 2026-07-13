@@ -492,7 +492,13 @@
             },
             {
               "if": { "properties": { "kind": { "const": "categorical" } }, "required": ["kind"] },
-              "then": { "required": ["kind", "outcomes", "dominant_outcome", "dominant_prob", "entropy", "consensus_strength", "confidence", "total_volume", "freshness"] }
+              "then": {
+                "required": ["kind", "outcomes", "confidence", "total_volume", "freshness"],
+                "anyOf": [
+                  { "required": ["exclusivity"] },
+                  { "required": ["dominant_outcome", "dominant_prob", "entropy", "consensus_strength"] }
+                ]
+              }
             },
             {
               "if": { "properties": { "kind": { "not": { "enum": ["binary", "directional_touch", "categorical"] } } } },

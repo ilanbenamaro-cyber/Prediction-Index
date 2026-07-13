@@ -62,6 +62,99 @@ export function realCategoricalLegs(legs) {
   return real.length > 0 ? real : (legs ?? []);
 }
 
+// ── EXCLUSIVITY GUARD (5.6, operator-approved design 2026-07-13) ─────────────
+// The de-vig below presumes MUTUALLY-EXCLUSIVE outcomes. 31% of live categorical
+// boards are NESTED DEADLINES ("X by <date₁…ₙ>" — a CDF in time) and others are
+// independent multi-binaries — normalizing those FABRICATES probabilities (live
+// proof: fed-rate-cut-by-629 raw 20.5% displayed as 49%). The guard classifies
+// each board and, when not exclusive, the record carries RAW probabilities only
+// with every PMF derivation suppressed. Misclassification is asymmetric BY
+// DESIGN: every wrong verdict degrades to raw-and-honest, never to fabricated.
+const EXCLUSIVE_SUM_MIN = 0.8;   // placeholder-filtered raw sum band for a genuine
+const EXCLUSIVE_SUM_MAX = 1.25;  // one-winner board (observed live: 0.96–1.05 + vig edge)
+const NESTED_MIN_DATED_FRACTION = 0.8; // "by <date>" legs must dominate the board
+const NESTED_MONOTONE_EPS = 0.025;     // tolerated per-step noise inversion (2.5pp)
+const MONTHS = { january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12 };
+
+/** Parse "by/before <date-ish>" from a leg question → { key: yyyymmdd, yearless } or null. */
+export function parseByDeadline(question) {
+  const m = String(question ?? '').toLowerCase().match(/\b(?:by|before)\b([^?]*)/);
+  if (!m) return null;
+  const s = m[1];
+  const eo = s.match(/end of (\d{4})/);
+  if (eo) return { key: Number(eo[1]) * 10000 + 1231, yearless: false };
+  // day = 1-2 digits NOT followed by another digit — else "january 2026" greedily
+  // reads day=20 out of the year (caught by the guard tests, 2026-07-13)
+  const md = s.match(/(january|february|march|april|may|june|july|august|september|october|november|december)\s*(?:(\d{1,2})(?!\d))?(?:,?\s*(\d{4}))?/);
+  if (md) {
+    const year = md[3] ? Number(md[3]) : null;
+    const monthDay = MONTHS[md[1]] * 100 + (md[2] ? Number(md[2]) : 28);
+    return { key: (year ?? 0) * 10000 + monthDay, yearless: year == null, monthDay };
+  }
+  const y = s.match(/(\d{4})/);
+  if (y) return { key: Number(y[1]) * 10000 + 1231, yearless: false };
+  return null;
+}
+
+/** Non-decreasing within eps when ordered by `key` (ties keep input order). */
+function monotoneByKey(items, eps = NESTED_MONOTONE_EPS) {
+  const s = [...items].sort((a, b) => a.key - b.key);
+  return s.every((it, i) => i === 0 || it.prob >= s[i - 1].prob - eps);
+}
+
+/**
+ * Classify a categorical board's exclusivity from its REAL legs (placeholder-filtered).
+ * legs: [{ label, prob (RAW YES midpoint), volume, question?, leg_end_date? }]
+ * Returns { verdict, basis } — verdict ∈
+ *   'exclusive'        → de-vig PMF is honest (today's path, unchanged)
+ *   'nested_deadline'  → "by <date>" board, monotone in deadline (F1: raw cumulative)
+ *   'non_exclusive'    → sum far from 1 and not nested (F2: raw list)
+ *   'ambiguous'        → the two nested orderings DISAGREE (F3: conservative raw)
+ * Detection is two-signal for nested (question-text dates + gamma leg endDates); a
+ * disagreement lands on 'ambiguous', which renders exactly like 'non_exclusive' —
+ * the conservative fallback is still honest raw, never a fabricated PMF.
+ */
+export function assessExclusivity(legs) {
+  const real = realCategoricalLegs(legs);
+  const priced = real.filter((l) => Number.isFinite(l.prob));
+  const sum = priced.reduce((a, l) => a + l.prob, 0);
+  const basis = { filtered_sum: Number(sum.toFixed(4)), real_legs: priced.length };
+  if (priced.length < 2) return { verdict: 'exclusive', basis }; // degenerate: nothing to guard
+
+  // ── nested test, signal 1: question-text "by/before <date>" ──
+  const dated = priced
+    .map((l) => ({ prob: l.prob, d: parseByDeadline(l.question), end: l.leg_end_date ? Date.parse(l.leg_end_date) : null }))
+    .filter((l) => l.d);
+  const datedFraction = dated.length / priced.length;
+  basis.dated_fraction = Number(datedFraction.toFixed(2));
+  let textMonotone = null, endMonotone = null;
+  if (dated.length >= 2 && datedFraction >= NESTED_MIN_DATED_FRACTION) {
+    // yearless legs: infer the base year from the earliest explicit year on the board
+    // (else from leg end dates); mis-inference is caught by the endDate cross-check below.
+    const years = dated.filter((l) => !l.d.yearless).map((l) => Math.floor(l.d.key / 10000)).filter((y) => y > 0);
+    const endYears = dated.filter((l) => l.end != null).map((l) => new Date(l.end).getUTCFullYear());
+    const baseYear = years.length ? Math.min(...years) : endYears.length ? Math.min(...endYears) : new Date().getUTCFullYear();
+    const keyed = dated.map((l) => ({ prob: l.prob, key: l.d.yearless ? baseYear * 10000 + l.d.monthDay : l.d.key }));
+    // A nested board needs ≥2 DISTINCT deadlines — 19 independent legs all "by end of 2026"
+    // share one date, and tie-ordering must never let input order fake monotonicity.
+    textMonotone = new Set(keyed.map((k) => k.key)).size >= 2 ? monotoneByKey(keyed) : null;
+    // ── signal 2: gamma per-leg endDate ordering (metadata is occasionally stale/wrong,
+    //    so it CROSS-CHECKS rather than replaces the text signal) ──
+    const ended = dated.filter((l) => l.end != null);
+    if (ended.length >= 2 && ended.length / dated.length >= NESTED_MIN_DATED_FRACTION
+        && new Set(ended.map((l) => l.end)).size > 1) {
+      endMonotone = monotoneByKey(ended.map((l) => ({ prob: l.prob, key: l.end })));
+    }
+    basis.text_monotone = textMonotone;
+    if (endMonotone != null) basis.end_date_monotone = endMonotone;
+    if (textMonotone && endMonotone !== false) return { verdict: 'nested_deadline', basis };
+    if (textMonotone && endMonotone === false) return { verdict: 'ambiguous', basis };
+  }
+
+  if (sum >= EXCLUSIVE_SUM_MIN && sum <= EXCLUSIVE_SUM_MAX) return { verdict: 'exclusive', basis };
+  return { verdict: 'non_exclusive', basis };
+}
+
 /** De-vig: scale a raw PMF to sum to 1, preserving ratios. All-zero ⇒ zeros (no div by 0). */
 export function normalizeProbabilities(rawProbs) {
   const sum = (rawProbs ?? []).reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0);
@@ -223,6 +316,18 @@ function buildCategoricalNarrative(dominant, entropy, confidence) {
   return `The market assigns ${pct} probability to "${label}" — ${conc} (entropy ${entropy.toFixed(2)}). Reliability is ${confidence.reliability.tier}; liquidity is ${confidence.liquidity.tier}.`;
 }
 
+/** Guard-mode narrative: only claims the RAW per-leg prices support — no PMF language. */
+function buildGuardedNarrative(verdict, headline, sum, confidence) {
+  const tail = `Reliability is ${confidence.reliability.tier}; liquidity is ${confidence.liquidity.tier}.`;
+  if (verdict === 'nested_deadline' && headline) {
+    return `Cumulative deadlines: the market prices "${headline.label}" at ${Math.round(headline.raw_probability * 100)}% (raw). `
+      + `Outcomes are nested, not mutually exclusive — probabilities do not sum to 1 and no single-winner distribution exists. ${tail}`;
+  }
+  const amb = verdict === 'ambiguous' ? ' (board structure ambiguous — treated conservatively)' : '';
+  return `Outcomes shown at raw market prices${amb} — they are not mutually exclusive and do not sum to 1 `
+    + `(raw sum ≈ ${sum.toFixed(2)}). No single-winner distribution exists. ${tail}`;
+}
+
 /**
  * Build the full canonical categorical record from a fetchCategoricalSnapshot result.
  *   live: { fetched_at, endpoints, raw_inputs, raw_sha256, outcomes[{label,prob,volume,
@@ -231,31 +336,76 @@ function buildCategoricalNarrative(dominant, entropy, confidence) {
 export function buildCategoricalRecord(live, methodologyVersion, config, lifecycle = null, freshnessThresholdHours = undefined) {
   if (!config) throw new Error('buildCategoricalRecord: a MarketConfig is required');
 
-  const outcomes = parseCategoricalOutcomes(live.outcomes ?? []);
-  const dominant = outcomes[0] ?? null;
-  const entropy = shannonEntropy(outcomes.map((o) => o.probability));
-  const dominantProb = dominant?.probability ?? 0;
-  const confidence = scoreCategoricalConfidence({
-    rawInputs: live.raw_inputs, totalVolume: live.total_volume,
-    midpointFallback: live.midpoint_fallback ?? null, lifecycle,
-    windowedVolume: live.liquidity ?? null, // Increment 1
-    daysToExpiry: daysUntil(config.resolves, live.fetched_at), // Increment 3
-    entropy, dominantProb, // Increment B: strong consensus → reliability
-  });
+  // ── 5.6 EXCLUSIVITY GUARD: classify BEFORE any normalization ──
+  const exclusivity = assessExclusivity(live.outcomes ?? []);
+  const guarded = exclusivity.verdict !== 'exclusive';
 
-  const derived = {
-    kind: 'categorical',
-    outcomes,
-    dominant_outcome: dominant?.label ?? null,
-    dominant_prob: dominantProb,
-    entropy,
-    consensus_strength: consensusStrength(dominantProb),
-    implied_winner: dominantProb > 0.5 ? (dominant?.label ?? null) : 'no consensus',
-    total_volume: live.total_volume ?? 0,
-    confidence,
-    narrative: buildCategoricalNarrative(dominant, entropy, confidence),
-    freshness: buildFreshness(live.fetched_at, null, freshnessThresholdHours, lifecycle),
-  };
+  let derived;
+  if (!guarded) {
+    // ── exclusive board: today's de-vig PMF path, byte-identical ──
+    const outcomes = parseCategoricalOutcomes(live.outcomes ?? []);
+    const dominant = outcomes[0] ?? null;
+    const entropy = shannonEntropy(outcomes.map((o) => o.probability));
+    const dominantProb = dominant?.probability ?? 0;
+    const confidence = scoreCategoricalConfidence({
+      rawInputs: live.raw_inputs, totalVolume: live.total_volume,
+      midpointFallback: live.midpoint_fallback ?? null, lifecycle,
+      windowedVolume: live.liquidity ?? null, // Increment 1
+      daysToExpiry: daysUntil(config.resolves, live.fetched_at), // Increment 3
+      entropy, dominantProb, // Increment B: strong consensus → reliability
+    });
+    derived = {
+      kind: 'categorical',
+      outcomes,
+      dominant_outcome: dominant?.label ?? null,
+      dominant_prob: dominantProb,
+      entropy,
+      consensus_strength: consensusStrength(dominantProb),
+      implied_winner: dominantProb > 0.5 ? (dominant?.label ?? null) : 'no consensus',
+      total_volume: live.total_volume ?? 0,
+      confidence,
+      narrative: buildCategoricalNarrative(dominant, entropy, confidence),
+      freshness: buildFreshness(live.fetched_at, null, freshnessThresholdHours, lifecycle),
+    };
+  } else {
+    // ── guarded board: RAW probabilities only; every PMF derivation SUPPRESSED
+    //    (entropy, dominant_*, consensus_strength, implied_winner all OMITTED —
+    //    normalizing a non-exclusive board fabricates numbers). Increment B is
+    //    disarmed by passing entropy/dominantProb = null (its own null path). ──
+    const real = realCategoricalLegs(live.outcomes ?? []);
+    const items = real.map((l) => ({
+      label: l.label,
+      raw_probability: Number.isFinite(l.prob) ? l.prob : null,
+      volume: l.volume ?? null,
+      midpoint_source: l.midpoint_source ?? null,
+      ...(l.leg_end_date ? { leg_end_date: l.leg_end_date } : {}),
+      ...(l.question ? { deadline: parseByDeadline(l.question)?.key ?? null } : {}),
+    }));
+    const nested = exclusivity.verdict === 'nested_deadline';
+    const outcomes = nested
+      ? [...items].sort((a, b) => (a.deadline ?? a.leg_end_date ?? 0) > (b.deadline ?? b.leg_end_date ?? 0) ? 1 : -1)
+      : [...items].sort((a, b) => (b.raw_probability ?? 0) - (a.raw_probability ?? 0));
+    // F1's honest headline: the LONGEST-horizon cumulative probability (rail + history)
+    const headline = nested && outcomes.length
+      ? { label: outcomes[outcomes.length - 1].label, raw_probability: outcomes[outcomes.length - 1].raw_probability }
+      : null;
+    const confidence = scoreCategoricalConfidence({
+      rawInputs: live.raw_inputs, totalVolume: live.total_volume,
+      midpointFallback: live.midpoint_fallback ?? null, lifecycle,
+      windowedVolume: live.liquidity ?? null,
+      daysToExpiry: daysUntil(config.resolves, live.fetched_at),
+      entropy: null, dominantProb: null, // Increment B must not fire on a fabricated PMF
+    });
+    derived = {
+      kind: 'categorical',
+      outcomes,
+      exclusivity: { verdict: exclusivity.verdict, basis: exclusivity.basis, ...(headline ? { headline } : {}) },
+      total_volume: live.total_volume ?? 0,
+      confidence,
+      narrative: buildGuardedNarrative(exclusivity.verdict, headline, exclusivity.basis.filtered_sum, confidence),
+      freshness: buildFreshness(live.fetched_at, null, freshnessThresholdHours, lifecycle),
+    };
+  }
   if (live.liquidity) derived.liquidity = live.liquidity; // Increment 1: windowed volume, omit-when-absent
 
   const snapshot = {

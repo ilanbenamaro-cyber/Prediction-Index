@@ -846,6 +846,10 @@ export async function fetchCategoricalMeta(config) {
     if (!ids) return null; // untraded/placeholder outcome (no order book) — skip, don't crash on ids[0]
     return {
       label: (m.groupItemTitle != null && String(m.groupItemTitle).trim()) || m.question,
+      // question + per-leg endDate feed the EXCLUSIVITY assessment (core/categorical.js
+      // assessExclusivity — 5.6 guard). SUPPLEMENTARY: never in raw_inputs, never hashed.
+      question: m.question ?? null,
+      leg_end_date: m.endDate ?? null,
       token_id: ids[0], // YES
       volume: m.volume != null ? Number(m.volume) : null,
       ...legWindowed(m), // windowed volume — supplementary, never hashed
@@ -906,7 +910,8 @@ export async function fetchCategoricalSnapshot(config) {
       token_id: r.l.token_id, threshold: i, midpoint, best_bid, best_ask, volume: r.l.volume,
       midpoint_source: source, ...(last_trade_price != null ? { last_trade_price } : {}),
     });
-    outcomes.push({ label: r.l.label, prob: parseFloat(midpoint), volume: r.l.volume, midpoint_source: source, best_bid, best_ask });
+    outcomes.push({ label: r.l.label, prob: parseFloat(midpoint), volume: r.l.volume, midpoint_source: source, best_bid, best_ask,
+      question: r.l.question ?? null, leg_end_date: r.l.leg_end_date ?? null }); // 5.6 guard inputs (supplementary)
   });
   if (outcomes.length < 2) throw new Error(`No usable prices for categorical event ${config.event_slug}`);
 

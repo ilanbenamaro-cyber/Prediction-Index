@@ -614,6 +614,15 @@ a:hover { text-decoration: underline; }
 .settle-band { fill: var(--accent-amber); fill-opacity: 0.22; stroke: var(--accent-amber); stroke-opacity: 0.7; stroke-width: 1; }
 .settle-note { font-size: var(--fs-tiny); line-height: var(--lh-prose); margin: var(--sp-3) 0 0; max-width: 70ch; }
 
+/* ── shape notice (5.6 exclusivity guard + 5.5 unsupported) — the honest-structure band ── */
+.shape-notice {
+  display: flex; align-items: baseline; gap: var(--sp-2);
+  margin-top: var(--sp-3); padding: var(--sp-2) 0;
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+}
+.shape-notice-tag { color: var(--accent-amber); white-space: nowrap; }
+.shape-notice-body { font-size: var(--fs-tiny); color: var(--text-muted); line-height: var(--lh-prose); }
+
 /* ── categorical detail view ─────────────────────────────────────────────── */
 .cat-tag { display: inline-block; font-family: var(--font-mono); font-size: var(--fs-micro); font-weight: 700;
   letter-spacing: var(--track-label); text-transform: uppercase; color: var(--accent-amber); padding: 0; }
