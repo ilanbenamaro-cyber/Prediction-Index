@@ -5,6 +5,19 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## DO NOT RE-WATCHLIST `next-openai-model-arena-debut-685` on dev (un-watchlisted 2026-07-13, operator order)
+**Why it's off the watchlist (dev ref `dxoyxjxcfbgygvjvrrfk`; 1 personal + 1 org row deleted;
+its 62 reconstructed history rows and `markets` row are KEPT for browse reuse):** the board is
+a THRESHOLD-NESTED family member ("1450+/1470+…" cumulative legs — one of the two unmodeled
+families from the 5.6 exclusivity survey). Today its verdict happens to flip EXCLUSIVE at
+settled sums ≈1.02, so the de-vig (÷1.02 ≈ raw) is de-minimis — but that is a COINCIDENCE of
+current prices, not a property of the board: as legs settle or prices move, the verdict can
+flip and future cron rows would alternate between guarded-raw and de-vigged PMFs, polluting
+the history with mode churn for a structure the pipeline cannot honestly model yet. The honest
+state is browse-only until the time-CDF/nested-shape EPIC ships a real cumulative shape.
+Re-adding it makes the cron resume snapshotting it (allWatchedMarketIds reads the watchlists)
+and re-creates exactly this problem.
+
 ## TRIPWIRE — the DEADLINE-LADDER shape gap: "hit $X by <date₁…dateₙ>" boards have NO honest shape
 **Named tripwire (2026-07-13, INC 5 survey; deliberately NOT fixed by the reach/dip classifier):**
 events whose legs share ONE price level across MULTIPLE deadlines ("Will STRC hit $100 by
