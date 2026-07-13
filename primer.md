@@ -32,6 +32,7 @@ healthy — it had simply never been run. See [[decisions]] "A gate that cannot 
 | verify-phase2b-isolation | plain-local | dev Supabase | 0/1/2 | `✓ ISOLATION GATE PASSED` (17 checks) | **treat red as P0** — this is THE RLS regression proof; re-run after ANY auth change |
 | verify-phase2b-watchlist | plain-local | dev Supabase | 0/1/2 | `✓ WATCHLIST GATE PASSED` | RLS / lib/watchlist typed-error drift |
 | verify-invite-flows | plain-local | dev Supabase GoTrue (~12 signups — rate limits) | 0/1/2 | `✓ INVITE FLOWS GATE PASSED` (45 checks) | the interpolated raw error in the failing line (42501 = grant/ACL class, bit prod 2026-07-10) |
+| verify-gc-browse | plain-local | dev Supabase (self-cleaning `gcv-` fixtures; spawns gc-browse-markets.mjs) | 0/1/2 | `✓ GC-BROWSE GATE PASSED` (16 checks) | leftover `gcv-` fixtures from a crashed prior run, then FK-cascade/RLS drift; HARD_EXCLUDE must hold BOTH SpaceX ids ([[gotchas]]) |
 
 "plain-local" still means env creds from `.env.local` (+ the `SUPABASE_URL`/`SUPABASE_ANON_KEY`
 aliases). Every gate is an **integration gate by construction** — the Live-API column marks what

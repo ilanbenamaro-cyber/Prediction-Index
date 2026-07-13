@@ -5,6 +5,43 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## GC-browse residual race (ACCEPTED v1, operator ruling 2026-07-13) — exact conditions + the v2 fix
+`scripts/gc-browse-markets.mjs` re-checks the watchlists immediately before each delete, but the
+re-check and the `delete from markets` are TWO statements: a watchlist INSERT that commits in the
+window between them is FK-cascade-deleted together with the market (all four FKs onto
+`markets(id)` cascade). Triggering it requires a user to watchlist a market that NOBODY has
+viewed in ≥30 days (the retention window is the real shield — `last_checked_at` is bumped on
+every serve) in that same instant. Accepted for v1 by explicit operator ruling. **v2 (do not
+build until ruled needed):** a migration-defined SQL function doing scan+delete in ONE
+transaction/statement (`delete … where not exists (select 1 from watchlists …)`), service-role
+only. Related trap the gate caught at birth: the frozen record's `markets.id` is the EVENT SLUG
+`spacex-ipo-closing-market-cap-above`, NOT the internal config id `spacex-ipo-market-cap` —
+HARD_EXCLUDE pins both; never "protect SpaceX" by the config id alone.
+
+## Resolved browse markets DO regenerate from live upstream (pricesmart experiment, 2026-07-13) — with a retention caveat
+The INC 6 "browse = cache" premise was UNPROVEN for resolved markets (gamma search hides them,
+and whether CLOB serves price history post-close was untested). Empirical answer via the prod
+pricesmart delete/re-browse: after deleting the fossil (markets row + 6 history rows + snapshot,
+cascade), the REAL deployed `/api/market` rebuilt the RESOLVED record from settled outcomePrices
+(`midpoint_source: resolved_settlement`), and `backfillMarket` rebuilt **all 6 history rows,
+same dates (2026-07-05→07-10), 0 failed** — CLOB still serves closed-market price history.
+CAVEAT: proven 4 days after resolution; CLOB's retention horizon for OLD resolved markets is
+untested — if a years-old resolved browse market ever matters, verify regeneration before GC'ing
+it. (Recorded so "browse = cache" doesn't silently harden into "forever, for any age".)
+
+## reconstruct-guarded-history: re-run counts are NOT an idempotency check (two artifacts)
+(1) The per-row skip tests `derived.exclusivity` PRESENCE, which conflates "not yet processed"
+with "processed → verdict exclusive" (the 1.8.0 schema is exclusivity XOR PMF, so
+exclusive-verdict rows carry NO block). After the 2026-07-13 prod apply (1241 reconstructed),
+a re-run reports `reconstructed=421` FOREVER — those are rows whose OWN raw sums sit in the
+[0.8,1.25] band and legitimately rebuilt to unguarded PMFs (verified: all stamped 1.8.0 with
+raw_probability). Re-applying rewrites identical content; the counter is noise, not drift.
+(2) The market-level probe verdict reads `rows[rows.length-1]` of an UNORDERED select with
+live gamma — it can flip between runs (prod: who-will-trump-nominate flipped non_exclusive →
+exclusive, +9 skipped). Consequence is bounded (the probe only gates which boards get per-row
+treatment; each row's stored verdict comes from its own data), but do not read re-run counts
+as a health signal — verify content (methodology stamp + raw_probability), not counters.
+
 ## DO NOT RE-WATCHLIST `next-openai-model-arena-debut-685` on dev (un-watchlisted 2026-07-13, operator order)
 **Why it's off the watchlist (dev ref `dxoyxjxcfbgygvjvrrfk`; 1 personal + 1 org row deleted;
 its 62 reconstructed history rows and `markets` row are KEPT for browse reuse):** the board is
