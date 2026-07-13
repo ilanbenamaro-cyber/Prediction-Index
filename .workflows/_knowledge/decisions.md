@@ -5,6 +5,26 @@ Newest at top. If you're about to change one of these, read the entry first.
 
 ---
 
+## A gate that cannot be run is not a red gate — it is an UNKNOWN gate, and unknown rots into false known-red
+**Decided (2026-07-13, perfection pass):** every verify gate must be RUNNABLE or explicitly,
+loudly not-run-by-design (**exit 2 + a printed recipe** — the convention verify-phase2a /
+verify-2c1-authgate / verify-history now share). The proof case: `verify-history` sat
+"known-red (crash)" across multiple sessions and two knowledge syncs — while the history
+system under it was completely healthy (first-ever real run: 22/22, provenance re-hash intact
+on all 10 watched markets). It had never crashed on an assertion; it had NEVER BEEN RUN, and
+the unhandled ECONNREFUSED read as a code bug. An unknown gate is worse than a red one: a red
+gate demands attention, an unknown one accumulates a false reputation that knowledge syncs then
+FOSSILIZE. Constraints this imposes:
+- New gates: preflight every environmental requirement (env vars, server reachability) →
+  exit 2 + recipe. Never let a missing prerequisite surface as a stack trace or a silent 0.
+- Exit contract: 0 = full assertion set passed · 1 = a real check failed · 2 = not-run-by-design.
+- The standing GATE INVENTORY table in primer.md (runs-where / live-API dependency / expected
+  exits / green output / if-red-check-this-first) is the anti-rot mechanism — keep it current
+  when adding or changing any gate; every gate here is an integration gate by construction.
+- Assertion messages interpolate RAW evidence (error codes, actual values) — a failure line
+  must be diagnosable from the log alone (the 2026-07-10 prod grant gap cost a round-trip
+  because "approve failed" hid a 42501).
+
 ## Self-service invites — three-path gate, validate-in-hook / consume-in-trigger, RLS state machine
 **Decided (2026-07-10, operator-approved design + two Opus adversarial reviews; full doc:
 `docs/design/self-service-invites-design.md`):** signup accepts three paths, evaluated in the
