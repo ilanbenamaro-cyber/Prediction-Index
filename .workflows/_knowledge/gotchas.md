@@ -5,6 +5,23 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## TRIPWIRE — the DEADLINE-LADDER shape gap: "hit $X by <date₁…dateₙ>" boards have NO honest shape
+**Named tripwire (2026-07-13, INC 5 survey; deliberately NOT fixed by the reach/dip classifier):**
+events whose legs share ONE price level across MULTIPLE deadlines ("Will STRC hit $100 by
+June 30 / Sep 30 / Dec 31?", `when-will-bitcoin-hit-150k`) fit NO existing shape: touch math
+(high/low series over LEVELS) cannot express them — dedup would collapse identical strikes —
+and survival parses them into a DEGENERATE ladder of identical thresholds. Bare "hit" is
+deliberately not a touch verb for exactly this reason (plus direction ambiguity — see
+TOUCH_VERB_RE in core/fetch.js). **The tripwire:** `strc-hits-100-by-20260618001620693` is
+stored as threshold_ladder with three identical $100 thresholds AND sits on the dev watchlist,
+cron-snapshotted twice daily as a meaningless curve (severity call owed at the 2026-07-13
+INC 7 triage). If a user adds another "hit $X by dates" board, it will look just as wrong.
+The fix is a NEW SHAPE (deadline ladder / cumulative touch-in-time), not a regex. Related
+pre-existing looseness, same triage: ladderShapeFromMarkets' survival rule is some($-leg) —
+ONE stray $-leg makes a whole categorical event survival (live instance:
+what-will-happen-before-gta-vi, "Will bitcoin hit $1m before GTA VI?"); exact-asserted in
+test/market-shape.test.js so any change is loud.
+
 ## verify-history needs a RUNNING server — and its positive path TRIGGERS a real snapshot batch
 **Symptom (mis-filed as "crash" until 2026-07-13):** with no server it died on an unhandled
 `ECONNREFUSED ::1:3001` stack trace and everyone read it as broken code. It was never broken —

@@ -363,6 +363,17 @@ export function kindFromMarkets(markets) {
 // (disjoint intervals). Neither is a survival curve, so both must route away from the
 // ladder math (see MARKET-TYPES-PLAN.md).
 const TOUCH_RE = /\((?:LOW|HIGH)\)/;
+// Marker-less touch wording (gamma survey 2026-07-13, operator-approved rule): the crypto
+// "what price will X hit" family words its legs "reach $N" (upside) / "dip to $N"
+// (downside) with NO (HIGH)/(LOW) marker — 15 of 48 live multi-leg numeric events, all
+// previously mis-shaped as survival. EXACTLY these two verb families; each must govern a
+// money amount ($-adjacency: kills "reach the semifinals" / "launches reach space"), and
+// classification additionally requires a ≥2-LEG QUORUM (kills one stray "hit $1m before
+// GTA VI" leg flipping a categorical event — ladderShapeFromMarkets runs on EVERY
+// multi-leg event). Bare "hit" is deliberately NOT a trigger: direction-ambiguous, and
+// the live bare-hit events are same-level/multi-DEADLINE boards the touch math cannot
+// express (see gotchas "deadline-ladder shape gap"). Do not add verbs not observed live.
+const TOUCH_VERB_RE = /\b(?:reach|dip to)\s*\$\s*\d/i;
 const BUCKET_RE = /\bbetween\b/i;
 
 /** Finer shape of a MULTI-LEG event, classified from question text only (no CLOB):
@@ -377,6 +388,9 @@ export function ladderShapeFromMarkets(markets) {
   if (!Array.isArray(markets) || markets.length === 0) throw new Error('Gamma event contained no markets');
   const questions = markets.map((m) => m?.question ?? '');
   if (questions.some((qn) => TOUCH_RE.test(qn))) return 'directional_touch';
+  // verb-worded touch needs the QUORUM (≥2 legs, the pipeline's own usable-leg minimum) —
+  // some() would let one stray leg reclassify a whole categorical/survival event
+  if (questions.filter((qn) => TOUCH_VERB_RE.test(qn)).length >= 2) return 'directional_touch';
   if (questions.some((qn) => BUCKET_RE.test(qn))) return 'bucket_pmf';
   if (questions.some((qn) => THRESHOLD_RE.test(qn))) return 'survival';
   return 'categorical';
@@ -708,7 +722,19 @@ export async function fetchTouchMeta(config) {
   const all = Array.isArray(ev.markets) ? ev.markets : [];
   const legs = dedupTouchLegs(all.map((m) => {
     const t = parseTouchLeg(m.question);
-    if (!t) return null;
+    if (!t) {
+      // SILENT-LEG-DROP GUARD (operator mandate, 2026-07-13): on a touch-classified
+      // event, a $-BEARING leg we cannot side means the wild wording has drifted past
+      // the taxonomy (marker + reach/dip) — serving the remaining legs would present a
+      // silently-truncated board as if it were whole: a wrong number, confidently shown.
+      // LOUD (verbatim leg text, greppable prefix), but a warn not a throw: one drifted
+      // stray must not take down the whole event's serve. Money-less legs (categorical
+      // strays, unpriced strikes) keep today's quiet skip — those are legitimate.
+      if (THRESHOLD_RE.test(m?.question ?? '')) {
+        console.warn(`[touch-meta] UNSIDEABLE $-bearing leg on ${config.event_slug} — wording drift past the touch taxonomy? Verbatim: "${m.question}"`);
+      }
+      return null;
+    }
     const ids = parseClobTokenIds(m);
     if (!ids) return null; // untraded/placeholder rung (e.g. gold "hit (HIGH) $5,000") — skip, don't crash
     return {
