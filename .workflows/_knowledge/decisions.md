@@ -5,6 +5,25 @@ Newest at top. If you're about to change one of these, read the entry first.
 
 ---
 
+## schema_version 2.0.0 → 2.1.0 — a contract that changes while its version stands still is fossilization
+**Decided (2026-07-13, operator ruling at the perfection-pass gate):** the 1.8.0 exclusivity-guard
+schema relaxation (categorical derived contract became conditional: exclusivity block XOR the PMF
+field set) BUMPS `schema_version` to **2.1.0**. The 1.8.0 changelog entry's original
+"unchanged at 2.0.0" is superseded and amended in place.
+**Why:** the contract materially changed — a consumer reading `dominant_prob` now gets `undefined`
+where a number was previously guaranteed. A contract that changes while its version stands still is
+the SAME fossilization mechanism the "unknown gate" entry names: the version is the signal, and a
+signal that never moves is not a signal. The operator's pre-stated rule was "bump iff it cannot
+break the frozen hash"; evidence established the bump is parity-safe — parity asserts only
+`hashRawInputs(raw_inputs)===raw_sha256` and `deepEqual(derived, fixture.derived)`, `schema_version`
+is top-level and in neither; the 1.x→2.0.0 precedent never touched parity; the frozen RESOLVED
+SpaceX record is never re-stamped (resolution guard exits before `freezeRecord`).
+**Constrains:** contract-shape changes (fields becoming conditional counts) bump `schema_version`
+even when every previously-valid record stays valid — "pure relaxation" is not an exemption. The
+version lives in ONE place (`core/snapshot.js` `SCHEMA_VERSION`); `docs/api/v1/schema.json` carries
+no version const to sync. Consumers reading it: `lib/cache.mjs` column promotion (informational) +
+published-schema readers.
+
 ## A gate that cannot be run is not a red gate — it is an UNKNOWN gate, and unknown rots into false known-red
 **Decided (2026-07-13, perfection pass):** every verify gate must be RUNNABLE or explicitly,
 loudly not-run-by-design (**exit 2 + a printed recipe** — the convention verify-phase2a /

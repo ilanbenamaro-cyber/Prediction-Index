@@ -20,7 +20,7 @@ import { buildFreshness } from './freshness.js';
 import { ASSET } from './fetch.js';
 import { labelLt, labelBetween, labelGt } from './market-config.js';
 
-export const SCHEMA_VERSION = '2.0.0';
+export const SCHEMA_VERSION = '2.1.0';
 
 // Config → derived-metric option slices. A null config means "legacy SpaceX
 // defaults" (the function-level defaults), keeping existing callers and the
