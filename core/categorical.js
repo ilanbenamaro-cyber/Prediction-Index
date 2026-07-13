@@ -139,10 +139,13 @@ export function assessExclusivity(legs) {
     // share one date, and tie-ordering must never let input order fake monotonicity.
     textMonotone = new Set(keyed.map((k) => k.key)).size >= 2 ? monotoneByKey(keyed) : null;
     // ── signal 2: gamma per-leg endDate ordering (metadata is occasionally stale/wrong,
-    //    so it CROSS-CHECKS rather than replaces the text signal) ──
+    //    so it CROSS-CHECKS rather than replaces the text signal). Heavily-TIED endDates
+    //    (fed-rate-cut: five legs share one stale date) make tie-order decide the answer —
+    //    the signal is only trustworthy when endDates are MOSTLY DISTINCT. ──
     const ended = dated.filter((l) => l.end != null);
+    const distinctEnds = new Set(ended.map((l) => l.end)).size;
     if (ended.length >= 2 && ended.length / dated.length >= NESTED_MIN_DATED_FRACTION
-        && new Set(ended.map((l) => l.end)).size > 1) {
+        && distinctEnds / ended.length >= NESTED_MIN_DATED_FRACTION) {
       endMonotone = monotoneByKey(ended.map((l) => ({ prob: l.prob, key: l.end })));
     }
     basis.text_monotone = textMonotone;
