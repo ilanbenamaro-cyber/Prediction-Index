@@ -5,6 +5,16 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## DO NOT RE-WATCHLIST `strc-hits-100-by-20260618001620693` on dev (un-watchlisted 2026-07-14, INC 7 triage)
+**Severity call P2, disposition executed (dev ref `dxoyxjxcfbgygvjvrrfk`; 1 personal watchlist
+row deleted; 16 history rows + `markets` row KEPT):** the board is the NAMED deadline-ladder
+tripwire — three legs at ONE price level ($100) across three deadlines, stored as a
+threshold_ladder of identical thresholds, i.e. a meaningless degenerate curve snapshotted on
+every batch. Exposure was dev-only (never on prod), which is what holds it at P2. The honest
+shape is the time-CDF EPIC; until then the board is browse-only. The INC 7 [shape-tripwire]
+(duplicate_thresholds) now logs loudly if this family is ever computed again — including when
+a user re-adds one. See the TRIPWIRE entry below for the family.
+
 ## GC-browse residual race (ACCEPTED v1, operator ruling 2026-07-13) — exact conditions + the v2 fix
 `scripts/gc-browse-markets.mjs` re-checks the watchlists immediately before each delete, but the
 re-check and the `delete from markets` are TWO statements: a watchlist INSERT that commits in the
