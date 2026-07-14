@@ -174,3 +174,56 @@ test('deriveCategoricalSeries: guarded segment charts RAW values', () => {
   assert.ok(s && s.probLines.length === 2);
   assert.equal(s.probLines[0].points[0].value, 0.2);
 });
+
+// ── red-team additions (INC 7, 2026-07-13): confirmed fabrication paths, now locked ──
+const rtLeg = (label, prob, question, end) => ({ label, prob, volume: 1000, question, leg_end_date: end });
+
+test('RT-1: numeric-date nested board ("by 6/30/2026") with in-band sum must NOT de-vig', () => {
+  // pre-fix, every numeric leg collapsed to the bare-year fallback's SAME key, the
+  // distinct-deadline requirement went blind, and the sum test fabricated a PMF over a CDF
+  const v = assessExclusivity([
+    rtLeg('by 3/31', 0.20, 'Will X happen by 3/31/2026?', '2026-03-31'),
+    rtLeg('by 6/30', 0.30, 'Will X happen by 6/30/2026?', '2026-06-30'),
+    rtLeg('by 12/31', 0.45, 'Will X happen by 12/31/2026?', '2026-12-31'),
+  ]).verdict;
+  assert.equal(v, 'nested_deadline');
+});
+
+test('RT-1b: quarter-date nested board ("by Q2 2026") with in-band sum must NOT de-vig', () => {
+  const v = assessExclusivity([
+    rtLeg('Q1', 0.20, 'Will X happen by Q1 2026?', '2026-03-31'),
+    rtLeg('Q2', 0.30, 'Will X happen by Q2 2026?', '2026-06-30'),
+    rtLeg('Q4', 0.45, 'Will X happen by Q4 2026?', '2026-12-31'),
+  ]).verdict;
+  assert.equal(v, 'nested_deadline');
+});
+
+test('RT-2: dated-dominated board with a >eps inversion lands on ambiguous, NEVER the sum test', () => {
+  // a single stale-quote inversion (3pp) on a wording-obvious time-CDF board; sum 1.02 is
+  // in the exclusive band — falling through would de-vig a CDF into a fabricated PMF
+  const v = assessExclusivity([
+    rtLeg('Aug', 0.30, 'Will X happen by August 31, 2026?', '2026-08-31'),
+    rtLeg('Oct', 0.27, 'Will X happen by October 31, 2026?', '2026-10-31'),
+    rtLeg('Dec', 0.45, 'Will X happen by December 31, 2026?', '2026-12-31'),
+  ]).verdict;
+  assert.equal(v, 'ambiguous');
+});
+
+test('RT regression: shared-single-deadline exclusive board ("acquired by <who> by 2027") still de-vigs', () => {
+  // the deadline is a common suffix, not the differentiator — the no-fall-through rule
+  // must not strip honest de-vig from genuinely exclusive boards
+  const v = assessExclusivity([
+    rtLeg('MSFT', 0.50, 'Will Acme be acquired by Microsoft by 2027?', '2027-01-01'),
+    rtLeg('GOOG', 0.30, 'Will Acme be acquired by Google by 2027?', '2027-01-01'),
+    rtLeg('none', 0.22, 'Will Acme not be acquired by 2027?', '2027-01-01'),
+  ]).verdict;
+  assert.equal(v, 'exclusive');
+});
+
+test('RT-3: parseByDeadline keeps the year after an ordinal day + parses numeric/quarter forms', () => {
+  assert.deepEqual(parseByDeadline('by July 4th, 2026'), { key: 20260704, yearless: false, monthDay: 704 });
+  assert.deepEqual(parseByDeadline('by 6/30/2026'), { key: 20260630, yearless: false, monthDay: 630 });
+  assert.equal(parseByDeadline('by 6/30').yearless, true);
+  assert.deepEqual(parseByDeadline('by Q3 2026'), { key: 20260930, yearless: false, monthDay: 930 });
+  assert.equal(parseByDeadline('by 13/45/2026').key, 20261231); // bogus m/d → bare-year fallback
+});

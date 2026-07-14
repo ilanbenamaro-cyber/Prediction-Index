@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0",
+  "version": "1.9.0",
   "asset": "spacex-ipo-market-cap",
   "summary": "Derived valuation metrics from Polymarket 'closing market cap above $X' YES prices. Each 'above $X' market is a separate order book, so raw midpoints are arbitrage-adjusted (volume-weighted isotonic regression) into a monotone CDF before any metric is computed. Raw values are preserved alongside the adjusted ones. Two output tiers are kept strictly separate: TIER 1 (derived.market) are pure market transforms with no assumptions; TIER 2 (derived.scenarios) require external inputs and each carries a sourced, dated, ranged assumption (see assumptions.json). A scenario with no usable assumption renders 'input_required', never a fabricated number.",
   "metrics": {
@@ -180,6 +180,11 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.9.0",
+      "date": "2026-07-13",
+      "change": "EXCLUSIVITY GUARD HARDENING (behavior change, categorical only; red-team INC 7, two confirmed fabrication paths closed). (1) NO FALL-THROUGH: a dated-dominated board (≥0.8 'by <date>' legs) with ≥2 DISTINCT deadlines never reaches the sum test — monotone ⇒ nested_deadline, non-monotone (stale-quote inversion > 2.5pp eps) ⇒ ambiguous/raw. Previously an in-band sum de-vigged such a CDF into a fabricated PMF (RT-2). Boards whose dated legs share ONE deadline (common suffix, e.g. every leg '…by 2027?') still fall through — there the deadline is not the differentiator, and genuinely exclusive boards keep their honest de-vig. (2) parseByDeadline now parses numeric ('by 6/30/2026') and quarter ('by Q3 2026') deadlines — previously every such leg collapsed to the bare-year fallback's IDENTICAL key, blinding the distinct-deadline requirement (RT-1); ordinal days no longer eat the year ('by July 4th, 2026', RT-3). Every verdict flip this causes degrades toward raw-and-honest, never toward the de-vig. Schema unchanged at 2.1.0 (no contract shape change). SpaceX parity 4/4 byte-identical."
+    },
     {
       "version": "1.8.0",
       "date": "2026-07-13",

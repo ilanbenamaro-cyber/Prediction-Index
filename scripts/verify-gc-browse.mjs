@@ -95,6 +95,11 @@ async function run() {
   ok(!picked.has('spacex-ipo-closing-market-cap-above'), 'frozen SpaceX id is NOT selected even when stale');
   ok(HARD_EXCLUDE.has('spacex-ipo-closing-market-cap-above') && HARD_EXCLUDE.has('spacex-ipo-market-cap'),
     'hard-exclusion list pins the frozen id (event slug + internal config id)');
+  // an id-pinned guard must guard a row that EXISTS — the original HARD_EXCLUDE pinned the
+  // config id, which is not a markets row, and only the watchlist check stood between GC
+  // and the frozen record (see gotchas "markets.id is the EVENT SLUG")
+  ok(markets.some((m) => m.id === 'spacex-ipo-closing-market-cap-above'),
+    'HARD_EXCLUDE primary id exists as a real markets row (guard points at something)');
 
   console.log('— full-scan DRY-RUN (child process, no writes) —');
   const dry = gc();
@@ -111,6 +116,11 @@ async function run() {
   const refD = gc('--id', 'spacex-ipo-closing-market-cap-above'); // DRY-RUN on purpose — never apply at the real id
   ok(refD.status === 1, `--id spacex (dry-run) exits 1 (got ${refD.status})`);
   ok((refD.stdout + refD.stderr).includes('hard-excluded'), 'SpaceX refusal names the exclusion');
+  // a targeted call that matches nothing must be LOUD — the original script exited 0 silently
+  // (red-team INC 7): on a delete tool, "nothing matched" is an operator error, never a success
+  const refN = gc('--id', `gcv-${RUN}-does-not-exist`, '--apply');
+  ok(refN.status === 1, `--id <nonexistent> --apply exits 1 (got ${refN.status})`);
+  ok((refN.stdout + refN.stderr).includes('NOT FOUND'), 'no-match refusal says NOT FOUND');
 
   console.log('— delete path (C) + invariant (A intact) —');
   const del = gc('--id', C, '--apply');

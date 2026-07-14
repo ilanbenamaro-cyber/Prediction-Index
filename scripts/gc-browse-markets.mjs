@@ -56,14 +56,37 @@ export function selectEligible({ markets, watchedIds, now, days = DEFAULT_DAYS, 
   return out;
 }
 
+// supabase-js silently caps un-ranged selects at 1000 rows (red-team INC 7): an
+// un-paginated watchlist read past that cap would make a watchlisted market look
+// unwatched — a silent-deletion path. Every full-table read here paginates.
+async function selectAll(svc, table, columns) {
+  const PAGE = 1000;
+  const out = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await svc.from(table).select(columns).range(from, from + PAGE - 1);
+    if (error) throw new Error(`${table}: ${error.message}`);
+    out.push(...(data ?? []));
+    if ((data?.length ?? 0) < PAGE) return out;
+  }
+}
+
 async function watchedIdSet(svc) {
   const [pw, ow] = await Promise.all([
-    svc.from('personal_watchlist').select('market_id'),
-    svc.from('org_watchlist').select('market_id'),
+    selectAll(svc, 'personal_watchlist', 'market_id'),
+    selectAll(svc, 'org_watchlist', 'market_id'),
   ]);
-  if (pw.error) throw new Error(`watched (personal): ${pw.error.message}`);
-  if (ow.error) throw new Error(`watched (org): ${ow.error.message}`);
-  return new Set([...(pw.data ?? []), ...(ow.data ?? [])].map((r) => r.market_id));
+  return new Set([...pw, ...ow].map((r) => r.market_id));
+}
+
+/** Targeted per-id watchlist check for delete time — immune to pagination by construction. */
+async function isWatched(svc, id) {
+  const [pw, ow] = await Promise.all([
+    svc.from('personal_watchlist').select('*', { count: 'exact', head: true }).eq('market_id', id),
+    svc.from('org_watchlist').select('*', { count: 'exact', head: true }).eq('market_id', id),
+  ]);
+  if (pw.error) throw new Error(`re-check (personal) ${id}: ${pw.error.message}`);
+  if (ow.error) throw new Error(`re-check (org) ${id}: ${ow.error.message}`);
+  return (pw.count ?? 0) > 0 || (ow.count ?? 0) > 0;
 }
 
 async function main() {
@@ -81,9 +104,9 @@ async function main() {
   console.log(`${target.banner} · ${APPLY ? 'APPLY' : 'DRY-RUN'} · retention ${days}d${onlyId ? ` · only ${onlyId}` : ''}`);
   const svc = createClient(target.url, target.serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  const { data: markets, error } = await svc.from('markets')
-    .select('id, kind, resolution_status, last_checked_at, config');
-  if (error) { console.error(error.message); process.exit(1); }
+  let markets;
+  try { markets = await selectAll(svc, 'markets', 'id, kind, resolution_status, last_checked_at, config'); }
+  catch (e) { console.error(e.message); process.exit(1); }
   const watchedIds = await watchedIdSet(svc);
 
   const eligible = selectEligible({ markets: markets ?? [], watchedIds, now: Date.now(), days, onlyId });
@@ -114,9 +137,9 @@ async function main() {
     console.log(`  ${m.id}: ${m.kind ?? '?'} · ${life} · last_checked ${m.last_checked_at ?? 'never'} · history=${h.count ?? '?'} snapshots=${s.count ?? '?'}`);
     if (!APPLY) { deleted++; continue; }
 
-    // delete-time watchlist re-check (the GC invariant: never delete a watchlisted market)
-    const fresh = await watchedIdSet(svc);
-    if (fresh.has(m.id)) { console.error(`    REFUSED: watchlisted since scan — skipping`); refused++; continue; }
+    // delete-time watchlist re-check (the GC invariant: never delete a watchlisted market) —
+    // targeted per-id counts, immune to any full-table read truncation
+    if (await isWatched(svc, m.id)) { console.error(`    REFUSED: watchlisted since scan — skipping`); refused++; continue; }
     const del = await svc.from('markets').delete().eq('id', m.id).select('id');
     if (del.error) { console.error(`    delete failed: ${del.error.message}`); failed++; continue; }
     const [h2, s2] = await Promise.all([

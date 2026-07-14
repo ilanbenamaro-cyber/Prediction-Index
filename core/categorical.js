@@ -84,12 +84,31 @@ export function parseByDeadline(question) {
   const eo = s.match(/end of (\d{4})/);
   if (eo) return { key: Number(eo[1]) * 10000 + 1231, yearless: false };
   // day = 1-2 digits NOT followed by another digit — else "january 2026" greedily
-  // reads day=20 out of the year (caught by the guard tests, 2026-07-13)
-  const md = s.match(/(january|february|march|april|may|june|july|august|september|october|november|december)\s*(?:(\d{1,2})(?!\d))?(?:,?\s*(\d{4}))?/);
+  // reads day=20 out of the year (caught by the guard tests, 2026-07-13); an ordinal
+  // suffix ("July 4th, 2026") must not eat the year (red-team RT-3, 2026-07-13)
+  const md = s.match(/(january|february|march|april|may|june|july|august|september|october|november|december)\s*(?:(\d{1,2})(?:st|nd|rd|th)?(?!\d))?(?:,?\s*(\d{4}))?/);
   if (md) {
     const year = md[3] ? Number(md[3]) : null;
     const monthDay = MONTHS[md[1]] * 100 + (md[2] ? Number(md[2]) : 28);
     return { key: (year ?? 0) * 10000 + monthDay, yearless: year == null, monthDay };
+  }
+  // numeric dates "by 6/30/2026" (red-team RT-1: without this, every numeric leg collapsed
+  // to the bare-year fallback's SAME key and the distinct-deadline requirement went blind)
+  const num = s.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+  if (num) {
+    const mm = Number(num[1]), dd = Number(num[2]);
+    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      const year = num[3] ? Number(num[3].length === 2 ? '20' + num[3] : num[3]) : null;
+      const monthDay = mm * 100 + dd;
+      return { key: (year ?? 0) * 10000 + monthDay, yearless: year == null, monthDay };
+    }
+  }
+  // quarters "by Q3 2026" → quarter-end
+  const q = s.match(/q([1-4])\s*,?\s*(\d{4})?/);
+  if (q) {
+    const qEnd = { 1: 331, 2: 630, 3: 930, 4: 1231 }[Number(q[1])];
+    const year = q[2] ? Number(q[2]) : null;
+    return { key: (year ?? 0) * 10000 + qEnd, yearless: year == null, monthDay: qEnd };
   }
   const y = s.match(/(\d{4})/);
   if (y) return { key: Number(y[1]) * 10000 + 1231, yearless: false };
@@ -152,6 +171,13 @@ export function assessExclusivity(legs) {
     if (endMonotone != null) basis.end_date_monotone = endMonotone;
     if (textMonotone && endMonotone !== false) return { verdict: 'nested_deadline', basis };
     if (textMonotone && endMonotone === false) return { verdict: 'ambiguous', basis };
+    // NO FALL-THROUGH for deadline-differentiated boards (red-team RT-2, 2026-07-13):
+    // a dated-dominated board with ≥2 DISTINCT deadlines is time-CDF-shaped by wording —
+    // a monotonicity failure (stale quote inversion) must land on conservative raw, never
+    // on the sum test where an in-band sum would de-vig a CDF into a fabricated PMF.
+    // A board whose dated legs all share ONE deadline (a common suffix like "…by 2027?")
+    // keeps falling through: there the deadline is not the differentiator.
+    if (textMonotone === false) return { verdict: 'ambiguous', basis };
   }
 
   if (sum >= EXCLUSIVE_SUM_MIN && sum <= EXCLUSIVE_SUM_MAX) return { verdict: 'exclusive', basis };
