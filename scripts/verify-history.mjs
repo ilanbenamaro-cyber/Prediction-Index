@@ -1,11 +1,18 @@
 // scripts/verify-history.mjs — live verification of the Phase 1 history system.
 //
-// Run against a running server (local dev or a deploy) with the cron secret + the dev
-// Supabase creds in env:
-//   BASE_URL=http://localhost:3001 \
-//   CRON_SECRET=… \
-//   SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… NEXT_PUBLIC_SUPABASE_ANON_KEY=… \
-//   node scripts/verify-history.mjs
+// REQUIRES A RUNNING SERVER (it exercises the real /api/snapshot cron route) — without
+// one it exits 2 (not-run), matching verify-phase2a / verify-2c1-authgate. NOTE: the
+// positive path TRIGGERS A REAL SNAPSHOT BATCH against whatever Supabase project the
+// server points at — run it against DEV. Resolved markets (incl. frozen SpaceX) are
+// skipped by the route, never rewritten.
+//
+// LOCAL RUN RECIPE (fresh port — never reuse a port a dev server has used; stale-build trap):
+//   rm -rf .next && npx next build && npx next start -p 3617 &
+//   set -a; . <(sed 's/^export //' .env.local); set +a
+//   BASE_URL=http://localhost:3617 SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
+//     node scripts/verify-history.mjs
+//   (CRON_SECRET / SUPABASE_SERVICE_ROLE_KEY / NEXT_PUBLIC_SUPABASE_ANON_KEY come from
+//    .env.local; the script's CRON_SECRET must match the server's.)
 //
 // Proves, against the real cron route + market_history table:
 //   NEG  /api/snapshot returns 401 with no / wrong CRON_SECRET (fails closed);
@@ -33,6 +40,18 @@ const snap = (auth) => fetch(`${BASE}/api/snapshot`, { headers: { ...baseHeaders
 
 console.log(`\nPhase 1 history verification → ${BASE}\n`);
 if (!SECRET) { console.error('Set CRON_SECRET (must match the server env).'); process.exit(2); }
+// Preflight: an un-runnable gate must be OBVIOUSLY un-runnable, never a stack trace.
+// Any HTTP response (even 404/307) proves reachability; only network errors throw.
+try {
+  await fetch(BASE, { headers: baseHeaders, signal: AbortSignal.timeout(4000) });
+} catch {
+  console.error(`verify-history requires a RUNNING server at ${BASE} (none reachable).\n`
+    + `Local recipe (see this file's header for the full version):\n`
+    + `  rm -rf .next && npx next build && npx next start -p 3617 &\n`
+    + `  BASE_URL=http://localhost:3617 CRON_SECRET=… SUPABASE_URL=… \\\n`
+    + `    SUPABASE_SERVICE_ROLE_KEY=… NEXT_PUBLIC_SUPABASE_ANON_KEY=… node scripts/verify-history.mjs`);
+  process.exit(2);
+}
 
 // ── NEG: the cron route fails closed ──
 console.log('NEG: /api/snapshot rejects missing / wrong auth');

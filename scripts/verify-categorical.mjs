@@ -35,5 +35,29 @@ try {
   ok(false, `compute threw: ${e.message}`);
 }
 
+// ── 5.6 EXCLUSIVITY GUARD: a live NON-exclusive board must compute GUARDED —
+//    raw prices only, every PMF derivation suppressed (the de-vig on a nested
+//    board fabricated numbers: raw 20.5% displayed as 49%, found 2026-07-13).
+//    Override with GUARDED_SLUG=<event-slug>. ──
+const GUARDED = process.env.GUARDED_SLUG || 'fed-rate-cut-by-629';
+console.log(`\nGuarded (non-exclusive) verification → ${GUARDED}\n`);
+try {
+  const { record } = await computeMarketRecord({ id: GUARDED });
+  const d = record.snapshot.derived;
+  ok(d.kind === 'categorical', `kind === 'categorical' (got ${d.kind})`);
+  ok(d.exclusivity != null && d.exclusivity.verdict !== 'exclusive',
+    `guard fired (verdict: ${d.exclusivity?.verdict ?? 'MISSING — board normalized!'})`);
+  for (const k of ['entropy', 'dominant_prob', 'dominant_outcome', 'consensus_strength', 'implied_winner']) {
+    ok(!(k in d), `${k} suppressed`);
+  }
+  ok((d.outcomes ?? []).every((o) => !('probability' in o) && o.raw_probability != null),
+    'outcomes carry RAW probabilities only (no normalized values)');
+  ok(!/assigns .*probability to/.test(d.narrative ?? ''), 'narrative contains no fabricated-PMF sentence');
+  ok(record.snapshot.source.raw_sha256 === hashRawInputs(record.snapshot.raw_inputs), 'guarded record provenance re-hashes');
+  console.log(`  narrative: ${d.narrative?.slice(0, 120)}…`);
+} catch (e) {
+  ok(false, `guarded compute threw: ${e.message}`);
+}
+
 console.log(failures === 0 ? '\n✅ categorical verification PASSED\n' : `\n❌ ${failures} check(s) FAILED\n`);
 process.exit(failures === 0 ? 0 : 1);

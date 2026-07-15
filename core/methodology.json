@@ -1,5 +1,5 @@
 {
-  "version": "1.7.1",
+  "version": "1.9.0",
   "asset": "spacex-ipo-market-cap",
   "summary": "Derived valuation metrics from Polymarket 'closing market cap above $X' YES prices. Each 'above $X' market is a separate order book, so raw midpoints are arbitrage-adjusted (volume-weighted isotonic regression) into a monotone CDF before any metric is computed. Raw values are preserved alongside the adjusted ones. Two output tiers are kept strictly separate: TIER 1 (derived.market) are pure market transforms with no assumptions; TIER 2 (derived.scenarios) require external inputs and each carries a sourced, dated, ranged assumption (see assumptions.json). A scenario with no usable assumption renders 'input_required', never a fabricated number.",
   "metrics": {
@@ -107,6 +107,11 @@
         "rule": "Before de-vig normalization, PLACEHOLDER legs are removed: a leg is an artifact only when it has ZERO all-time volume AND (a generic '<word> <letter>' label such as 'Candidate C', OR a midpoint still pinned within 0.02 of the 0.5 untraded listing default). Any traded leg (volume > 0) is always kept; a zero-volume leg with a genuinely divergent quote (a real long-shot) is kept too. If filtering would remove every leg, the original set is used unchanged.",
         "rationale": "Polymarket seeds categorical events with 25+ untraded generic legs at ~0.5 each; including them in the de-vig denominator collapses the real leader (a true ~97% leader read 7%). The filter applies to the DERIVED display PMF only — every observed leg still lands in raw_inputs and the hash.",
         "reference": "core/categorical.js isPlaceholderLeg / realCategoricalLegs (Bug Zero, 2026-06-26)"
+      },
+      "exclusivity_guard": {
+        "rule": "Before any de-vig, each categorical board is classified: NESTED_DEADLINE (>=2 legs worded by/before <date> covering >=80% of placeholder-filtered legs, with >=2 distinct deadlines and raw probabilities non-decreasing by deadline within 2.5pp, cross-checked against gamma per-leg endDates — a disagreement lands AMBIGUOUS); else EXCLUSIVE when the placeholder-filtered raw sum is in [0.8, 1.25]; else NON_EXCLUSIVE. Only EXCLUSIVE boards are de-vig normalized. Guarded boards display RAW observed prices with every PMF-dependent derivation suppressed (entropy, dominant outcome/probability, consensus strength, implied winner, the consensus reliability lift) and carry derived.exclusivity { verdict, basis, headline? }; a NESTED board’s headline is its longest-horizon raw probability.",
+        "rationale": "The de-vig presumes mutually-exclusive outcomes. 31% of live categorical boards are nested deadlines (a cumulative curve in time) and others are independent multi-binaries; normalizing them FABRICATES probabilities (live proof: a nested board priced at 20.5% raw displayed as 49%, its 62% chance of no-event erased). Misclassification is asymmetric by design: every wrong verdict degrades to raw-and-honest display, never to a fabricated PMF. History derivations (velocity, jump detection, outcome series) never cross an exclusivity-mode boundary, so a guard transition or band-edge flap can never render as a market move.",
+        "reference": "core/categorical.js assessExclusivity / buildCategoricalRecord (guard branch); lib/market-history.mjs latestModeSegment"
       }
     },
     "narrative": {
@@ -175,6 +180,16 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.9.0",
+      "date": "2026-07-13",
+      "change": "EXCLUSIVITY GUARD HARDENING (behavior change, categorical only; red-team INC 7, two confirmed fabrication paths closed). (1) NO FALL-THROUGH: a dated-dominated board (≥0.8 'by <date>' legs) with ≥2 DISTINCT deadlines never reaches the sum test — monotone ⇒ nested_deadline, non-monotone (stale-quote inversion > 2.5pp eps) ⇒ ambiguous/raw. Previously an in-band sum de-vigged such a CDF into a fabricated PMF (RT-2). Boards whose dated legs share ONE deadline (common suffix, e.g. every leg '…by 2027?') still fall through — there the deadline is not the differentiator, and genuinely exclusive boards keep their honest de-vig. (2) parseByDeadline now parses numeric ('by 6/30/2026') and quarter ('by Q3 2026') deadlines — previously every such leg collapsed to the bare-year fallback's IDENTICAL key, blinding the distinct-deadline requirement (RT-1); ordinal days no longer eat the year ('by July 4th, 2026', RT-3). Every verdict flip this causes degrades toward raw-and-honest, never toward the de-vig. Schema unchanged at 2.1.0 (no contract shape change). SpaceX parity 4/4 byte-identical."
+    },
+    {
+      "version": "1.8.0",
+      "date": "2026-07-13",
+      "change": "EXCLUSIVITY GUARD (behavior change, categorical only). The de-vig no longer runs unconditionally: boards classified NESTED_DEADLINE / NON_EXCLUSIVE / AMBIGUOUS (see metrics.categorical.exclusivity_guard) display RAW observed prices with all PMF derivations suppressed and an explicit structure notice. Schema: the categorical derived contract becomes conditional (exclusivity block XOR the PMF field set) — schema_version 2.0.0 → 2.1.0 (AMENDED 2026-07-13, operator ruling; supersedes this entry's original 'unchanged at 2.0.0'). Rationale: a consumer reading dominant_prob now gets undefined where a number was previously guaranteed — the contract materially changed, and a version that stands still while its contract moves is not a signal. The bump is parity-safe: the parity gate asserts only the raw-inputs hash and derived deep-equality; schema_version is top-level and in neither, and the frozen RESOLVED SpaceX record is never re-stamped (resolution guard skips the pipeline). Survival/binary/touch/bucket paths untouched; SpaceX parity 4/4 byte-identical."
+    },
     {
       "version": "1.7.1",
       "date": "2026-07-02",

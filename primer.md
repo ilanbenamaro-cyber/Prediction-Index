@@ -8,6 +8,36 @@
 > There is **no `.workflows/_system/` dir, no `codebase.md`/`MEMORY.md`** — the global `/sync`
 > skill tolerates their absence (updated 2026-06-18); don't be alarmed when it skips them.
 
+## GATE INVENTORY (standing reference — established 2026-07-13; keep current)
+
+**THE CONVENTION: not-run-by-design exits 2 with a recipe.** A gate that cannot run in the
+current environment must SAY SO and exit 2 — never a stack trace, never a silent 0. Any future
+gate follows this. Exit 0 = the gate's full assertion set passed; exit 1 = a real check failed.
+**A red gate means: check the "if red" column FIRST, then suspect code.** (Why this table
+exists: verify-history sat "known-red" across multiple sessions while the system under it was
+healthy — it had simply never been run. See [[decisions]] "A gate that cannot be run…".)
+
+| Gate | Runs where | Live-API dependency | Exits | Green output | If red, check THIS first |
+|---|---|---|---|---|---|
+| verify-phase2-binary | plain-local | **gamma+CLOB** (2 fixture slugs; BINARY `us-recession-by-end-of-2026` rots ~Jan 2027 — `BINARY_SLUG`/`LADDER_SLUG` override) | 0/1 | `✓ BINARY GATE PASSED` | **gamma serving the fixtures** (see [[gotchas]]), THEN record shape |
+| verify-history | **needs-server** (`BASE_URL`) + CRON_SECRET + dev Supabase | gamma+CLOB (batch computes watched markets) | 0/1/**2**+recipe | `✅ history verification PASSED` (22 checks) | a watched market failing live compute; recipe in script header; **dev only — POS runs a real batch** |
+| verify-accuracy | plain-local | gamma+CLOB — **except** RESOLVED published feed → zero network | 0 (PASS/OK/**FINAL**)/1/2 (STALE) | `VERDICT: PASS\|OK\|FINAL` — **FINAL is the current normal** (published feed = resolved SpaceX; no banner) | age zone first (STALE = re-snapshot then re-verify fresh); upstream cross-source divergence is surfaced, not our bug |
+| verify-categorical | plain-local | gamma+CLOB (live compute) | 0/1 | `✅ categorical verification PASSED` | gamma fixture-market availability |
+| verify-phase2a | **needs-deploy** (`BASE_URL` + Vercel bypass) | deployed app + gamma | 0/1/**2**+recipe | phase-2a banner | deployment env vars |
+| verify-2c1-authgate | **needs-server** (`BASE_URL`) | none beyond the app | 0/1/**2**+recipe | `✓ AUTH-GATE NEGATIVE PROOF PASSED` | middleware/session changes; server's NEXT_PUBLIC env |
+| verify-2c2-rail | plain-local | dev Supabase (writes self-cleaning fixtures) | 0/1/2 no creds | `✓ RAIL-SCAN GATE PASSED` | readScan firewall / RLS drift; dev DB state |
+| verify-2c3-detail | plain-local | dev Supabase (frozen SpaceX row) | 0/1/2 | `✓ DETAIL DATA-LAYER GATE PASSED` | **record-shape assumptions in the GATE** (bit 2026-07-10: pre-0010 confidence), then dev SpaceX seed |
+| verify-2c4-search-add | plain-local | dev Supabase + gamma (search + compute-then-add) | 0/1/2 | `✓ SEARCH+ADD GATE PASSED` | gamma/CLOB availability, then RLS |
+| verify-phase2b-auth | plain-local | dev Supabase GoTrue (real signups) | 0/1/2 | `✓ AUTH GATE PASSED` (11 checks) | **hook enabled?** (the negative check IS the enabled-proof); TEST_EMAIL_DOMAIN; prod runs need the confirm-email recipe ([[gotchas]]) |
+| verify-phase2b-isolation | plain-local | dev Supabase | 0/1/2 | `✓ ISOLATION GATE PASSED` (17 checks) | **treat red as P0** — this is THE RLS regression proof; re-run after ANY auth change |
+| verify-phase2b-watchlist | plain-local | dev Supabase | 0/1/2 | `✓ WATCHLIST GATE PASSED` | RLS / lib/watchlist typed-error drift |
+| verify-invite-flows | plain-local | dev Supabase GoTrue (~12 signups — rate limits) | 0/1/2 | `✓ INVITE FLOWS GATE PASSED` (45 checks) | the interpolated raw error in the failing line (42501 = grant/ACL class, bit prod 2026-07-10) |
+| verify-gc-browse | plain-local | dev Supabase (self-cleaning `gcv-` fixtures; spawns gc-browse-markets.mjs) | 0/1/2 | `✓ GC-BROWSE GATE PASSED` (16 checks) | leftover `gcv-` fixtures from a crashed prior run, then FK-cascade/RLS drift; HARD_EXCLUDE must hold BOTH SpaceX ids ([[gotchas]]) |
+
+"plain-local" still means env creds from `.env.local` (+ the `SUPABASE_URL`/`SUPABASE_ANON_KEY`
+aliases). Every gate is an **integration gate by construction** — the Live-API column marks what
+can turn it red for reasons unrelated to our code. Hermetic recorded fixtures: parked future item.
+
 ## ⮕ DIRECTION (2026-07-10, latest): SELF-SERVICE INVITES — MERGED + LIVE ON PROD (`main` @ `aa2262f`)
 - **`main` is at `aa2262f`, in sync with origin.** Two merges: PR #2 `111b29a` (the feature — 11
   gated commits) + PR #3 `aa2262f` (the grant-gap follow-up). Gates on merged main: tsc 0 ·

@@ -62,3 +62,109 @@ test('categorical: multi-leg, no numeric $ threshold', () => {
   ]);
   assert.equal(ladderShapeFromMarkets(m), 'categorical');
 });
+
+// ── Marker-less touch verbs: "reach $N" / "dip to $N" (gamma survey 2026-07-13) ──
+// The crypto "what price will X hit" family words touch legs WITHOUT the (HIGH)/(LOW)
+// marker. Rule (operator-approved): exactly the reach/dip-to verb families, each
+// governing a money amount ($-adjacency), with a ≥2-leg quorum. The negative controls
+// below are PERMANENT GUARDS — every one is a real live/stored market that a broadened
+// regex once could have (or would have) mis-flipped. If your classifier change breaks
+// one of these, the change is wrong, not the test.
+import { parseTouchLeg } from '../core/touch.js';
+
+test('touch verbs: two-sided reach/dip board (Bitcoin June 29-July 5, verbatim legs)', () => {
+  const m = q([
+    'Will Bitcoin reach $74,000 June 29-July 5?',
+    'Will Bitcoin reach $62,000 June 29-July 5?',
+    'Will Bitcoin dip to $58,000 June 29-July 5?',
+    'Will Bitcoin dip to $46,000 June 29-July 5?',
+  ]);
+  assert.equal(ladderShapeFromMarkets(m), 'directional_touch');
+});
+
+test('touch verbs: one-sided reach-only board (Ethereum July, verbatim legs)', () => {
+  const m = q([
+    'Will Ethereum reach $2,500 in July?',
+    'Will Ethereum reach $2,400 in July?',
+    'Will Ethereum reach $2,300 in July?',
+  ]);
+  assert.equal(ladderShapeFromMarkets(m), 'directional_touch');
+});
+
+test('NEGATIVE: SpaceX "above $X" settlement wording stays survival (the frozen hash)', () => {
+  const m = q([
+    'SpaceX IPO closing market cap above $4T?',
+    'SpaceX IPO closing market cap above $2T?',
+    'SpaceX IPO closing market cap above $1T?',
+  ]);
+  assert.equal(ladderShapeFromMarkets(m), 'survival');
+});
+
+test('NEGATIVE: one stray "hit $" leg does not flip a categorical event to TOUCH (GTA VI, verbatim)', () => {
+  const m = q([
+    'Will bitcoin hit $1m before GTA VI?',
+    'Another pandemic before GTA VI?',
+    'Russia-Ukraine ceasefire before GTA VI?',
+  ]);
+  // NOT touch (bare "hit" excluded). Since 5.5 (all-legs-$ survival tightening) a
+  // MIXED board is 'unsupported' — served as an explicit honest refusal, never routed
+  // to survival (throws on the unparseable leg) or categorical (would de-vig
+  // non-exclusive outcomes into a fabricated PMF).
+  assert.equal(ladderShapeFromMarkets(m), 'unsupported');
+});
+
+test('NEGATIVE: quorum — a single reach-$ leg among categorical legs does not flip the event to TOUCH', () => {
+  const m = q([
+    'Will bitcoin reach $1m before GTA VI?', // hypothetical single verb-leg: below quorum
+    'Another pandemic before GTA VI?',
+    'New Rihanna album before GTA VI?',
+  ]);
+  // below quorum → not touch; a mixed board is 'unsupported' since 5.5
+  assert.equal(ladderShapeFromMarkets(m), 'unsupported');
+});
+
+test('NEGATIVE: "reach" without money is not a touch verb (World Cup semifinals, stored on dev)', () => {
+  const m = q([
+    'Will Argentina reach the semifinals?',
+    'Will Spain reach the semifinals?',
+  ]);
+  assert.equal(ladderShapeFromMarkets(m), 'categorical');
+});
+
+test('NEGATIVE: "launches reach space" is not a touch verb (Starship, on the dev watchlist)', () => {
+  const m = q([
+    'Will 5 or more SpaceX Starship launches reach space in 2026?',
+    'Will 10 or more SpaceX Starship launches reach space in 2026?',
+  ]);
+  assert.equal(ladderShapeFromMarkets(m), 'categorical');
+});
+
+test('NEGATIVE: bare "hit $X by <date>" multi-deadline stays out of touch (STRC, verbatim)', () => {
+  const m = q([
+    'Will STRC hit $100 by June 30?',
+    'Will STRC hit $100 by September 30?',
+    'Will STRC hit $100 by December 31?',
+  ]);
+  assert.equal(ladderShapeFromMarkets(m), 'survival'); // still mis-shaped — parked deadline-ladder gap, NOT fixed by verbs
+});
+
+test('NEGATIVE: "between" buckets stay bucket_pmf beside reach-free legs', () => {
+  const m = q([
+    'Will the price of Bitcoin be between $62,000 and $64,000 on June 24?',
+    'Will the price of Bitcoin be less than $56,000 on June 24?',
+  ]);
+  assert.equal(ladderShapeFromMarkets(m), 'bucket_pmf');
+});
+
+test('parseTouchLeg: verb sides — reach→HIGH, dip to→LOW; marker keeps precedence; unsideable→null', () => {
+  assert.deepEqual(parseTouchLeg('Will Bitcoin reach $74,000 June 29-July 5?'), { side: 'HIGH', level: 74000 });
+  assert.deepEqual(parseTouchLeg('Will Bitcoin dip to $46,000 June 29-July 5?'), { side: 'LOW', level: 46000 });
+  assert.deepEqual(parseTouchLeg('Will WTI hit (LOW) $75 Week of June 22 2026?'), { side: 'LOW', level: 75 });
+  // marker precedence over a verb, if both ever co-occur
+  assert.deepEqual(parseTouchLeg('Will X reach (LOW) $10?'), { side: 'LOW', level: 10 });
+  // $-bearing but unsideable (bare hit / settlement wording) → null (fetchTouchMeta logs it loudly)
+  assert.equal(parseTouchLeg('Will STRC hit $100 by June 30?'), null);
+  assert.equal(parseTouchLeg('SpaceX IPO closing market cap above $4T?'), null);
+  // money-less → null (quiet skip is legitimate)
+  assert.equal(parseTouchLeg('Will Argentina reach the semifinals?'), null);
+});

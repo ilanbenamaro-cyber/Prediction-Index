@@ -15,7 +15,11 @@ import { computeMarketRecord } from '../lib/compute.mjs';
 import { classifyMarketKind, hashRawInputs } from '../core/fetch.js';
 
 const BINARY = process.env.BINARY_SLUG || 'us-recession-by-end-of-2026';
-const LADDER = process.env.LADDER_SLUG || 'will-wti-hit-week-of-june-22-2026';
+// LADDER fixture = the eternal SURVIVAL reference (RESOLVED → never changes; gamma-stable;
+// compute-only read, no DB write). The previous default (will-wti-hit-week-of-june-22-2026)
+// rotted two ways: dated weekly slugs expire, and WTI "hit (HIGH)/(LOW)" markets are
+// directional_touch by construction — not a survival ladder at all (found 2026-07-13).
+const LADDER = process.env.LADDER_SLUG || 'spacex-ipo-closing-market-cap-above';
 
 let failures = 0;
 const ok = (c, m) => { console.log(`${c ? '  ✓' : '  ✗ FAIL:'} ${m}`); if (!c) failures++; };
@@ -37,8 +41,13 @@ async function run() {
   ok(d.kind === 'binary', `derived.kind === 'binary'`);
   ok(typeof d.probability === 'number' && d.probability > 0 && d.probability < 1, `probability in (0,1): ${d.probability}`);
   ok(config.kind === 'binary', `config.kind === 'binary' (drives markets.kind in cache)`);
-  ok(!!d.confidence?.tier && Array.isArray(d.confidence?.reasons) && d.confidence.reasons.length > 0,
-    `confidence ${d.confidence?.tier} with reasons: ${JSON.stringify(d.confidence?.reasons)}`);
+  // post-0010 confidence split: {reliability, liquidity} each {tier, reasons} — assert BOTH
+  // dimensions (same staleness class as 2c3, fixed there in 07684a1)
+  ok(!!d.confidence?.reliability?.tier && Array.isArray(d.confidence?.reliability?.reasons)
+       && d.confidence.reliability.reasons.length > 0
+     && !!d.confidence?.liquidity?.tier && Array.isArray(d.confidence?.liquidity?.reasons)
+       && d.confidence.liquidity.reasons.length > 0,
+    `confidence reliability=${d.confidence?.reliability?.tier} + liquidity=${d.confidence?.liquidity?.tier} with reasons`);
   ok(!Array.isArray(d.markets), `no ladder markets[] on a binary record`);
   const sha = record.snapshot.source.raw_sha256;
   ok(hashRawInputs(record.snapshot.raw_inputs) === sha, `hashRawInputs(raw_inputs) === raw_sha256 → in-browser verify will ✓`);

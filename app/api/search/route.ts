@@ -22,7 +22,7 @@ interface GammaEvent {
   markets?: Array<{ question?: string }>;
   tags?: GammaTag[];
 }
-export type MarketType = 'binary' | 'survival' | 'bucket_pmf' | 'directional_touch' | 'categorical';
+export type MarketType = 'binary' | 'survival' | 'bucket_pmf' | 'directional_touch' | 'categorical' | 'unsupported';
 export interface SearchResult {
   slug: string;
   title: string;

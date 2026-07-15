@@ -20,7 +20,7 @@ import { buildFreshness } from './freshness.js';
 import { ASSET } from './fetch.js';
 import { labelLt, labelBetween, labelGt } from './market-config.js';
 
-export const SCHEMA_VERSION = '2.0.0';
+export const SCHEMA_VERSION = '2.1.0';
 
 // Config → derived-metric option slices. A null config means "legacy SpaceX
 // defaults" (the function-level defaults), keeping existing callers and the
@@ -82,6 +82,23 @@ function probAt(markets, threshold) {
 function buildDerivedCore({ markets, rawInputs = null, anomalies = null, config = null, lifecycle = null, midpointFallback = null, daysToExpiry = null, liquidity = null }) {
   const adj = adjustSnapshot(markets, floorOpts(config)); // markets carry raw_prob + adjusted_prob + bucket_prob>=0
   const adjusted = adj.markets;
+  // SHAPE TRIPWIRE (INC 7 red-team, log-only — the record is untouched): a genuine survival
+  // ladder is near-monotone by construction, so when the MAJORITY of adjacent rungs invert,
+  // or rungs share one threshold, the board is structurally NOT a P(>X) curve — the signature
+  // of a misrouted competing/touch/bare-hit board (the classifier families with no live
+  // instance yet). Instrument forward, never guess: this converts "silent wrong number
+  // someday" into "logged the day it happens". One structured line, same convention as
+  // [touch-meta] / [backfill-trigger].
+  const twPairs = Math.max(0, (markets?.length ?? 0) - 1);
+  const twDup = new Set((markets ?? []).map((m) => m.threshold)).size < (markets?.length ?? 0);
+  if (twPairs >= 2 && (twDup || adj.monotonicity_violations > twPairs * 0.5)) {
+    console.warn('[shape-tripwire]', JSON.stringify({
+      id: config?.id ?? null,
+      violations: adj.monotonicity_violations,
+      pairs: twPairs,
+      duplicate_thresholds: twDup,
+    }));
+  }
   const impliedMedian = computeImpliedMedian(adjusted);
   const impliedMean = computeImpliedMean(adjusted, meanOpts(config)); // central / base case
   // Bug 3: near-settlement is computed from the ADJUSTED curve + days-to-expiry. The history

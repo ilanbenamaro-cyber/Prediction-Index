@@ -13,6 +13,7 @@ import { DEPS } from '@/lib/market-deps.mjs';
 import { createClient } from '@/lib/supabase/server';
 import { listVisible } from '@/lib/watchlist.mjs';
 import { AddToWatchlist, type Membership } from './AddToWatchlist';
+import { ShapeNotice } from './ShapeNotice';
 import { canonicalizeRawInputs } from '@/core/fetch.js';
 import { after } from 'next/server';
 import { headers } from 'next/headers';
@@ -590,6 +591,17 @@ export function DetailSkeleton() {
 }
 
 function DetailError({ id, status, message }: { id: string; status: number; message?: string }) {
+  // 5.5: an UNSUPPORTED-shape board is a deliberate refusal, not a failure — render the
+  // honest-structure notice (shared ShapeNotice primitive), not an apologetic error.
+  if (message?.startsWith('UNSUPPORTED_SHAPE:')) {
+    return (
+      <div className="empty" data-zone="detail-unsupported" data-status={status}>
+        <ShapeNotice label="UNSUPPORTED STRUCTURE" field="unsupported-notice">
+          {message.replace(/^UNSUPPORTED_SHAPE:\s*/, '')}
+        </ShapeNotice>
+      </div>
+    );
+  }
   return (
     <div className="empty wl-error" data-zone="detail-error" data-status={status}>
       Couldn’t load <code>{id}</code> (status {status}).<br />

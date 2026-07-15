@@ -5,6 +5,170 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## Pre-0010 cached browse markets that RESOLVE before re-browse 422 FOREVER — class census'd and CLEARED (2026-07-15)
+The resolved-with-prior serve path freezes the STORED record as authoritative and never
+recomputes — so a browse market cached before the 0010 confidence split that resolves before
+anyone re-browses it fails current-schema validation (422, graceful UI, no fabrication) on
+every subsequent view, permanently. OPEN old-shape markets SELF-HEAL (serve recomputes and
+re-caches); only resolved ones fossilize. Census (prod, 2026-07-15): exactly 2 old-shape
+latest snapshots existed, 1 was the fossil (cleared via `gc-browse-markets --id` + re-browse,
+rebuilt valid), 1 self-healed on probe — **the class is now EMPTY on both envs and cannot
+refill** (all writes are new-shape). If a future breaking derived reshape ships, this class
+re-opens: re-run the census (old-shape latest snapshot ∧ resolved) or ship the design-gated
+serve-path self-heal on the futures list. Related: "A breaking `derived` reshape also
+invalidates STORED FINAL records" below — this is that gotcha's browse-market corollary.
+
+## Playwright screenshot 5s cap → in-page html-to-image workaround (proven ×7) + password-less dev login
+A backgrounded browser throttles rAF, so Playwright's "element stable" wait starves and
+screenshots hit the 5s backend cap. Workaround (now proven ×12 across two sessions): inject
+`html-to-image` from unpkg via browser_evaluate, `toJpeg(document.documentElement, {quality:
+~0.45, pixelRatio: 1})` → dataURL → save via evaluate's `filename` param → base64-decode in
+Bash → Read the jpeg. Login without typing credentials into the form: programmatic GoTrue
+sign-in in a Node script (the verify-script pattern) → write the session as the
+`sb-<ref>-auth-token` cookie (`'base64-' + base64url(JSON.stringify(session))`, chunk at
+~3000 chars to `.0/.1` names if longer) via document.cookie → navigate; SSR middleware
+accepts it.
+
+## Gamma/wording parse traps that feed the guard — endDates and deadline text
+(1) Gamma per-leg `endDate` can be STALE or TIED across legs (fed-rate-cut: five legs shared
+one date) and occasionally wrong — never trust it alone; the guard uses it only as a
+CROSS-CHECK and only when mostly-distinct (≥0.8 distinct fraction). (2) parseByDeadline digit
+traps, each caught by a permanent test: "by January 2026" must not read day=20 from the year
+(digit-boundary); "by July 4th, 2026" must not lose the year to the ordinal (RT-3); numeric
+"by 6/30/2026" and "by Q3 2026" must parse to DISTINCT keys or the nested detector goes blind
+(RT-1). Wording is the load-bearing signal — parser gaps become fabrication paths.
+
+## The exclusivity guard's fall-through could reproduce the fabrication it exists to prevent (RT-1/RT-2)
+**A guard is only as good as its worst untested branch (INC 7 red-team, 2026-07-14).** Two
+confirmed fabrication paths lived INSIDE assessExclusivity's own branch order: RT-1 — numeric
+("by 6/30/2026") and quarter ("by Q3 2026") deadlines all collapsed to the bare-year fallback's
+ONE parse key, so the distinct-deadline requirement went blind and the board fell through to the
+sum test, where an in-band sum de-vigged a time-CDF into a PMF; RT-2 — a dated-dominated board
+with a single >2.5pp stale-quote inversion failed text-monotone and fell through the same way.
+Fixed at methodology 1.9.0 (no-fall-through rule + numeric/quarter/ordinal parsing), locked by
+5 permanent tests in test/exclusivity-guard.test.js (RT-1, RT-1b, RT-2, RT-3, shared-deadline
+regression). **Any change to assessExclusivity's branch order must re-run these 5 tests** — the
+asymmetry principle ("every misclassification degrades to raw") is a property of the branch
+ORDER, not of any single branch.
+
+## DO NOT RE-WATCHLIST `strc-hits-100-by-20260618001620693` on dev (un-watchlisted 2026-07-14, INC 7 triage)
+**Severity call P2, disposition executed (dev ref `dxoyxjxcfbgygvjvrrfk`; 1 personal watchlist
+row deleted; 16 history rows + `markets` row KEPT):** the board is the NAMED deadline-ladder
+tripwire — three legs at ONE price level ($100) across three deadlines, stored as a
+threshold_ladder of identical thresholds, i.e. a meaningless degenerate curve snapshotted on
+every batch. Exposure was dev-only (never on prod), which is what holds it at P2. The honest
+shape is the time-CDF EPIC; until then the board is browse-only. The INC 7 [shape-tripwire]
+(duplicate_thresholds) now logs loudly if this family is ever computed again — including when
+a user re-adds one. See the TRIPWIRE entry below for the family.
+
+## GC-browse residual race (ACCEPTED v1, operator ruling 2026-07-13) — exact conditions + the v2 fix
+`scripts/gc-browse-markets.mjs` re-checks the watchlists immediately before each delete, but the
+re-check and the `delete from markets` are TWO statements: a watchlist INSERT that commits in the
+window between them is FK-cascade-deleted together with the market (all four FKs onto
+`markets(id)` cascade). Triggering it requires a user to watchlist a market that NOBODY has
+viewed in ≥30 days (the retention window is the real shield — `last_checked_at` is bumped on
+every serve) in that same instant. Accepted for v1 by explicit operator ruling. **v2 (do not
+build until ruled needed):** a migration-defined SQL function doing scan+delete in ONE
+transaction/statement (`delete … where not exists (select 1 from watchlists …)`), service-role
+only. Related trap the gate caught at birth: the frozen record's `markets.id` is the EVENT SLUG
+`spacex-ipo-closing-market-cap-above`, NOT the internal config id `spacex-ipo-market-cap` —
+HARD_EXCLUDE pins both; never "protect SpaceX" by the config id alone.
+
+## TRIPWIRE — "browse=cache" is proven at 4 days post-resolution ONLY; CLOB history has a REAL horizon and the failure is SILENT
+Do not let "browse = cache" harden into "forever, at any age". Pricesmart experiment
+(2026-07-13, prod): deleting a resolved browse market and re-browsing regenerated the record
+(deployed `/api/market`, settled outcomePrices) AND all 6 history rows, same dates, 0 failed —
+**4 days after resolution**. The horizon probe (same date): CLOB `prices-history` returns full
+curves for closed markets ending ≥ ~Nov 2023 (`ilya-still-at-openai-on-jan-1`, 46 points) and
+**HTTP 200 with ZERO points** for older ones (2011→early-2023 enders all empty) — an era
+boundary (pre-CLOB/AMM markets), not — so far — a rolling window, but rolling deletion is NOT
+disproven. **The failure mode is silent: the record regenerates, the chart comes back empty,
+nobody notices.** The guard: GC's per-market report prints `RESOLVED <n>d ago` (or `age
+UNKNOWN — regeneration not guaranteed`) so the operator sees the actual risk before typing
+--apply. If a resolved browse market older than the proven range matters, probe its legs'
+prices-history BEFORE GC'ing it.
+**Retention point 2 (2026-07-15, prod):** `what-price-will-bitcoin-hit-in-june-2026`, a touch
+board ~2.5 weeks post-resolution, rebuilt **30 history rows where 29 existed** (2026-06-02→07-01,
+0 failed — the rebuild recovered a day the original capture missed). Proven range now: 4 days
+AND ~2.5 weeks post-resolution; the ~Nov-2023 era boundary stands as the only observed cliff.
+
+## The frozen record's `markets.id` is the EVENT SLUG, not the config id — this trap will bite again
+`markets.id` = `spacex-ipo-closing-market-cap-above` (the event slug; dev AND prod verified
+2026-07-13). The internal config id `spacex-ipo-market-cap` (core/fetch.js ASSET.id) does NOT
+exist as a markets row. INC 6's HARD_EXCLUDE was originally pinned to the config id alone —
+i.e. the guard protecting the frozen provenance anchor pointed at a row that isn't there, and
+only the watchlist check stood between GC and SpaceX. The verify gate caught it at birth
+(operator's approved design had the same blind spot). Rule: anything that must protect or
+target the frozen record BY ID uses the event slug — and any id-pinned guard gets a gate check
+that the pinned id actually EXISTS in the table it guards.
+
+## reconstruct-guarded-history: re-run counts are NOT an idempotency check (two artifacts)
+(1) The per-row skip tests `derived.exclusivity` PRESENCE, which conflates "not yet processed"
+with "processed → verdict exclusive" (the 1.8.0 schema is exclusivity XOR PMF, so
+exclusive-verdict rows carry NO block). After the 2026-07-13 prod apply (1241 reconstructed),
+a re-run reports `reconstructed=421` FOREVER — those are rows whose OWN raw sums sit in the
+[0.8,1.25] band and legitimately rebuilt to unguarded PMFs (verified: all stamped 1.8.0 with
+raw_probability). Re-applying rewrites identical content; the counter is noise, not drift.
+(2) The market-level probe verdict reads `rows[rows.length-1]` of an UNORDERED select with
+live gamma — it can flip between runs (prod: who-will-trump-nominate flipped non_exclusive →
+exclusive, +9 skipped). Consequence is bounded (the probe only gates which boards get per-row
+treatment; each row's stored verdict comes from its own data), but do not read re-run counts
+as a health signal — verify content (methodology stamp + raw_probability), not counters.
+
+## DO NOT RE-WATCHLIST `next-openai-model-arena-debut-685` on dev (un-watchlisted 2026-07-13, operator order)
+**Why it's off the watchlist (dev ref `dxoyxjxcfbgygvjvrrfk`; 1 personal + 1 org row deleted;
+its 62 reconstructed history rows and `markets` row are KEPT for browse reuse):** the board is
+a THRESHOLD-NESTED family member ("1450+/1470+…" cumulative legs — one of the two unmodeled
+families from the 5.6 exclusivity survey). Today its verdict happens to flip EXCLUSIVE at
+settled sums ≈1.02, so the de-vig (÷1.02 ≈ raw) is de-minimis — but that is a COINCIDENCE of
+current prices, not a property of the board: as legs settle or prices move, the verdict can
+flip and future cron rows would alternate between guarded-raw and de-vigged PMFs, polluting
+the history with mode churn for a structure the pipeline cannot honestly model yet. The honest
+state is browse-only until the time-CDF/nested-shape EPIC ships a real cumulative shape.
+Re-adding it makes the cron resume snapshotting it (allWatchedMarketIds reads the watchlists)
+and re-creates exactly this problem.
+
+## TRIPWIRE — the DEADLINE-LADDER shape gap: "hit $X by <date₁…dateₙ>" boards have NO honest shape
+**Named tripwire (2026-07-13, INC 5 survey; deliberately NOT fixed by the reach/dip classifier):**
+events whose legs share ONE price level across MULTIPLE deadlines ("Will STRC hit $100 by
+June 30 / Sep 30 / Dec 31?", `when-will-bitcoin-hit-150k`) fit NO existing shape: touch math
+(high/low series over LEVELS) cannot express them — dedup would collapse identical strikes —
+and survival parses them into a DEGENERATE ladder of identical thresholds. Bare "hit" is
+deliberately not a touch verb for exactly this reason (plus direction ambiguity — see
+TOUCH_VERB_RE in core/fetch.js). **The tripwire, DISPOSITIONED at INC 7 (2026-07-14):**
+`strc-hits-100-by-20260618001620693` — P2 (dev-only exposure), un-watchlisted (see its own
+entry above); the [shape-tripwire] duplicate-thresholds warn (core/snapshot.js, INC 7) now
+logs the family loudly wherever it's computed. If a user adds another "hit $X by dates" board,
+it still looks wrong but no longer silently. The fix remains a NEW SHAPE (deadline ladder /
+cumulative touch-in-time) — the time-CDF EPIC. The related some($-leg) looseness (one stray
+"$1m before GTA VI" leg flipping a categorical to survival) was **FIXED at 5.5**: survival now
+requires ALL legs $-worded, mixed boards are 'unsupported' (typed 422, no write) — proven live
+on the GTA VI board and exact-asserted in test/market-shape.test.js.
+
+## verify-history needs a RUNNING server — and its positive path TRIGGERS a real snapshot batch
+**Symptom (mis-filed as "crash" until 2026-07-13):** with no server it died on an unhandled
+`ECONNREFUSED ::1:3001` stack trace and everyone read it as broken code. It was never broken —
+it had simply NEVER BEEN RUN (needs `BASE_URL` + a live server + `CRON_SECRET`); on its first
+real run (2026-07-13, production build, fresh port 3617) it passed 22/22, including provenance
+re-hash on ALL 10 watched markets' stored history records and the market_history deny-all RLS
+check. Now preflights reachability → clean exit 2 with the recipe (the full recipe lives in the
+script header). Two standing cautions:
+1. The POS check runs a REAL `/api/snapshot` batch against whatever project the server points
+   at — only ever run it at DEV. Resolved markets (incl. frozen SpaceX) are skipped by the
+   route (verified: SpaceX snapshot fetched_at unchanged after the run).
+2. Fresh, never-used port + `rm -rf .next` first — the stale-build trap has produced false
+   green in this repo before.
+
+## verify-phase2-binary's fixtures are LIVE gamma markets — check gamma before suspecting code
+The LADDER no-regression fixture is the resolved SpaceX event (`spacex-ipo-closing-market-cap-above`,
+chosen 2026-07-13 after the previous fixture rotted: `will-wti-hit-week-of-june-22-2026` was BOTH a
+dated weekly slug AND a directional_touch market by construction — "hit (HIGH)/(LOW)" wording —
+so the survival assertions could never pass). The gate therefore depends on gamma continuing to
+serve that resolved event. Stable since inception; `seed-spacex.mjs` shares the dependency and
+fails loudly first; `LADDER_SLUG`/`BINARY_SLUG` overrides exist. **If this gate goes red, check
+gamma BEFORE suspecting code.** (All verify-* gates are integration gates by construction — a
+hermetic recorded-fixture design is a parked future item, not this pass.)
+
 ## Running the signup verify gates against PROD needs a real-MX domain + Confirm-email OFF for the window
 **Symptom (bit the prod standup, 2026-07-10):** all deny-path checks passed but every positive
 signup failed — `@example.com` is rejected by prod's stricter email-deliverability validation
