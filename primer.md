@@ -38,7 +38,41 @@ healthy — it had simply never been run. See [[decisions]] "A gate that cannot 
 aliases). Every gate is an **integration gate by construction** — the Live-API column marks what
 can turn it red for reasons unrelated to our code. Hermetic recorded fixtures: parked future item.
 
-## ⮕ DIRECTION (2026-07-10, latest): SELF-SERVICE INVITES — MERGED + LIVE ON PROD (`main` @ `aa2262f`)
+## ⮕ DIRECTION (2026-07-15, latest): PERFECTION PASS — MERGED (`main` @ `3e2e62a`)
+- **`main` is at merge `3e2e62a`** (--no-ff, branch `fix/perfection-pass-2026-07-13`, 13 commits,
+  base `17c0731`). Gates at merge, clean production build: **parity 4/4 · 503/503 · tsc 0 ·
+  verify 13/13** (11 plain-local + 2c1 + history on a live server; phase2a = exit-2-by-design).
+- **The headline P1:** the categorical de-vig FABRICATED probabilities on every non-mutually-
+  exclusive board (fed-rate-cut displayed 49% for a market-priced 20.5%; ~56% of live
+  categorical boards non-exclusive; three of four live instances were sum-ok and invisible to a
+  sum test). Fixed by the **exclusivity guard** (core/categorical.js assessExclusivity,
+  methodology 1.8.0 → red-team-hardened **1.9.0**, schema **2.1.0**) — verdicts F1 nested / F2
+  non-exclusive / F3 ambiguous all degrade to raw-and-honest; the asymmetry is a property of
+  the BRANCH ORDER (5 RT tests lock it, see [[gotchas]]). **1241 prod + 282 dev** history rows
+  reconstructed in place, raw hashes byte-verified, zero purged.
+- **Also shipped:** touch classifier (reach/dip, marker-less); 5.5 all-legs-$ survival +
+  'unsupported' shape; browse-market **GC** (operator-gated, 19-check gate, browse=cache proven
+  at 4d AND ~2.5wk post-resolution — retention tripwire in [[gotchas]]); **[shape-tripwire]**
+  log-only instrument; pre-0010 browse-fossil 422 class census'd + CLEARED on both envs;
+  dev un-watchlists: next-openai-model, strc-hits-100 (do NOT re-add — [[gotchas]]).
+- **FUTURES (owed, must not evaporate):**
+  1. **time-CDF / competing-vs-cumulative EPIC** — nested-deadline + threshold-nested families
+     + the four INC 7 classifier P2s are ONE family; dominant mis-served volume, the biggest
+     product opportunity found. Until then the tripwires are the instrument.
+  2. methodology.json **publish drift-check** — core/ vs docs/api/v1 copy is an ownerless
+     manual step (root cause of the INC 4 rot); automate or gate it.
+  3. **Serve-path self-heal** for schema-fossilized frozen records (fails validation → rebuild
+     via resolved-no-prior) — DESIGN-GATED, do not slip in.
+  4. schema_version/hash decoupling ruling — RESOLVED 2026-07-13 (bump to 2.1.0; see
+     [[decisions]] "a contract that changes while its version stands still").
+  5. Hermetic fixture for verify-phase2-binary (live-gamma fixture rots by expiry AND shape).
+  6. config-less %-ladder `$`-prefix default; band-edge verdict hysteresis; reconstruct-script
+     probe nondeterminism (order the select if ever re-run); favicon.ico 404.
+- **The pass lesson** (full text in [[decisions]]): every real finding sat one layer beneath a
+  green surface; every tool that deletes/skips/classifies must fail LOUD; a green gate proves
+  only what someone thought to assert.
+
+## ⮕ DIRECTION (2026-07-10): SELF-SERVICE INVITES — MERGED + LIVE ON PROD (`main` @ `aa2262f`)
 - **`main` is at `aa2262f`, in sync with origin.** Two merges: PR #2 `111b29a` (the feature — 11
   gated commits) + PR #3 `aa2262f` (the grant-gap follow-up). Gates on merged main: tsc 0 ·
   470/470 · parity 4/4.
