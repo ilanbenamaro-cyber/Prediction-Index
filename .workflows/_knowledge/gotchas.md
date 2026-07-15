@@ -5,6 +5,19 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## The exclusivity guard's fall-through could reproduce the fabrication it exists to prevent (RT-1/RT-2)
+**A guard is only as good as its worst untested branch (INC 7 red-team, 2026-07-14).** Two
+confirmed fabrication paths lived INSIDE assessExclusivity's own branch order: RT-1 — numeric
+("by 6/30/2026") and quarter ("by Q3 2026") deadlines all collapsed to the bare-year fallback's
+ONE parse key, so the distinct-deadline requirement went blind and the board fell through to the
+sum test, where an in-band sum de-vigged a time-CDF into a PMF; RT-2 — a dated-dominated board
+with a single >2.5pp stale-quote inversion failed text-monotone and fell through the same way.
+Fixed at methodology 1.9.0 (no-fall-through rule + numeric/quarter/ordinal parsing), locked by
+5 permanent tests in test/exclusivity-guard.test.js (RT-1, RT-1b, RT-2, RT-3, shared-deadline
+regression). **Any change to assessExclusivity's branch order must re-run these 5 tests** — the
+asymmetry principle ("every misclassification degrades to raw") is a property of the branch
+ORDER, not of any single branch.
+
 ## DO NOT RE-WATCHLIST `strc-hits-100-by-20260618001620693` on dev (un-watchlisted 2026-07-14, INC 7 triage)
 **Severity call P2, disposition executed (dev ref `dxoyxjxcfbgygvjvrrfk`; 1 personal watchlist
 row deleted; 16 history rows + `markets` row KEPT):** the board is the NAMED deadline-ladder
