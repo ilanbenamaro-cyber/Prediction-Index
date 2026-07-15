@@ -5,6 +5,69 @@ Newest at top. If you're about to change one of these, read the entry first.
 
 ---
 
+## THE PASS LESSON (perfection pass 2026-07-13→15): every real finding sat one layer beneath a green surface
+**Recorded once, for the next pass to read first.** The P1s of this pass were not where anyone
+was looking: the fabricating de-vig hid behind a *correct* sum test (three of four live
+fabrication instances were sum-ok); the guard's own fall-through could reproduce the exact
+fabrication it existed to prevent (RT-1/RT-2); HARD_EXCLUDE protected the frozen record by an
+id that didn't exist as a row; `--id` on a delete tool exited 0 on no-match; verify-history
+was "known-red" for weeks having never been run; the browse-fossil 422 class hid behind a
+graceful error page. **Every silent-failure mode was indistinguishable from success until
+probed.** Two design principles this imposes:
+- **Every tool that deletes, skips, or classifies must fail LOUD** — a no-match is an error,
+  a refusal names its reason, a misroute logs a structured tripwire line, a not-run gate
+  exits 2 with a recipe. Quiet success and quiet failure must never share an exit code.
+- **A green gate proves only what someone thought to assert.** The gate that caught the
+  HARD_EXCLUDE bug did so because it asserted EXISTENCE, not just membership; the parity gate
+  never protected `schema_version` because no one asserted it. When adding a guard, add the
+  assertion that the guard points at something real.
+Corollary that paid three times: instrument first — the operator's guessed mechanism was wrong
+twice and instrumentation found the real bug both times; the shape-tripwire converts "silent
+wrong number someday" into "logged the day it happens".
+
+## Browse-market GC — browse data is CACHE, watchlist data is RECORD (INC 6, operator-approved 2026-07-13, amended 07-14)
+**Decided:** GC deletes WHOLE stale browse markets (un-watchlisted ∧ `last_checked_at` older
+than --days (30) ∧ not HARD_EXCLUDE'd — both SpaceX ids, event slug first) via operator-run
+`scripts/gc-browse-markets.mjs`; FK cascade clears snapshots + history; regeneration is the
+existing browse/backfill path. Empirical basis for "browse=cache": pricesmart (4d
+post-resolution, 6/6 rows) and bitcoin-hit-in-june (~2.5wk, 30 rows where 29 existed) both
+rebuilt clean; the CLOB horizon is an era boundary (~Nov 2023), surfaced per-market as
+`RESOLVED <n>d ago` in the report (operator amendment: the retention horizon has teeth).
+**Constrains:** the cron path stays watchlist-governed and gains NO delete authority until the
+script has earned trust; the delete-time watchlist re-check is a TARGETED per-id count (never
+a full-table read — supabase-js truncates at 1000 rows silently, red-team P1); the residual
+mid-statement race is ACCEPTED v1 (documented in gotchas, v2 = single-transaction SQL
+function); the four-fixture gate (verify-gc-browse, 19 checks) is the invariant proof —
+selection exact, refusals loud, cascade clean, watched history byte-identical. GC is also the
+standing remediation for schema-fossilized browse records (the pre-0010 422 class).
+
+## Exclusivity guard (5.6) + hardening (1.9.0) — verdict rules and why the branch ORDER is the safety property
+**Decided (operator-approved design 2026-07-13; hardened at INC 7 red-team 2026-07-14):**
+assessExclusivity classifies every categorical board before the de-vig may run: F1
+nested_deadline (raw cumulative, date-ordered, longest-horizon headline) / F2 non_exclusive
+(raw desc) / F3 ambiguous (conservative raw); exclusive = placeholder-filtered raw sum in
+[0.8, 1.25] AND not deadline-differentiated. Nested detection is two-signal (question-text
+"by/before <date>" parse + gamma endDate cross-check, endDates only when mostly-distinct);
+N-slots/composites folded into F2 v1 (N-inference killed by the settled-integer trap);
+history derivations are mode-segmented (latestModeSegment). **1.9.0 (RT-1/RT-2):** a
+dated-dominated board with ≥2 DISTINCT deadlines NEVER falls through to the sum test
+(non-monotone ⇒ ambiguous); shared-single-deadline boards still may (the deadline is not the
+differentiator there); parseByDeadline handles numeric/quarter/ordinal forms. **Constrains:**
+misclassification asymmetry (every wrong verdict degrades to raw-and-honest, never to a
+fabricated PMF) is a property of the BRANCH ORDER — any reorder must re-run the 5 RT tests
+(gotchas). Reconstruction-in-place over purge for remediation (the raw layer is TRUE).
+
+## 5.5 — survival requires ALL legs $-worded; mixed boards are 'unsupported', NEVER categorical
+**Decided (operator-approved 2026-07-13):** ladderShapeFromMarkets routes to survival only
+when EVERY leg carries a $ threshold (21/21 live + 5/5 stored genuine ladders are 100%
+$-legged); a mixed board (some-but-not-all $) is 'unsupported' → typed 422, NO market-row
+write, ShapeNotice + UNSUPPORTED search chip. **Why not categorical:** the de-vig has no
+exclusivity signal for text-undetectable independence — honest-and-blank beats
+confident-and-wrong. **Constrains:** the four INC 7 classifier P2s (3rd-person verbs,
+reach/hit quorum splits, all-$ competing boards, bucket+reach precedence) are ONE
+competing-vs-cumulative family with the time-CDF EPIC; do not add verbs/branches for
+unobserved wording — the [shape-tripwire] + [touch-meta] warns are the standing instruments.
+
 ## schema_version 2.0.0 → 2.1.0 — a contract that changes while its version stands still is fossilization
 **Decided (2026-07-13, operator ruling at the perfection-pass gate):** the 1.8.0 exclusivity-guard
 schema relaxation (categorical derived contract became conditional: exclusivity block XOR the PMF

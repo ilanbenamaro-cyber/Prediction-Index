@@ -5,6 +5,39 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## Pre-0010 cached browse markets that RESOLVE before re-browse 422 FOREVER — class census'd and CLEARED (2026-07-15)
+The resolved-with-prior serve path freezes the STORED record as authoritative and never
+recomputes — so a browse market cached before the 0010 confidence split that resolves before
+anyone re-browses it fails current-schema validation (422, graceful UI, no fabrication) on
+every subsequent view, permanently. OPEN old-shape markets SELF-HEAL (serve recomputes and
+re-caches); only resolved ones fossilize. Census (prod, 2026-07-15): exactly 2 old-shape
+latest snapshots existed, 1 was the fossil (cleared via `gc-browse-markets --id` + re-browse,
+rebuilt valid), 1 self-healed on probe — **the class is now EMPTY on both envs and cannot
+refill** (all writes are new-shape). If a future breaking derived reshape ships, this class
+re-opens: re-run the census (old-shape latest snapshot ∧ resolved) or ship the design-gated
+serve-path self-heal on the futures list. Related: "A breaking `derived` reshape also
+invalidates STORED FINAL records" below — this is that gotcha's browse-market corollary.
+
+## Playwright screenshot 5s cap → in-page html-to-image workaround (proven ×7) + password-less dev login
+A backgrounded browser throttles rAF, so Playwright's "element stable" wait starves and
+screenshots hit the 5s backend cap. Workaround (now proven ×12 across two sessions): inject
+`html-to-image` from unpkg via browser_evaluate, `toJpeg(document.documentElement, {quality:
+~0.45, pixelRatio: 1})` → dataURL → save via evaluate's `filename` param → base64-decode in
+Bash → Read the jpeg. Login without typing credentials into the form: programmatic GoTrue
+sign-in in a Node script (the verify-script pattern) → write the session as the
+`sb-<ref>-auth-token` cookie (`'base64-' + base64url(JSON.stringify(session))`, chunk at
+~3000 chars to `.0/.1` names if longer) via document.cookie → navigate; SSR middleware
+accepts it.
+
+## Gamma/wording parse traps that feed the guard — endDates and deadline text
+(1) Gamma per-leg `endDate` can be STALE or TIED across legs (fed-rate-cut: five legs shared
+one date) and occasionally wrong — never trust it alone; the guard uses it only as a
+CROSS-CHECK and only when mostly-distinct (≥0.8 distinct fraction). (2) parseByDeadline digit
+traps, each caught by a permanent test: "by January 2026" must not read day=20 from the year
+(digit-boundary); "by July 4th, 2026" must not lose the year to the ordinal (RT-3); numeric
+"by 6/30/2026" and "by Q3 2026" must parse to DISTINCT keys or the nested detector goes blind
+(RT-1). Wording is the load-bearing signal — parser gaps become fabrication paths.
+
 ## The exclusivity guard's fall-through could reproduce the fabrication it exists to prevent (RT-1/RT-2)
 **A guard is only as good as its worst untested branch (INC 7 red-team, 2026-07-14).** Two
 confirmed fabrication paths lived INSIDE assessExclusivity's own branch order: RT-1 — numeric
@@ -54,6 +87,10 @@ nobody notices.** The guard: GC's per-market report prints `RESOLVED <n>d ago` (
 UNKNOWN — regeneration not guaranteed`) so the operator sees the actual risk before typing
 --apply. If a resolved browse market older than the proven range matters, probe its legs'
 prices-history BEFORE GC'ing it.
+**Retention point 2 (2026-07-15, prod):** `what-price-will-bitcoin-hit-in-june-2026`, a touch
+board ~2.5 weeks post-resolution, rebuilt **30 history rows where 29 existed** (2026-06-02→07-01,
+0 failed — the rebuild recovered a day the original capture missed). Proven range now: 4 days
+AND ~2.5 weeks post-resolution; the ~Nov-2023 era boundary stands as the only observed cliff.
 
 ## The frozen record's `markets.id` is the EVENT SLUG, not the config id — this trap will bite again
 `markets.id` = `spacex-ipo-closing-market-cap-above` (the event slug; dev AND prod verified
@@ -98,15 +135,15 @@ June 30 / Sep 30 / Dec 31?", `when-will-bitcoin-hit-150k`) fit NO existing shape
 (high/low series over LEVELS) cannot express them — dedup would collapse identical strikes —
 and survival parses them into a DEGENERATE ladder of identical thresholds. Bare "hit" is
 deliberately not a touch verb for exactly this reason (plus direction ambiguity — see
-TOUCH_VERB_RE in core/fetch.js). **The tripwire:** `strc-hits-100-by-20260618001620693` is
-stored as threshold_ladder with three identical $100 thresholds AND sits on the dev watchlist,
-cron-snapshotted twice daily as a meaningless curve (severity call owed at the 2026-07-13
-INC 7 triage). If a user adds another "hit $X by dates" board, it will look just as wrong.
-The fix is a NEW SHAPE (deadline ladder / cumulative touch-in-time), not a regex. Related
-pre-existing looseness, same triage: ladderShapeFromMarkets' survival rule is some($-leg) —
-ONE stray $-leg makes a whole categorical event survival (live instance:
-what-will-happen-before-gta-vi, "Will bitcoin hit $1m before GTA VI?"); exact-asserted in
-test/market-shape.test.js so any change is loud.
+TOUCH_VERB_RE in core/fetch.js). **The tripwire, DISPOSITIONED at INC 7 (2026-07-14):**
+`strc-hits-100-by-20260618001620693` — P2 (dev-only exposure), un-watchlisted (see its own
+entry above); the [shape-tripwire] duplicate-thresholds warn (core/snapshot.js, INC 7) now
+logs the family loudly wherever it's computed. If a user adds another "hit $X by dates" board,
+it still looks wrong but no longer silently. The fix remains a NEW SHAPE (deadline ladder /
+cumulative touch-in-time) — the time-CDF EPIC. The related some($-leg) looseness (one stray
+"$1m before GTA VI" leg flipping a categorical to survival) was **FIXED at 5.5**: survival now
+requires ALL legs $-worded, mixed boards are 'unsupported' (typed 422, no write) — proven live
+on the GTA VI board and exact-asserted in test/market-shape.test.js.
 
 ## verify-history needs a RUNNING server — and its positive path TRIGGERS a real snapshot batch
 **Symptom (mis-filed as "crash" until 2026-07-13):** with no server it died on an unhandled
