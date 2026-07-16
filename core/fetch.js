@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import { thresholdRegExp, labelGt } from './market-config.js';
 import { parseBucketLeg, buildPmfLadder } from './bucket.js';
 import { parseTouchLeg, impliedRange } from './touch.js';
+import { settledYesStr } from './settlement.js';
 import { deriveUnit } from './money.js';
 
 const EVENT_SLUG = 'spacex-ipo-closing-market-cap-above';
@@ -153,12 +154,39 @@ const gammaUrl = (slug) => `https://gamma-api.polymarket.com/events?slug=${slug}
 
 // ── shared midpoint resolution (Phase 1) — used by BOTH the ladder and binary
 // fetchers so the fallback chain lives in one place. Pure of I/O except
-// fetchLastTradePrice. resolveFromBook covers everything up to the last-trade tier;
+// fetchLastTradePrice. priceLeg covers everything up to the last-trade tier;
 // callers fetch last-trade only for the rungs/sides it marks `needsLastTrade`.
-function resolveFromBook(mid, book) {
-  const best_bid = book.BUY != null ? String(book.BUY) : null;
-  const best_ask = book.SELL != null ? String(book.SELL) : null;
-  if (mid != null) return { best_bid, best_ask, midpoint: String(mid), midpoint_source: 'clob_midpoint' };
+// ── SETTLED-LEG PRICING RULE (operator-approved 2026-07-16; see gotchas "CLOB midpoint
+//    returns a SYNTHETIC 0.5"). A leg prices from the most-settled truth available, and a
+//    dead book's midpoint is never truth:
+//      1. SETTLED  (uma='resolved' + parseable settled price) → its own settled truth;
+//      2. PENDING  (closed / not accepting, not yet resolved)  → last_trade, NEVER the
+//         midpoint (the book is dead; a present midpoint over it is the documented lie);
+//      3. OPEN     → midpoint only over a LIVE TWO-SIDED book, then the existing tiers.
+//    "Dead book" pinned empirically: CLOB /prices returns SENTINELS for an empty side —
+//    BUY=0 (no bid), SELL=1 (no ask) — and /midpoint then fabricates (0+1)/2 = 0.5
+//    (Norway, world-cup-winner, 0×0 book). A sentinel side is ABSENT, not a quote; a
+//    one-sided book must not be read as live. Every uncertain case degrades to an
+//    OBSERVED datum (last_trade) or a loud skip — never to a synthetic quote.
+export function priceLeg(resolution, mid, book) {
+  if (resolution?.uma_resolution_status === 'resolved') {
+    const settled = settledYesStr(resolution.outcomes, resolution.outcome_prices);
+    if (settled != null) {
+      return { best_bid: null, best_ask: null, midpoint: settled, midpoint_source: 'resolved_settlement' };
+    }
+    // resolved but unparseable settled price → treat as PENDING below (null-not-zero)
+  }
+  // strip CLOB's empty-side sentinels FIRST — they are absences, not quotes
+  const rawBid = book.BUY != null ? String(book.BUY) : null;
+  const rawAsk = book.SELL != null ? String(book.SELL) : null;
+  const best_bid = rawBid != null && Number(rawBid) > 0 ? rawBid : null;
+  const best_ask = rawAsk != null && Number(rawAsk) < 1 ? rawAsk : null;
+  if (resolution && (resolution.closed === true || resolution.accepting_orders === false)) {
+    return { best_bid, best_ask, needsLastTrade: true }; // PENDING: dead book → last real observation
+  }
+  if (mid != null && best_bid != null && best_ask != null) {
+    return { best_bid, best_ask, midpoint: String(mid), midpoint_source: 'clob_midpoint' };
+  }
   if (best_bid != null && best_ask != null) {
     return { best_bid, best_ask, midpoint: String((Number(best_bid) + Number(best_ask)) / 2), midpoint_source: 'bid_ask_mean' };
   }
@@ -259,7 +287,7 @@ export async function fetchLiveSnapshot(config = null) {
   // the hash recipe — and the frozen SpaceX hash — are untouched (the resolved
   // midpoint VALUE is what's hashed). Skipped rungs are excluded from raw_inputs AND
   // the ladder, and surfaced via midpoint_fallback → confidence. See gotchas.md.
-  const resolved = meta.map((m) => ({ m, ...resolveFromBook(midRaw[m.token_id], priceRaw[m.token_id] || {}) }));
+  const resolved = meta.map((m) => ({ m, ...priceLeg(m, midRaw[m.token_id], priceRaw[m.token_id] || {}) }));
 
   // Fetch last-trade ONLY for the no-book rungs (small N) — never on the normal path.
   const needers = resolved.filter((r) => r.needsLastTrade);
@@ -503,7 +531,7 @@ export async function fetchBinarySnapshot(config = null) {
   const sides = [
     { token: meta.yes_token, threshold: 1 },
     { token: meta.no_token, threshold: 0 },
-  ].map((s) => ({ ...s, ...resolveFromBook(midRaw[s.token], priceRaw[s.token] || {}) }));
+  ].map((s) => ({ ...s, ...priceLeg(null, midRaw[s.token], priceRaw[s.token] || {}) }));
 
   const lastTradeThresholds = [];
   const skippedThresholds = [];
@@ -636,7 +664,7 @@ export async function fetchBucketPmfSnapshot(config) {
   });
 
   // Resolve each bucket's YES price with the shared fallback chain (last-trade for a dead book).
-  const resolved = meta.legs.map((l) => ({ l, ...resolveFromBook(midRaw[l.token_id], priceRaw[l.token_id] || {}) }));
+  const resolved = meta.legs.map((l) => ({ l, ...priceLeg(l, midRaw[l.token_id], priceRaw[l.token_id] || {}) }));
   const needers = resolved.filter((r) => r.needsLastTrade);
   const lastTradeBy = new Map(await Promise.all(needers.map(async (r) => [r.l.token_id, await fetchLastTradePrice(r.l.token_id)])));
 
@@ -788,7 +816,7 @@ export async function fetchTouchSnapshot(config) {
     body: JSON.stringify(tokens.flatMap((t) => [{ token_id: t, side: 'BUY' }, { token_id: t, side: 'SELL' }])),
   });
 
-  const resolved = meta.legs.map((l) => ({ l, ...resolveFromBook(midRaw[l.token_id], priceRaw[l.token_id] || {}) }));
+  const resolved = meta.legs.map((l) => ({ l, ...priceLeg(l, midRaw[l.token_id], priceRaw[l.token_id] || {}) }));
   const needers = resolved.filter((r) => r.needsLastTrade);
   const lastTradeBy = new Map(await Promise.all(needers.map(async (r) => [r.l.token_id, await fetchLastTradePrice(r.l.token_id)])));
 
@@ -898,7 +926,7 @@ export async function fetchCategoricalSnapshot(config) {
     body: JSON.stringify(tokens.flatMap((t) => [{ token_id: t, side: 'BUY' }, { token_id: t, side: 'SELL' }])),
   });
 
-  const resolved = meta.legs.map((l) => ({ l, ...resolveFromBook(midRaw[l.token_id], priceRaw[l.token_id] || {}) }));
+  const resolved = meta.legs.map((l) => ({ l, ...priceLeg(l, midRaw[l.token_id], priceRaw[l.token_id] || {}) }));
   const needers = resolved.filter((r) => r.needsLastTrade);
   const lastTradeBy = new Map(await Promise.all(needers.map(async (r) => [r.l.token_id, await fetchLastTradePrice(r.l.token_id)])));
 

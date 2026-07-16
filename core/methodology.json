@@ -1,5 +1,5 @@
 {
-  "version": "1.9.0",
+  "version": "1.10.0",
   "asset": "spacex-ipo-market-cap",
   "summary": "Derived valuation metrics from Polymarket 'closing market cap above $X' YES prices. Each 'above $X' market is a separate order book, so raw midpoints are arbitrage-adjusted (volume-weighted isotonic regression) into a monotone CDF before any metric is computed. Raw values are preserved alongside the adjusted ones. Two output tiers are kept strictly separate: TIER 1 (derived.market) are pure market transforms with no assumptions; TIER 2 (derived.scenarios) require external inputs and each carries a sourced, dated, ranged assumption (see assumptions.json). A scenario with no usable assumption renders 'input_required', never a fabricated number.",
   "metrics": {
@@ -180,6 +180,11 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.10.0",
+      "date": "2026-07-16",
+      "change": "SETTLED-LEG PRICING (behavior change, ALL multi-leg shapes; live prod finding: Norway, eliminated and UMA-resolved-NO, displayed at 50% because CLOB's midpoint endpoint fabricates 0.5 over an EMPTY book — /prices returns sentinels BUY=0/SELL=1 for absent sides and midpoint averages them). The per-leg pricing chain (core/fetch.js priceLeg, ONE definition for every fetcher) now prices by most-settled-truth-first: (1) SETTLED (umaResolutionStatus='resolved' + parseable settled price via the shared settledYesStr reader, label-aligned, null-not-zero) → the leg's own settled YES price, midpoint_source 'resolved_settlement', bid/ask null; (2) PENDING (closed / not accepting orders, not yet resolved) → last_trade, NEVER the midpoint (dead book); (3) OPEN → midpoint only over a LIVE TWO-SIDED book (sentinel sides are stripped as absences; a one-sided book is never read as live), then the existing bid/ask/last-trade tiers. outcomePrices on an OPEN leg mirrors LIVE prices and is never read as settled. raw_inputs now carry the settled string for settled legs → new hashes going forward (the hash is over observed truth; the settled price IS the observation). Schema unchanged at 2.1.0 (no shape change; 'resolved_settlement' was already a valid midpoint_source). Frozen SpaceX replay untouched — parity 4/4 byte-identical immediately post-change."
+    },
     {
       "version": "1.9.0",
       "date": "2026-07-13",

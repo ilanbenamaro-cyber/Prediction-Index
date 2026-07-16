@@ -5,6 +5,23 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## CLOB midpoint returns a SYNTHETIC 0.5 for an empty book on a settled/closed leg — midpoint-present ≠ midpoint-trustworthy
+**Confirmed live (2026-07-16, prod):** Norway (eliminated, `closed=true`, `uma=resolved`,
+settled `["0","1"]` = P(win) 0) displayed at **50%** — because CLOB's `midpoint` endpoint
+answered `{"mid":"0.5"}` for a token whose `book` endpoint, same instant, showed **0 bids and
+0 asks**. The fallback chain trusted midpoint-present and recorded 0.5 as `clob_midpoint`; the
+existing "missing CLOB midpoint = empty book → last_trade" gotcha covers midpoint-ABSENT, not
+midpoint-LYING. Population at discovery: 2 legs across all 76 prod markets, in TWO shapes
+(world-cup-winner categorical · spacex-closing-…-ipo-month threshold_ladder) — the shared
+pricing chain, not a categorical quirk. Related sub-case, same root: a settled leg priced from
+a stale `last_trade` (Italy: 2.7% where settled truth is 0). **A settled leg must be priced
+from its own settled truth (`outcomePrices` via the label-aligned `settledYesStr` reader —
+null-not-zero), never from any live quote.** TWO traps inside that rule: (1) `outcomePrices`
+on an OPEN leg mirrors LIVE prices (Spain, mid-final: `["0.5835","0.4165"]`) — it is
+settlement truth ONLY under `umaResolutionStatus='resolved'`; (2) the danger is one
+coincidence away from fabrication: had the board's raw sum landed inside [0.8, 1.25], the
+phantom 0.5 would have entered the de-vig and distorted every outcome.
+
 ## Pre-0010 cached browse markets that RESOLVE before re-browse 422 FOREVER — class census'd and CLEARED (2026-07-15)
 The resolved-with-prior serve path freezes the STORED record as authoritative and never
 recomputes — so a browse market cached before the 0010 confidence split that resolves before
