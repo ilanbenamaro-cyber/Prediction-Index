@@ -38,7 +38,36 @@ healthy — it had simply never been run. See [[decisions]] "A gate that cannot 
 aliases). Every gate is an **integration gate by construction** — the Live-API column marks what
 can turn it red for reasons unrelated to our code. Hermetic recorded fixtures: parked future item.
 
-## ⮕ DIRECTION (2026-07-15, latest): PERFECTION PASS — MERGED (`main` @ `3e2e62a`)
+## ⮕ DIRECTION (2026-07-16, latest): SETTLED-LEG PRICING — MERGED (`main` @ `bdc3bcb`)
+- **`main` is at merge `bdc3bcb`** (--no-ff, branch `fix/settled-leg-pricing`, 2 commits, base
+  `21299d4`). Gates at merge, clean production build: **parity 4/4 · 512/512 · tsc 0 ·
+  verify 11/11 · 9 negative controls · before/after screenshots.**
+- **Root cause (prod finding, diagnosed before any fix):** CLOB's `midpoint` endpoint
+  FABRICATES 0.5 over an EMPTY book — `/prices` returns sentinels BUY=0 (no bid) / SELL=1
+  (no ask) and midpoint averages them. Eliminated Norway (uma-resolved-NO, 0×0 book) displayed
+  at **50%**, ranked above finalist Argentina; our chain trusted midpoint-present. The 5.6
+  guard fired correctly (sum 1.57 → raw display) — the bad number was UPSTREAM, shown
+  faithfully. One coincidence (in-band sum) away from de-vig fabrication.
+- **THE RULE (methodology 1.10.0, one chain — core/fetch.js `priceLeg`, all 5 fetchers):**
+  a leg prices from the most-settled truth available, and a dead book's midpoint is never
+  truth. SETTLED (uma='resolved' + parseable `settledYesStr`, label-aligned, null-not-zero,
+  hoisted to core/settlement.js) → its own settled price as `resolved_settlement`; PENDING
+  (closed, not yet resolved) → last_trade, NEVER the midpoint; OPEN → midpoint only over a
+  **live two-sided book** (sentinel sides stripped; one-sided is never live). `outcomePrices`
+  on an OPEN leg mirrors LIVE prices — settled truth only under uma='resolved'.
+- **Consequences proven:** world-cup-winner sum 1.573 → 1.000, verdict → exclusive, de-vig
+  → **Spain 58.4% / Argentina 41.6%**, all 48 settled legs 0 (before/after screenshots in the
+  increment record). **8 phantom history rows purged on prod** (07-12/18h → 07-16/2h; the
+  boundary printout proved the predicate caught exactly the phantom onset — last real quote
+  0.0005 at 07-12/02h). Purge, never rewrite provenance: these rows' RAW recorded the lie —
+  the first raw-is-false defect, distinct from the raw-is-true reconstruction class. Post-purge
+  series derivations clean (no jump narration; velocity honestly 'collecting').
+- **Population at fix:** 2 phantom legs across all 76 prod markets, two shapes — hence the
+  all-shapes chain scope. Known P2 left standing: July-13 reconstruction nulled dominant_*
+  columns on unguarded-rebuilt rows (self-heals as cron rows land); see also gotchas "CLOB
+  midpoint returns a SYNTHETIC 0.5" for the standing trap.
+
+## ⮕ DIRECTION (2026-07-15): PERFECTION PASS — MERGED (`main` @ `3e2e62a`)
 - **`main` is at merge `3e2e62a`** (--no-ff, branch `fix/perfection-pass-2026-07-13`, 13 commits,
   base `17c0731`). Gates at merge, clean production build: **parity 4/4 · 503/503 · tsc 0 ·
   verify 13/13** (11 plain-local + 2c1 + history on a live server; phase2a = exit-2-by-design).
