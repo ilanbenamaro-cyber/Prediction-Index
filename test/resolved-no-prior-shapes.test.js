@@ -99,7 +99,12 @@ test('computeMarketRecord(survival): RESOLVED + prior=null → 200-able record (
   validateRecord(record);
 });
 
-test('computeMarketRecord(survival): RESOLVED + prior≠null → freezes the prior (builder NOT used)', async () => {
+// fix/resolved-transition-settled-truth: this used to characterize the freeze-forever bug (a
+// RESOLVED transition froze the PRIOR's stale live probabilities, keeping the prior's fetched_at —
+// the silent same-key no-op that left resolved markets stuck OPEN in the cache forever). Now a
+// RESOLVED transition with a prior tries settled truth FIRST (new fetched_at → a real write); the
+// degrade-to-freeze path (unparseable settlement) is covered in test/resolved-transition.test.js.
+test('computeMarketRecord(survival): RESOLVED + prior≠null → settled truth wins (builder IS used, new fetched_at)', async () => {
   const legs = survivalLegs(['1', '1', '0', '0']);
   const marketsLive = legs.map((l) => ({ label: l.label, threshold: l.threshold, prob: 0.77, volume: l.volume })); // distinctive 0.77
   const config = defaultConfigForLadder(legs.map((l) => l.threshold), { id: 'ladder-x', event_slug: 'ladder-x', name: 'X' });
@@ -120,10 +125,13 @@ test('computeMarketRecord(survival): RESOLVED + prior≠null → freezes the pri
       clobTokenIds: [l.token_id, `${l.token_id}-no`], volume: l.volume,
     })),
   };
-  const { record, lifecycle } = await withGamma([event], () => computeMarketRecord({ id: 'ladder-x', prior }));
+  const { record, lifecycle, writeReplace } = await withGamma([event], () => computeMarketRecord({ id: 'ladder-x', prior }));
   assert.equal(lifecycle.state, 'RESOLVED');
-  // The frozen prior's distinctive 0.77 probs survive — proving the minimal builder wasn't used.
-  assert.ok(record.snapshot.derived.markets.every((m) => m.raw_prob === 0.77));
+  // The SETTLED (0/1-adjacent) probs win, not the frozen prior's distinctive 0.77 — the minimal
+  // builder WAS used. (Yes at 40,45 / No at 50,55 per legs(['1','1','0','0']).)
+  assert.ok(record.snapshot.derived.markets.every((m) => m.raw_prob !== 0.77));
+  assert.notEqual(record.snapshot.fetched_at, prior.snapshot.fetched_at);
+  assert.equal(writeReplace, false);
 });
 
 // ── BUCKET_PMF (disjoint-interval PMF, e.g. Bitcoin "between $X and $Y") ────────────────────────
@@ -182,7 +190,9 @@ test('computeMarketRecord(bucket_pmf): RESOLVED + prior=null → 200-able record
   validateRecord(record);
 });
 
-test('computeMarketRecord(bucket_pmf): RESOLVED + prior≠null → freezes the prior (builder NOT used)', async () => {
+// fix/resolved-transition-settled-truth: was "freezes the prior (builder NOT used)" — see the
+// survival test above for the full rationale.
+test('computeMarketRecord(bucket_pmf): RESOLVED + prior≠null → settled truth wins (builder IS used, new fetched_at)', async () => {
   const meta = bucketMeta({ prices: ['0', '1', '0'] });
   const event = {
     title: 'Bucket test', slug: 'bucket-x', closed: true, active: true, endDate: '2026-07-05T00:00:00Z',
@@ -202,9 +212,12 @@ test('computeMarketRecord(bucket_pmf): RESOLVED + prior≠null → freezes the p
   attachAnalytics(prior, { priors: {}, config });
   prior.assumptions_version = null;
   attachNarrative(prior, { config });
-  const { record, lifecycle } = await withGamma([event], () => computeMarketRecord({ id: 'bucket-x', prior }));
+  const { record, lifecycle, writeReplace } = await withGamma([event], () => computeMarketRecord({ id: 'bucket-x', prior }));
   assert.equal(lifecycle.state, 'RESOLVED');
-  assert.ok(record.snapshot.derived.markets.some((m) => m.raw_prob === 0.33)); // frozen prior survives
+  // The frozen prior's distinctive 0.33/0.11/0.02 probs do NOT survive — settled truth was built.
+  assert.ok(!record.snapshot.derived.markets.some((m) => m.raw_prob === 0.33));
+  assert.notEqual(record.snapshot.fetched_at, prior.snapshot.fetched_at);
+  assert.equal(writeReplace, false);
 });
 
 // ── DIRECTIONAL_TOUCH (WTI/Silver "(LOW)/(HIGH) hit $X") ─────────────────────────────────────────
@@ -337,7 +350,9 @@ test('computeMarketRecord(categorical): RESOLVED + prior=null → 200-able recor
   validateRecord(record);
 });
 
-test('computeMarketRecord(categorical): RESOLVED + prior≠null → freezes the prior (builder NOT used)', async () => {
+// fix/resolved-transition-settled-truth: was "freezes the prior (builder NOT used)" — see the
+// survival test above for the full rationale.
+test('computeMarketRecord(categorical): RESOLVED + prior≠null → settled truth wins (builder IS used, new fetched_at)', async () => {
   const meta = categoricalMeta({ prices: ['0', '1', '0'] });
   const event = {
     title: 'Categorical test', slug: 'cat-e2', closed: true, active: true, endDate: '2026-07-05T00:00:00Z',
@@ -356,9 +371,12 @@ test('computeMarketRecord(categorical): RESOLVED + prior≠null → freezes the 
     outcomes: [{ label: 'Option A', prob: 0.4, volume: 1 }, { label: 'Option B', prob: 0.35, volume: 1 }, { label: 'Option C', prob: 0.25, volume: 1 }],
     total_volume: 3,
   }, '1.0.0', priorConfig, null);
-  const { record, lifecycle } = await withGamma([event], () => computeMarketRecord({ id: 'cat-e2', prior }));
+  const { record, lifecycle, writeReplace } = await withGamma([event], () => computeMarketRecord({ id: 'cat-e2', prior }));
   assert.equal(lifecycle.state, 'RESOLVED');
-  // The frozen prior's distinctive 40%/35%/25% distribution survives — the minimal builder wasn't used.
-  assert.equal(record.snapshot.derived.dominant_outcome, 'Option A');
-  assert.ok(Math.abs(record.snapshot.derived.dominant_prob - 0.4) < 1e-9);
+  // Settled truth wins: Option B settled to 1 (prices ['0','1','0']) — NOT the frozen prior's
+  // distinctive 40%/35%/25% distribution (which would report Option A).
+  assert.equal(record.snapshot.derived.dominant_outcome, 'Option B');
+  assert.ok(Math.abs(record.snapshot.derived.dominant_prob - 1) < 1e-9);
+  assert.notEqual(record.snapshot.fetched_at, prior.snapshot.fetched_at);
+  assert.equal(writeReplace, false);
 });
