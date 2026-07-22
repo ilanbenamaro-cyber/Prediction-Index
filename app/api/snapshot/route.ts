@@ -16,7 +16,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { DEPS } from '@/lib/market-deps.mjs';
 import { serveMarket } from '@/lib/serve-market.mjs';
-import { allWatchedMarketIds, marketsSnapshottedOn, writeHistory, marketsNeedingBackfill } from '@/lib/market-history.mjs';
+import { allWatchedMarketIds, marketsSnapshottedOn, writeHistory, marketsNeedingBackfill, writeCronRun } from '@/lib/market-history.mjs';
 
 // Node runtime: core/ + the service-role Supabase client require Node APIs (not edge).
 export const runtime = 'nodejs';
@@ -128,6 +128,27 @@ export async function GET(req: Request): Promise<Response> {
     failures,
     backfill_retried,
   };
+
+  // Permanent, queryable ledger of this invocation (migration 0015) — Vercel deployment logs roll
+  // off, this table doesn't. The run itself must NOT fail because its OWN ledger write failed: log
+  // loud and still return the summary (the console.log line below is the fallback record either way).
+  try {
+    await writeCronRun({
+      started_at: startedAt,
+      run_date: today,
+      snapshot_hour: snapshotHour,
+      total: ids.length,
+      skipped_already: already.size,
+      skipped_resolved: resolved,
+      success,
+      failed,
+      failures,
+      backfill_retried,
+    });
+  } catch (e) {
+    console.warn('[snapshot] cron_runs insert failed', (e as Error).message);
+  }
+
   // Observable in Vercel deployment logs (success/failed/skipped counts + per-market errors).
   console.log('[snapshot]', JSON.stringify(summary));
   return Response.json(summary, { status: 200, headers: NO_STORE });
