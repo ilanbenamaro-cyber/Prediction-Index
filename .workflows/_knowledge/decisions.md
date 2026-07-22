@@ -1094,3 +1094,27 @@ Single source = surfaces can't disagree.
 **Constrains:** Deltas/derived numbers are computed in core and **stored**; renderers read stored
 values through one formatter (`core/format.js`). A `grep` for any formula must find one definition.
 The red-team has twice caught renderer re-derivation (density bars, then guarded) — keep checking.
+
+## Resolved = settled truth, freeze is degraded-fallback only
+**Decided:** Resolved = settled truth as of **1.11.0**. A RESOLVED lifecycle transition with a
+cached prior builds the SAME settled-truth record (`buildMinimalResolvedRecord`) the no-prior
+first-browse path always used, with a genuinely new `fetched_at` (an append, never a rewrite of the
+prior's row). Freezing the prior (`freezePriorRecord`) is now a DEGRADED fallback, reached only when
+no leg has a parseable settled price — logged loud (`console.warn`), never a silent substitution —
+and that freeze (plus the CLOSED_PENDING-with-prior freeze) must declare `writeReplace:true`, because
+it keeps the prior's `fetched_at` and would otherwise collide with the row already written for that
+key. The **SpaceX reference record** is grandfathered as the historical artifact of the pre-1.11.0
+freeze-epoch semantic — it is stored RESOLVED and serves via SERVE_FINAL (the cache-hit branch that
+returns before any compute path runs), so it structurally never re-enters this transition logic; its
+`raw_sha256` is immutable and untouched by this change.
+**Why:** Before 1.11.0, a resolved transition froze the prior record's stale live numbers AND kept
+the prior's `fetched_at` — and `market_snapshots` upserts on `(market_id, fetched_at)` with
+`ignoreDuplicates` when not replacing, so that write silently never landed. The market stayed OPEN
+in the cache forever and every serve repeated probe→freeze→no-op (live victims: world-cup-winner,
+which-continent-will-win-the-world-cup — see gotchas.md). A quiet drop must never share an exit path
+with success (see the CLAUDE.md primer's standing "fail LOUD" principle).
+**Constrains:** Any new market shape's RESOLVED-with-prior branch must route through
+`resolveTransition` (lib/compute.mjs), not call `freezePriorRecord`/its per-shape variants directly.
+`writeRecord` (lib/cache.mjs) now throws if `replace:false` and the snapshot upsert affected zero
+rows — any future caller passing `replace:false` into a same-`fetched_at` write path will surface
+that loudly, by design.
