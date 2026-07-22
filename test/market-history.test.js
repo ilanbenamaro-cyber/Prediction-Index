@@ -705,3 +705,33 @@ test('collapseDaily: a same-day transition row wins over a cron row for that dat
   assert.equal(out[0].source, 'transition');
   assert.equal(out[0].probability, 1.0);
 });
+
+test('deriveDeltas: the settlement step never appears in the Δ columns; the same data WITHOUT the marker does (review P2)', () => {
+  // 8 flat traded days at P(>2)=0.6, then the settled 0/1 step.
+  const flat = [];
+  for (let i = 0; i <= 7; i++) flat.push(mkRow(i, { markets: [{ threshold: 2, prob: 0.6 }] }));
+  const settledRow = { ...mkRow(8, { markets: [{ threshold: 2, prob: 1.0 }] }), source: 'transition' };
+
+  const withMarker = deriveDeltas([...flat, settledRow], [2]);
+  assert.equal(withMarker[0].d1, 0, 'the settlement step must not read as a 1-day Δ');
+
+  const unmarked = { ...mkRow(8, { markets: [{ threshold: 2, prob: 1.0 }] }) }; // same data, no marker
+  const control = deriveDeltas([...flat, unmarked], [2]);
+  assert.ok(Math.abs(control[0].d1 - 0.4) < 1e-9, 'the SAME data without the marker IS a real Δ (the guard is the discriminator)');
+});
+
+test('deriveDispersion: the settled point-mass IQR never fabricates a "converging" narrative (review P2)', () => {
+  // 31 traded days with a stable width-1 IQR, then the resolution's degenerate point-mass (width 0).
+  const traded = [];
+  for (let i = 0; i <= 30; i++) traded.push(mkRow(i, { iqr: { p25: 1, p75: 2 } }));
+  const settledRow = { ...mkRow(31, { iqr: { p25: 1.5, p75: 1.5 } }), source: 'transition' };
+
+  const d = deriveDispersion([...traded, settledRow]);
+  assert.equal(d.status, 'ok');
+  assert.equal(d.direction, 'stable', 'traded IQR was flat — the settled point-mass must not read as converging');
+  assert.equal(d.current_width, 1, 'the current width is the last TRADED width, not the settled 0');
+
+  const unmarked = { ...mkRow(31, { iqr: { p25: 1.5, p75: 1.5 } }) }; // same data, no marker
+  const control = deriveDispersion([...traded, unmarked]);
+  assert.equal(control.direction, 'converging', 'the SAME data without the marker DOES converge (the guard is the discriminator)');
+});

@@ -253,6 +253,36 @@ test('serveMarket: writeTransitionHistory absent from deps → treated as a no-o
   assert.equal(r.status, 200);
 });
 
+test('serveMarket: a THROWING writeTransitionHistory does not fail the serve — record persisted, still 200, warned loud (review P2)', async () => {
+  // The authoritative writeRecord already landed; failing the serve over the observability row
+  // would 500 the viewer AND the row would never retry (the next serve is SERVE_FINAL).
+  const snapshot = { lifecycle_state: 'OPEN', cached_at: iso(NOW - CACHE_TTL_MS - 1), record: recordAt(NOW - CACHE_TTL_MS - 1) };
+  let wrote = false;
+  const deps = {
+    readCache: async () => ({ snapshot, market: null }),
+    computeMarketRecord: async () => ({ record: recordAt(NOW), lifecycle: { state: 'RESOLVED', resolved_outcome: null }, config: {}, writeReplace: false }),
+    writeRecord: async () => { wrote = true; },
+    probeLifecycle: async () => {}, touchProbe: async () => {},
+    writeTransitionHistory: async () => { throw new Error('history table down'); },
+  };
+  const warnCalls = [];
+  const origWarn = console.warn;
+  console.warn = (...args) => warnCalls.push(args);
+  let r;
+  try {
+    r = await serveMarket({ id: 'm', deps, now });
+  } finally {
+    console.warn = origWarn;
+  }
+  assert.equal(r.status, 200, 'the serve must not fail over the observability write');
+  assert.equal(wrote, true, 'the authoritative record write happened');
+  assert.ok('record' in r.body && r.body.record, 'the record is still served');
+  assert.ok(
+    warnCalls.some((args) => String(args[0]).includes('transition history write failed')),
+    'the failure is warned loud, never swallowed silently',
+  );
+});
+
 test('serveMarket: threads computeMarketRecord\'s writeReplace into writeRecord({ replace })', async () => {
   let capturedReplace = 'unset';
   const deps = {
