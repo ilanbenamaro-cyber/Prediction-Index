@@ -81,7 +81,7 @@ export function BinaryDetailView({ record, envelope, hist, addControl }: { recor
         </div>
         <div className="detail-head-actions">
           {addControl}
-          {envelope?.market_id && <RefreshButton slug={envelope.market_id} />}
+          {envelope?.market_id && lifecycleState !== 'RESOLVED' && <RefreshButton slug={envelope.market_id} />}
           <span className={`detail-lifecycle ${LIFECYCLE_CLASS[lifecycleState] ?? ''}`} data-field="lifecycle">
             ● {LIFECYCLE_LABEL[lifecycleState] ?? lifecycleState}
           </span>
