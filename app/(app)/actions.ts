@@ -121,10 +121,21 @@ export async function refreshMarket(slug: string): Promise<ActionResult> {
   if (authError || !data?.user) return { ok: false, error: 'not authenticated' };
 
   try {
-    const { snapshot } = await readCache(id); // prior, for the RESOLVED freeze path
+    const { snapshot } = await readCache(id); // prior, for the RESOLVED transition path
+    // SERVE_FINAL shield (review P1, fix/resolved-transition-settled-truth): a stored-RESOLVED
+    // market's record is final — serveMarket never recomputes it (SERVE_FINAL returns before any
+    // compute), and this direct path must match. Before the silent-no-op fix, a refresh on a
+    // resolved market recomputed and then silently dropped the write (the bug accidentally
+    // shielding the grandfathered SpaceX anchor); with writes now landing, an unguarded refresh
+    // would INSERT a new settled record and shadow the frozen one. Refuse BEFORE any compute.
+    if (snapshot?.lifecycle_state === 'RESOLVED') {
+      return { ok: false, error: 'market is resolved — the final record is frozen' };
+    }
     const prior = snapshot?.record ?? null;
-    const { record, lifecycle, config } = await computeMarketRecord({ id, prior });
-    await writeRecord(id, record, lifecycle, config);
+    const { record, lifecycle, config, writeReplace } = await computeMarketRecord({ id, prior });
+    // Thread writeReplace (review P2): a CLOSED_PENDING-with-prior refresh keeps the prior's
+    // fetched_at — without declaring replace, writeRecord's loud no-op check would false-throw.
+    await writeRecord(id, record, lifecycle, config, { replace: writeReplace });
   } catch (e) {
     return { ok: false, error: msg(e, 'could not refresh market') };
   }

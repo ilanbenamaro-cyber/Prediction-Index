@@ -107,8 +107,14 @@ test('computeMarketRecord: RESOLVED binary + prior=null → 200-able record (no 
   validateRecord(record);
 });
 
-test('computeMarketRecord: RESOLVED binary + prior≠null → freezes the prior (builder NOT used)', async () => {
-  // A prior with a DISTINCTIVE 0.42 probability a minimal record (1/0) would never produce.
+// fix/resolved-transition-settled-truth: this used to characterize the freeze-forever bug — a
+// RESOLVED transition with a prior froze the PRIOR's stale live probability instead of the settled
+// truth, and worse, kept the prior's fetched_at so the write silently no-opped (the market stayed
+// OPEN in the cache forever). Now a RESOLVED transition ALWAYS tries settled truth first (a NEW
+// fetched_at → a genuine write), and only degrades to a freeze when no leg has a parseable settled
+// price (see the DEGRADED test below).
+test('computeMarketRecord: RESOLVED binary + prior≠null → settled truth wins (builder IS used, new fetched_at)', async () => {
+  // A prior with a DISTINCTIVE 0.42 probability the settled-truth builder (1/0) would never produce.
   const priorLive = {
     fetched_at: '2026-02-01T00:00:00Z', endpoints: ['g'],
     raw_inputs: [
@@ -122,10 +128,18 @@ test('computeMarketRecord: RESOLVED binary + prior≠null → freezes the prior 
   const priorConfig = { id: 'x', name: 'X', kind: 'binary', platform: 'polymarket', market_url: 'https://polymarket.com/event/x', resolves: '2026-02-10' };
   const prior = buildBinaryRecord(priorLive, '1.0.0', priorConfig, null); // OPEN prior
 
-  const { record, lifecycle } = await withGamma([RESOLVED_BINARY_EVENT],
+  const { record, lifecycle, writeReplace } = await withGamma([RESOLVED_BINARY_EVENT],
     () => computeMarketRecord({ id: 'x', prior }));
   assert.equal(lifecycle.state, 'RESOLVED');
-  // The FROZEN PRIOR's probability survives — proving buildMinimalResolvedRecord (which would give 1) was not used.
-  assert.equal(record.snapshot.derived.probability, 0.42);
+  // The SETTLED price (1) wins, not the frozen prior's stale 0.42 — proving buildMinimalResolvedRecord IS used.
+  assert.equal(record.snapshot.derived.probability, 1);
+  assert.notEqual(record.snapshot.fetched_at, priorLive.fetched_at, 'a genuine new fetched_at — never the same-key no-op');
+  assert.equal(writeReplace, false, 'settled truth writes as a normal insert, never replace');
   validateRecord(record);
 });
+
+// NOTE: unlike the 4 ladder/touch/categorical shapes, buildMinimalBinary never throws the
+// "no parseable settled prices" 409 (a missing price just renders `probability: null`, per its own
+// contract in test/resolved-no-prior.test.js above) — so the DEGRADE branch of resolveTransition is
+// structurally unreachable for the binary shape. That degrade path is covered by the ladder shapes
+// (which DO 409 on an all-unparseable settlement) in test/resolved-transition.test.js.

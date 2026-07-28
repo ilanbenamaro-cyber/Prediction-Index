@@ -246,7 +246,9 @@ function MarketDetailView({ record, envelope, hist, deltas, movers, narrativeBit
         </div>
         <div className="detail-head-actions">
           {addControl}
-          {envelope?.market_id && <RefreshButton slug={envelope.market_id} />}
+          {/* No refresh on a RESOLVED view: the final record is frozen and the server action
+              refuses (SERVE_FINAL shield) — don't invite a guaranteed-refusal click. */}
+          {envelope?.market_id && lifecycleState !== 'RESOLVED' && <RefreshButton slug={envelope.market_id} />}
           {near ? (
             <span className="detail-lifecycle state-pending" data-field="lifecycle" data-near-settlement="true">
               ◐ NEAR SETTLEMENT

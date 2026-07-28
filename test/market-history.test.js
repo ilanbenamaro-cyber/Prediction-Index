@@ -14,7 +14,7 @@ import {
   linregSlope, headlineValue,
   deriveVelocity, deriveDispersion, deriveDeltas, deriveBiggestMoves,
   deriveChartSeries, headlineChange, latestSnapshotWindow, detectJumps, deriveConfidenceTrend,
-  needsBackfill,
+  needsBackfill, stripResolutionRows,
   MIN_VELOCITY_DAYS, MIN_DISPERSION_DAYS,
 } from '../lib/market-history.mjs';
 
@@ -639,4 +639,99 @@ test('collapseDaily: already-unique dates pass through unchanged, ascending by d
   assert.deepEqual(out.map((r) => r.snapshot_date), ['2026-07-01', '2026-07-02']);
   assert.deepEqual(collapseDaily([]), []);
   assert.deepEqual(collapseDaily(null), []);
+});
+
+// ── REFINEMENT 1 (fix/resolved-transition-settled-truth): a resolution's final row is a settlement,
+// not a market move. stripResolutionRows filters source==='transition' out of every derivation that
+// NARRATES movement; the CHART series (deriveChartSeries et al, covered above) is deliberately never
+// filtered — the step must still render, it just must never be counted/labeled as price action. ────
+
+test('stripResolutionRows: drops rows with source==="transition"; legacy rows without `source` pass through', () => {
+  const rows = [
+    { snapshot_date: dateAt(0), source: 'cron' },
+    { snapshot_date: dateAt(1), source: 'transition' },
+    { snapshot_date: dateAt(2) }, // legacy row, no `source` column at all
+  ];
+  const out = stripResolutionRows(rows);
+  assert.deepEqual(out.map((r) => r.snapshot_date), [dateAt(0), dateAt(2)]);
+  assert.deepEqual(stripResolutionRows([]), []);
+  assert.deepEqual(stripResolutionRows(null), []);
+});
+
+test('detectJumps: a resolution row (source="transition") is NEVER read as a jump; the identical data WITHOUT the marker still detects it (proves the guard is the discriminator)', () => {
+  const flat = [];
+  for (let i = 0; i < 10; i++) flat.push(mkRow(i, { kind: 'binary', probability: 0.30 }));
+  const settled = { ...mkRow(10, { kind: 'binary', probability: 1.0 }), source: 'transition' };
+
+  assert.equal(detectJumps([...flat, settled]).hasRecentJump, false, 'the settlement step must not read as a jump');
+
+  const unmarked = { ...mkRow(10, { kind: 'binary', probability: 1.0 }) }; // same data, no source marker
+  assert.equal(detectJumps([...flat, unmarked]).hasRecentJump, true, 'the SAME data without the marker IS a real jump');
+});
+
+test('deriveVelocity: excludes the resolution row from both the point count and the trend', () => {
+  const flat = [];
+  for (let i = 0; i < 10; i++) flat.push(mkRow(i, { kind: 'binary', probability: 0.30 }));
+  const settled = { ...mkRow(10, { kind: 'binary', probability: 1.0 }), source: 'transition' };
+  const v = deriveVelocity([...flat, settled]);
+  assert.equal(v.days_have, 10); // the transition row is excluded from the count
+  assert.equal(v.trend, 'steady'); // the real 10 days are flat — no jump-driven "rising" from settlement
+  assert.equal(v.jump, undefined);
+});
+
+test('headlineChange: the resolution row is never the "today" endpoint of a narrated delta', () => {
+  const flat = [];
+  for (let i = 0; i <= 7; i++) flat.push(mkRow(i, { kind: 'binary', probability: 0.30 }));
+  const settled = { ...mkRow(8, { kind: 'binary', probability: 1.0 }), source: 'transition' };
+  // "today" resolves to day 7 (0.30); 7 days back is day 0 (0.30) → no change, despite day 8 settling to 1.0.
+  assert.equal(headlineChange([...flat, settled], 7), 0);
+});
+
+test('deriveBiggestMoves: the resolution row is never counted as a move', () => {
+  const flat = [];
+  for (let i = 0; i <= 5; i++) flat.push(mkRow(i, { kind: 'binary', probability: 0.30 }));
+  const settled = { ...mkRow(6, { kind: 'binary', probability: 1.0 }), source: 'transition' };
+  const moves = deriveBiggestMoves([...flat, settled], 30);
+  assert.equal(moves.change, 0, 'flat across the real (non-transition) days');
+});
+
+test('collapseDaily: a same-day transition row wins over a cron row for that date (precedence: transition > cron > backfill)', () => {
+  const rows = [
+    { snapshot_date: '2026-07-10', snapshot_hour: 18, source: 'cron', probability: 0.30 },
+    { snapshot_date: '2026-07-10', snapshot_hour: 20, source: 'transition', probability: 1.0 },
+  ];
+  const out = collapseDaily(rows);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].source, 'transition');
+  assert.equal(out[0].probability, 1.0);
+});
+
+test('deriveDeltas: the settlement step never appears in the Δ columns; the same data WITHOUT the marker does (review P2)', () => {
+  // 8 flat traded days at P(>2)=0.6, then the settled 0/1 step.
+  const flat = [];
+  for (let i = 0; i <= 7; i++) flat.push(mkRow(i, { markets: [{ threshold: 2, prob: 0.6 }] }));
+  const settledRow = { ...mkRow(8, { markets: [{ threshold: 2, prob: 1.0 }] }), source: 'transition' };
+
+  const withMarker = deriveDeltas([...flat, settledRow], [2]);
+  assert.equal(withMarker[0].d1, 0, 'the settlement step must not read as a 1-day Δ');
+
+  const unmarked = { ...mkRow(8, { markets: [{ threshold: 2, prob: 1.0 }] }) }; // same data, no marker
+  const control = deriveDeltas([...flat, unmarked], [2]);
+  assert.ok(Math.abs(control[0].d1 - 0.4) < 1e-9, 'the SAME data without the marker IS a real Δ (the guard is the discriminator)');
+});
+
+test('deriveDispersion: the settled point-mass IQR never fabricates a "converging" narrative (review P2)', () => {
+  // 31 traded days with a stable width-1 IQR, then the resolution's degenerate point-mass (width 0).
+  const traded = [];
+  for (let i = 0; i <= 30; i++) traded.push(mkRow(i, { iqr: { p25: 1, p75: 2 } }));
+  const settledRow = { ...mkRow(31, { iqr: { p25: 1.5, p75: 1.5 } }), source: 'transition' };
+
+  const d = deriveDispersion([...traded, settledRow]);
+  assert.equal(d.status, 'ok');
+  assert.equal(d.direction, 'stable', 'traded IQR was flat — the settled point-mass must not read as converging');
+  assert.equal(d.current_width, 1, 'the current width is the last TRADED width, not the settled 0');
+
+  const unmarked = { ...mkRow(31, { iqr: { p25: 1.5, p75: 1.5 } }) }; // same data, no marker
+  const control = deriveDispersion([...traded, unmarked]);
+  assert.equal(control.direction, 'converging', 'the SAME data without the marker DOES converge (the guard is the discriminator)');
 });

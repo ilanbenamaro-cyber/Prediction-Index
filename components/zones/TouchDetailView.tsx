@@ -231,7 +231,7 @@ export function TouchDetailView({ record, envelope, hist, addControl }: { record
         </div>
         <div className="detail-head-actions">
           {addControl}
-          {envelope?.market_id && <RefreshButton slug={envelope.market_id} />}
+          {envelope?.market_id && lifecycleState !== 'RESOLVED' && <RefreshButton slug={envelope.market_id} />}
           {near ? (
             <span className="detail-lifecycle state-pending" data-field="lifecycle" data-near-settlement="true">
               ◐ NEAR SETTLEMENT

@@ -1,5 +1,5 @@
 {
-  "version": "1.10.0",
+  "version": "1.11.0",
   "asset": "spacex-ipo-market-cap",
   "summary": "Derived valuation metrics from Polymarket 'closing market cap above $X' YES prices. Each 'above $X' market is a separate order book, so raw midpoints are arbitrage-adjusted (volume-weighted isotonic regression) into a monotone CDF before any metric is computed. Raw values are preserved alongside the adjusted ones. Two output tiers are kept strictly separate: TIER 1 (derived.market) are pure market transforms with no assumptions; TIER 2 (derived.scenarios) require external inputs and each carries a sourced, dated, ranged assumption (see assumptions.json). A scenario with no usable assumption renders 'input_required', never a fabricated number.",
   "metrics": {
@@ -180,6 +180,11 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.11.0",
+      "date": "2026-07-21",
+      "change": "RESOLVED TRANSITIONS STORE SETTLED TRUTH (behavior change, ALL 5 shapes; live prod finding: a resolved-transition freeze was a silent no-op — freezePriorRecord kept the prior's fetched_at, and the market_snapshots upsert on (market_id, fetched_at) with ignoreDuplicates silently dropped the RESOLVED row, leaving the market OPEN in the cache forever — victims world-cup-winner, which-continent-will-win-the-world-cup). A RESOLVED transition with a cached prior now ALWAYS tries settled truth first (append, new fetched_at — a genuine write, not a same-key upsert), via the same buildMinimalResolvedRecord the no-prior first-browse path already used. Freeze is now degraded-fallback ONLY (no leg has a parseable settled price), logged loud (never a silent fallback), and any freeze that keeps the prior's fetched_at (the degraded freeze, or a CLOSED_PENDING-with-prior freeze) now writes with replace:true so the lifecycle stamp cannot silently no-op again. A resolution transition also stamps ONE final history row (source='transition'); jump/velocity/headline-change/biggest-movers derivations now exclude that row from narration (the settlement is a real step, not a market move) while the chart series still renders it. writeRecord's snapshot upsert now throws loud on ANY undeclared silent conflict (replace:false + zero affected rows), independent of this fix's own paths. Schema unchanged at 2.1.0. SpaceX reference record is grandfathered as the historical artifact of the freeze-epoch semantic — it is stored RESOLVED and serves via SERVE_FINAL, structurally never re-entering this path; its raw_sha256 is untouched. Frozen SpaceX replay untouched — parity 4/4 byte-identical."
+    },
     {
       "version": "1.10.0",
       "date": "2026-07-16",
