@@ -78,6 +78,10 @@ can turn it red for reasons unrelated to our code. Hermetic recorded fixtures: p
   1-between minimal bucket board fails the ≥2 quorum and falls to the honest 5.5 chain —
   unobserved in the wild (census: every real bucket board carries ≥5 between legs); the
   `[shape-tripwire]` monotonicity warn is the instrument if one ever appears.
+- **FUTURES (appended, operator-mandated fail-loud follow-through):** plausibility-monitor
+  signature (banked, INC 6): a market backfill_status='failed' for N consecutive cron runs =
+  persistently stuck (e.g. permanently-404 legs) — surface via the monitor/cron_runs failures[]
+  rather than silent bounded retry-forever; the accepted v1 residual must become observable.
 
 ## ⮕ DIRECTION (2026-08-03): RESOLVED-TRANSITION SETTLED TRUTH — MERGED + LIVE + SWEPT (`main` @ `046680f`, PR #5)
 - **`main` is at merge `046680f`** (PR #5, branch `fix/resolved-transition-settled-truth`, 6 commits,
