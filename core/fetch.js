@@ -213,7 +213,7 @@ export async function fetchLastTradePrice(token) {
   if (!lt || lt.price == null) return null;
   const side = typeof lt.side === 'string' ? lt.side.toLowerCase() : '';
   if (side === 'buy' || side === 'sell') return String(lt.price);
-  console.warn('[last-trade] fabricated (side:"")', JSON.stringify({ token, price: String(lt.price), side: String(lt.side ?? '') }));
+  console.warn('[last-trade] fabricated (no witness)', JSON.stringify({ token, price: String(lt.price), side: String(lt.side ?? '') }));
   return null;
 }
 

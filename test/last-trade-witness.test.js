@@ -40,7 +40,7 @@ test('verbatim fabrication fixture: {"price":"0.5","side":""} → null, warns on
   );
   assert.equal(result, null);
   assert.equal(calls.length, 1, 'exactly one warn for a fabricated (price-present, witness-failed) response');
-  assert.match(calls[0][0], /^\[last-trade\] fabricated \(side:""\)/);
+  assert.match(calls[0][0], /^\[last-trade\] fabricated \(no witness\)/);
   const payload = JSON.parse(calls[0][1]);
   assert.deepEqual(payload, { token: 'tok-fabricated', price: '0.5', side: '' });
 });
