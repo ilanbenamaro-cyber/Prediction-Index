@@ -5,6 +5,28 @@ Newest at top. If you're about to change one of these, read the entry first.
 
 ---
 
+## A CLOB scalar is an observation only when its structural witness is present (operator-approved 2026-08-03, methodology 1.12.0)
+**Decided:** A CLOB scalar is an observation only when its structural witness is present — a
+two-sided book for a midpoint, a side for a trade. Fabricated otherwise (midpoint 0.5 on empty
+book, last-trade 0.5 with side:''). Any future CLOB-derived datum enters the pricing chain with
+its witness checked. Two instances now confirm the pattern is general, not one-off: **1.10.0**
+(dead-book midpoint) found `/midpoint` fabricating `(0+1)/2 = 0.5` over CLOB's own empty-side
+sentinels (BUY=0, SELL=1) — the witness there is a genuinely two-sided book, and a sentinel side
+is an absence, not a quote. **This fix (1.12.0)** found `/last-trade-price` fabricating
+`{"price":"0.5","side":""}` for a never-traded token with no order book — the witness there is a
+non-empty `side` ('buy'/'sell'); price can never be the discriminator on its own, only the side
+field proves a trade actually happened. **Empirical basis:** 369/369 fabricated last-trade
+responses landed at exactly price 0.5 with `side:""`; 8 genuine trades also landed at exactly
+0.5 but carried a real side — proof that price-based detection would have produced 8 false
+negatives, and only the witness (side) discriminates cleanly. **Constrains:** fixed at the
+single choke point (`fetchLastTradePrice`, core/fetch.js) that all 5 shape fetchers share;
+callers are untouched — a failed witness returns `null` and flows into the EXISTING skip
+machinery (`skippedThresholds` / `midpoint_fallback.skippedCount`), so the fix is skip-not-price,
+never a value substitution. A warn fires only when a price was present but the witness failed
+(missing/erroring responses keep the prior silent-null path — nothing was fabricated to warn
+about). See gotchas.md "CLOB /last-trade-price FABRICATES" and "CLOB midpoint returns a
+SYNTHETIC 0.5" for the live fixtures behind both instances.
+
 ## THE PASS LESSON (perfection pass 2026-07-13→15): every real finding sat one layer beneath a green surface
 **Recorded once, for the next pass to read first.** The P1s of this pass were not where anyone
 was looking: the fabricating de-vig hid behind a *correct* sum test (three of four live

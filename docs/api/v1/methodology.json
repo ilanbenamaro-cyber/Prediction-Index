@@ -1,5 +1,5 @@
 {
-  "version": "1.11.0",
+  "version": "1.12.0",
   "asset": "spacex-ipo-market-cap",
   "summary": "Derived valuation metrics from Polymarket 'closing market cap above $X' YES prices. Each 'above $X' market is a separate order book, so raw midpoints are arbitrage-adjusted (volume-weighted isotonic regression) into a monotone CDF before any metric is computed. Raw values are preserved alongside the adjusted ones. Two output tiers are kept strictly separate: TIER 1 (derived.market) are pure market transforms with no assumptions; TIER 2 (derived.scenarios) require external inputs and each carries a sourced, dated, ranged assumption (see assumptions.json). A scenario with no usable assumption renders 'input_required', never a fabricated number.",
   "metrics": {
@@ -180,6 +180,11 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.12.0",
+      "date": "2026-08-03",
+      "change": "LAST-TRADE WITNESS GUARD (core-fix, ALL 5 shape fetchers via the single choke point fetchLastTradePrice; live prod finding: CLOB's /last-trade-price endpoint fabricates {\"price\":\"0.5\",\"side\":\"\"} for a never-traded token with no order book — the fingerprint is side:\"\" ⇔ never-traded; a genuine trade always carries side \"buy\"/\"sell\", including 8 real trades that landed at exactly 0.5, so price can never be the discriminator, only side). fetchLastTradePrice now treats a last-trade response as an observation ONLY when side is 'buy' or 'sell' (case-insensitive); any other side (empty, missing, or unrecognized) returns null and logs one greppable warn ([last-trade] fabricated (side:\"\")) — but only when a price was actually present to fabricate (a fetch error or empty body keeps the prior silent-null path, unchanged). null flows into each caller's EXISTING skip machinery (skippedThresholds / midpoint_fallback.skippedCount) unmodified — this is a skip, never a price substitution, and no caller or pricing tier was reordered. General witness principle this confirms (see decisions.md): a CLOB scalar is an observation only when its structural witness is present — a two-sided book for a midpoint (1.10.0), a side for a trade (this fix). Population measured at fix time: 369 fabricated last-trade legs across 15 boards, 4 display-visible on filterless ladders. Frozen SpaceX replay untouched (no last-trade legs in the frozen record) — parity 4/4 byte-identical."
+    },
     {
       "version": "1.11.0",
       "date": "2026-07-21",

@@ -1,6 +1,6 @@
 # Methodology
 
-**Version 1.11.0** (see `core/methodology.json` — the version of record, with full changelog) · source: Polymarket (public market data only)
+**Version 1.12.0** (see `core/methodology.json` — the version of record, with full changelog) · source: Polymarket (public market data only)
 
 ## Two tiers (the firewall)
 - **Tier 1 — market signal** (`derived` + `derived.market.analytics`): pure transforms of observed
