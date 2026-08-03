@@ -16,10 +16,14 @@ legs, world-cup 10+1 pending legs) — zero real values in the tier. Display was
 coincidence: every such leg carried a placeholder-style label ("Team A", "Any Other …") that the
 categorical placeholder filter drops — one REAL label on a bookless leg puts a fabricated ~50%
 into the sum, the de-vig, and the board lead. **The discriminator is the side field, never the
-price value** (a genuine 0.5 trade has a side). Status: OPEN, needs its own core-fix increment
-(priceLeg's last-trade tier must reject side:"" → loud skip); monitor signature S1b watches it
-meanwhile. The 10 world-cup legs were remediated by the 1.11.0 resolved-transition rebuild;
-LeBron's 6 OPEN legs still carry fabricated 0.5s in raw_inputs today.
+price value** (a genuine 0.5 trade has a side). Status: **FIXED** — core witness guard shipped
+on `fix/last-trade-witness-guard` (methodology 1.12.0): `fetchLastTradePrice` (core/fetch.js,
+the single choke point all 5 shape fetchers share) now returns `null` and warns loud
+(`[last-trade] fabricated (side:"")`) unless `side` is 'buy'/'sell', case-insensitive; `null`
+flows into the existing skip machinery, never a value substitution. Population measured at fix
+time: **369 fabricated legs across 15 boards, 4 display-visible on filterless ladders**. The 10
+world-cup legs were remediated by the 1.11.0 resolved-transition rebuild; LeBron's 6 OPEN legs
+now skip loud instead of storing a fabricated 0.5.
 
 ## CLOB midpoint returns a SYNTHETIC 0.5 for an empty book on a settled/closed leg — midpoint-present ≠ midpoint-trustworthy
 **Confirmed live (2026-07-16, prod):** Norway (eliminated, `closed=true`, `uma=resolved`,

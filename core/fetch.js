@@ -194,13 +194,27 @@ export function priceLeg(resolution, mid, book) {
   if (best_ask != null) return { best_bid, best_ask, midpoint: best_ask, midpoint_source: 'best_ask' };
   return { best_bid, best_ask, needsLastTrade: true }; // no midpoint, no book
 }
-async function fetchLastTradePrice(token) {
+// Exported for the witness-guard tests (test/last-trade-witness.test.js) — otherwise
+// this stays the module's only caller-facing entry point for the last-trade tier.
+//
+// WITNESS PRINCIPLE: a CLOB scalar is an observation only when its structural witness
+// is present — a two-sided book for a midpoint (see priceLeg above), a side for a
+// trade. CLOB fabricates `{"price":"0.5","side":""}` for a never-traded token with no
+// order book (see gotchas.md "CLOB /last-trade-price FABRICATES"); a REAL trade always
+// carries side "buy"/"sell" — including genuine trades that land at exactly 0.5, so
+// price can never be the discriminator, only side.
+export async function fetchLastTradePrice(token) {
+  let lt;
   try {
-    const lt = await fetchJson(lastTradeUrl(token));
-    return lt && lt.price != null ? String(lt.price) : null;
+    lt = await fetchJson(lastTradeUrl(token));
   } catch {
-    return null;
+    return null; // fetch error / no body: existing silent-null path, unchanged
   }
+  if (!lt || lt.price == null) return null;
+  const side = typeof lt.side === 'string' ? lt.side.toLowerCase() : '';
+  if (side === 'buy' || side === 'sell') return String(lt.price);
+  console.warn('[last-trade] fabricated (no witness)', JSON.stringify({ token, price: String(lt.price), side: String(lt.side ?? '') }));
+  return null;
 }
 
 /**
