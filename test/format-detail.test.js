@@ -488,3 +488,79 @@ test('detailNarrative: percent-unit deltas read "down 0.20%", never "down $0.20%
   const d = detailNarrative({ medianLabel: '$2.10T', change30: -0.2, unit: 'T' });
   assert.ok(d.includes('down $0.20T over the past month'), d); // dollar path unchanged
 });
+
+// ── DISPLAY FIX: resolved-categorical banner derives winners from derived.outcomes, not the
+// {threshold, outcome} lifecycle side channel (which carries no label and made every resolved
+// categorical banner print the literal string "resolved: Yes"). ────────────────────────────
+import { resolvedCategoricalWinners } from '../lib/format-detail.mjs';
+
+test('resolvedCategoricalWinners: LOCK — the predicate is probability === 1 (settled truth), never near-1', () => {
+  // LOCK: the winner predicate is probability === 1 (settled truth), never near-1. Loosening
+  // this to a band (>0.95) would crown a confident-but-OPEN leg as resolved winner. If you are
+  // relaxing this predicate, you are about to fabricate a settlement.
+  const outcomes = [
+    { label: 'Confident-but-open', probability: 0.99 },
+    { label: 'Long shot A', probability: 0.008 },
+    { label: 'Long shot B', probability: 0.002 },
+  ];
+  assert.deepEqual(resolvedCategoricalWinners(outcomes), []); // the 0.99 leg is NOT crowned
+});
+
+test('resolvedCategoricalWinners: LOCK — zero winners on a degraded-freeze record and an all-No board', () => {
+  // A degraded-freeze-shaped record: lifecycle says RESOLVED, but outcomes still carry pre-final
+  // open-market quotes (no leg ever reached 1) — never guess a winner from stale quotes.
+  const degradedFreeze = [
+    { label: 'Alpha', probability: 0.62 },
+    { label: 'Beta', probability: 0.31 },
+    { label: 'Gamma', probability: 0.07 },
+  ];
+  assert.deepEqual(resolvedCategoricalWinners(degradedFreeze), []);
+
+  // A genuine all-No board (every leg settled to 0) — no winner exists, so none is fabricated.
+  const allNo = [
+    { label: 'Alpha', probability: 0 },
+    { label: 'Beta', probability: 0 },
+    { label: 'Gamma', probability: 0 },
+  ];
+  assert.deepEqual(resolvedCategoricalWinners(allNo), []);
+});
+
+test('resolvedCategoricalWinners: single winner settled to exactly 1', () => {
+  // Live-verified shape: Spain=1 among lower legs.
+  const outcomes = [
+    { label: 'Spain', probability: 1 },
+    { label: 'France', probability: 0 },
+    { label: 'Germany', probability: 0 },
+  ];
+  assert.deepEqual(resolvedCategoricalWinners(outcomes), ['Spain']);
+});
+
+test('resolvedCategoricalWinners: multi-winner (N-slots family) — every leg settled to 1 is crowned', () => {
+  const outcomes = [
+    { label: 'A', probability: 1 },
+    { label: 'B', probability: 1 },
+    { label: 'C', probability: 0 },
+  ];
+  assert.deepEqual(resolvedCategoricalWinners(outcomes), ['A', 'B']);
+});
+
+test('resolvedCategoricalWinners: raw_probability-only shape (guarded record) is crowned via the fallback', () => {
+  // A guarded record carries RAW probabilities only — probability is absent, raw_probability
+  // is the settled channel.
+  const outcomes = [
+    { label: 'Other', raw_probability: 1 },
+    { label: 'Everyone else', raw_probability: 0 },
+  ];
+  assert.deepEqual(resolvedCategoricalWinners(outcomes), ['Other']);
+});
+
+test('resolvedCategoricalWinners: empty/nullish input degrades to [], never throws', () => {
+  assert.deepEqual(resolvedCategoricalWinners([]), []);
+  assert.deepEqual(resolvedCategoricalWinners(null), []);
+  assert.deepEqual(resolvedCategoricalWinners(undefined), []);
+});
+
+test('resolvedCategoricalWinners: a winner missing a label is never crowned (label required)', () => {
+  const outcomes = [{ probability: 1 }, { label: 'Real winner', probability: 1 }];
+  assert.deepEqual(resolvedCategoricalWinners(outcomes), ['Real winner']);
+});

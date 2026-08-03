@@ -9,7 +9,7 @@
 // canonicalizes raw_inputs server-side for the in-browser verify.
 import { canonicalizeRawInputs } from '@/core/fetch.js';
 import { isPlaceholderLeg } from '@/core/categorical.js';
-import { fmtEastern, displayTitle, pointChange, categoricalNarrative, fmtDeltaPp, deltaSign, daysToExpiryLabel, platformLabel } from '@/lib/format-detail.mjs';
+import { fmtEastern, displayTitle, pointChange, categoricalNarrative, fmtDeltaPp, deltaSign, daysToExpiryLabel, platformLabel, resolvedCategoricalWinners } from '@/lib/format-detail.mjs';
 import { ConfidenceBadges, ConfidenceBasisGroup, signalBarStyle } from './ConfidenceBasis';
 import { VolumeCard } from './VolumeCard';
 import { CategoricalOutcomeBars } from './CategoricalOutcomeBars';
@@ -18,7 +18,7 @@ import { HashVerify } from './HashVerify';
 import { DetailFreshness } from './DetailFreshness';
 import { RefreshButton } from './RefreshButton';
 import { TrendHistorySection, type HistoryUI } from './TrendHistory';
-import type { MarketRecord, ServeBody, ResolvedLeg, CategoricalOutcome } from './market-record';
+import type { MarketRecord, ServeBody, CategoricalOutcome } from './market-record';
 
 const LIFECYCLE_CLASS: Record<string, string> = { OPEN: 'state-open', CLOSED_PENDING: 'state-pending', RESOLVED: 'state-resolved' };
 const LIFECYCLE_LABEL: Record<string, string> = { OPEN: 'OPEN', CLOSED_PENDING: 'CLOSED · PENDING', RESOLVED: 'RESOLVED' };
@@ -36,11 +36,16 @@ function consensusLabel(entropy: number | undefined): { label: string; cls: stri
   return { label: 'WIDE OPEN', cls: 'conf-low' };
 }
 
-/** The settled outcome from a RESOLVED categorical event: the leg whose price went to 1. */
-function resolvedWinner(outcome: ResolvedLeg[] | undefined): string | null {
-  if (!Array.isArray(outcome) || outcome.length === 0) return null;
-  const won = outcome.find((o) => o.outcome && o.outcome !== 'No');
-  return won ? `resolved: ${won.outcome}` : null;
+/** The settled winner banner for a RESOLVED categorical event, derived from `derived.outcomes`'
+ *  settled-to-1 labels (resolvedCategoricalWinners in lib/format-detail.mjs) — NOT from
+ *  `lifecycle.resolved_outcome` (that side channel has no label, only {threshold, outcome},
+ *  which is why this used to print the literal string "resolved: Yes" on every resolved board).
+ *  Zero winners → null (the banner renders the resolved state WITHOUT a winner line — honest
+ *  absence, never a guess). One winner → "resolved: Label". Multiple (N-slots family, e.g. a
+ *  multi-seat board) → "resolved: A, B". */
+function resolvedWinner(outcomes: CategoricalOutcome[] | undefined): string | null {
+  const winners = resolvedCategoricalWinners(outcomes);
+  return winners.length > 0 ? `resolved: ${winners.join(', ')}` : null;
 }
 
 export function CategoricalDetailView({ record, envelope, hist, addControl }: { record: MarketRecord; envelope: ServeBody; hist?: HistoryUI; addControl?: React.ReactNode }) {
@@ -71,7 +76,7 @@ export function CategoricalDetailView({ record, envelope, hist, addControl }: { 
   const consensus = consensusLabel(d.entropy);
   const rawSha: string = s?.source?.raw_sha256 ?? '';
   const canonical = Array.isArray(s?.raw_inputs) ? canonicalizeRawInputs(s.raw_inputs) : '';
-  const winner = resolvedWinner(s?.lifecycle?.resolved_outcome);
+  const winner = resolvedWinner(d.outcomes);
 
   // v1 ITEM 1/5: the dominant-outcome probability + its move over 30d/7d (from the lean history
   // series the view holds). Gated by days_have so a short window isn't mislabelled "past month".
