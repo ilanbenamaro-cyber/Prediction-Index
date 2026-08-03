@@ -138,7 +138,10 @@ export function assessExclusivity(legs) {
   const priced = real.filter((l) => Number.isFinite(l.prob));
   const sum = priced.reduce((a, l) => a + l.prob, 0);
   const basis = { filtered_sum: Number(sum.toFixed(4)), real_legs: priced.length };
-  if (priced.length < 2) return { verdict: 'exclusive', basis }; // degenerate: nothing to guard
+  // One (or zero) priced real outcomes cannot form a distribution — normalizing would
+  // fabricate certainty (a lone 0.30 leg → normalizeProbabilities([0.30]) === [1.0]). Route
+  // to the guarded raw display instead of the unguarded exclusive path.
+  if (priced.length < 2) return { verdict: 'insufficient_outcomes', basis };
 
   // ── nested test, signal 1: question-text "by/before <date>" ──
   const dated = priced
@@ -348,6 +351,10 @@ function buildCategoricalNarrative(dominant, entropy, confidence) {
 /** Guard-mode narrative: only claims the RAW per-leg prices support — no PMF language. */
 function buildGuardedNarrative(verdict, headline, sum, confidence) {
   const tail = `Reliability is ${confidence.reliability.tier}; liquidity is ${confidence.liquidity.tier}.`;
+  if (verdict === 'insufficient_outcomes') {
+    return `Only one real outcome carries a price — a single outcome cannot form a distribution. `
+      + `Shown at its raw market price. No winner probability exists. ${tail}`;
+  }
   if (verdict === 'nested_deadline' && headline) {
     return `Cumulative deadlines: the market prices "${headline.label}" at ${Math.round(headline.raw_probability * 100)}% (raw). `
       + `Outcomes are nested, not mutually exclusive — probabilities do not sum to 1 and no single-winner distribution exists. ${tail}`;
