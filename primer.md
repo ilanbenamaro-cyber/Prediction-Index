@@ -65,8 +65,11 @@ can turn it red for reasons unrelated to our code. Hermetic recorded fixtures: p
   beyond the 3 snapshots).
 - **FUTURES (added):** laso unit-collision — "$500k"/"$750k" legs on a $M-denominated board parse
   into garbled rung order (settlement honest, ordering wrong); parse-gap cousin of the
-  deadline-ladder family; browse+resolved, low priority. Standing from before: plausibility
-  monitor approval gate; latestModeSegment-inert-on-lean; time-CDF EPIC.
+  deadline-ladder family; browse+resolved, low priority. TOUCH_RE (core/fetch.js:432) still
+  classifies on `.some()` — structured "(HIGH)/(LOW)" wording, unflagged by audit, but the same
+  stray-leg class as the bucket quorum (P1-campaign INC 4); revisit if a mixed board misroutes.
+  Standing from before: plausibility monitor approval gate; latestModeSegment-inert-on-lean
+  (being closed by P1-campaign INC 2); time-CDF EPIC.
 
 ## ⮕ DIRECTION (2026-08-03): RESOLVED-TRANSITION SETTLED TRUTH — MERGED + LIVE + SWEPT (`main` @ `046680f`, PR #5)
 - **`main` is at merge `046680f`** (PR #5, branch `fix/resolved-transition-settled-truth`, 6 commits,
