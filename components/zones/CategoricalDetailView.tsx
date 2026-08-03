@@ -174,7 +174,7 @@ export function CategoricalDetailView({ record, envelope, hist, addControl }: { 
 
       {/* SHAPE NOTICE (5.6 guard) — right below trust: the structural honesty statement */}
       {guarded && (
-        <ShapeNotice label={nested ? 'CUMULATIVE DEADLINES' : excl?.verdict === 'ambiguous' ? 'STRUCTURE AMBIGUOUS' : 'INDEPENDENT OUTCOMES'} field="exclusivity-notice">
+        <ShapeNotice label={nested ? 'CUMULATIVE DEADLINES' : excl?.verdict === 'ambiguous' ? 'STRUCTURE AMBIGUOUS' : excl?.verdict === 'insufficient_outcomes' ? 'SINGLE PRICED OUTCOME' : 'INDEPENDENT OUTCOMES'} field="exclusivity-notice">
           {nested
             ? 'These outcomes are nested deadlines (each implies every later one). Probabilities are shown RAW, do not sum to 100%, and no single-winner distribution exists — normalizing them would fabricate numbers.'
             : `These outcomes are not mutually exclusive (raw sum ≈ ${(excl?.basis?.filtered_sum ?? 0).toFixed(2)}, not 1). Probabilities are shown RAW; consensus, entropy, and single-winner readings do not apply.`}

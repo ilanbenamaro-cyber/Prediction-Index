@@ -227,3 +227,53 @@ test('RT-3: parseByDeadline keeps the year after an ordinal day + parses numeric
   assert.deepEqual(parseByDeadline('by Q3 2026'), { key: 20260930, yearless: false, monthDay: 930 });
   assert.equal(parseByDeadline('by 13/45/2026').key, 20261231); // bogus m/d → bare-year fallback
 });
+
+// ── INSUFFICIENT OUTCOMES (single/zero real-leg board, preventive fix 2026-08-03) ─────────
+// priced.length < 2 previously took the UNGUARDED 'exclusive' path — normalizeProbabilities([0.30])
+// fabricates [1.0]: a lone 30% leg reads as a 100%-certain winner. Zero live instances (preventive);
+// the fix routes this branch to the guarded raw display like every other non-exclusive verdict.
+test('guard: single real leg (plus filtered placeholders) → insufficient_outcomes, not fabricated exclusive', () => {
+  const legs = [
+    { label: 'Real Candidate', prob: 0.30, volume: 500, question: 'Who wins?' },
+    // placeholders: zero volume, generic label OR pinned at the untraded 0.5 default —
+    // must be filtered BEFORE the priced.length count, proving the count is post-filter.
+    { label: 'Candidate B', prob: 0.5, volume: 0, question: 'Who wins?' },
+    { label: 'Candidate C', prob: 0.5, volume: 0, question: 'Who wins?' },
+  ];
+  const { verdict, basis } = assessExclusivity(legs);
+  assert.equal(verdict, 'insufficient_outcomes');
+  assert.equal(basis.real_legs, 1); // placeholders filtered out before the count
+
+  const d = buildCategoricalRecord(live(legs), '1.13.0', CONFIG).snapshot.derived;
+  assert.equal(d.exclusivity.verdict, 'insufficient_outcomes');
+  assert.equal(d.outcomes.length, 1);
+  assert.equal(d.outcomes[0].raw_probability, 0.30);
+  assert.ok(!('probability' in d.outcomes[0]), 'no normalized probability — guarded item shape');
+  for (const k of ['dominant_outcome', 'dominant_prob', 'implied_winner', 'entropy', 'consensus_strength']) {
+    assert.ok(!(k in d), `${k} must be OMITTED on an insufficient_outcomes record`);
+  }
+  assert.match(d.narrative, /single outcome cannot form a distribution/);
+});
+
+test('guard: zero priced real legs (all NaN/missing prob) → insufficient_outcomes, no crash', () => {
+  const legs = [
+    { label: 'Candidate A', prob: undefined, volume: 500, question: 'Who wins?' },
+    { label: 'Candidate B', prob: NaN, volume: 800, question: 'Who wins?' },
+  ];
+  const { verdict, basis } = assessExclusivity(legs);
+  assert.equal(verdict, 'insufficient_outcomes');
+  assert.equal(basis.real_legs, 0);
+
+  const d = buildCategoricalRecord(live(legs), '1.13.0', CONFIG).snapshot.derived;
+  assert.equal(d.exclusivity.verdict, 'insufficient_outcomes');
+  assert.deepEqual(d.outcomes.map((o) => o.raw_probability), [null, null]); // graceful degrade, no crash
+});
+
+test('guard: 2-real-leg board still classifies exactly as before — threshold is <2, not <=2', () => {
+  const legs = [
+    { label: 'A', prob: 0.6, volume: 500, question: 'Who wins?' },
+    { label: 'B', prob: 0.4, volume: 500, question: 'Who wins?' },
+  ];
+  const { verdict } = assessExclusivity(legs);
+  assert.equal(verdict, 'exclusive'); // 2 real legs, sum 1.0 in band — unaffected by this fix
+});

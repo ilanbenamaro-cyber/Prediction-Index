@@ -80,7 +80,7 @@ export interface Derived {
   // 5.6 exclusivity guard — present ONLY on guarded (non-exclusive) categorical records;
   // when present, dominant_*/entropy/consensus_strength/implied_winner are suppressed.
   exclusivity?: {
-    verdict: 'nested_deadline' | 'non_exclusive' | 'ambiguous';
+    verdict: 'nested_deadline' | 'non_exclusive' | 'ambiguous' | 'insufficient_outcomes';
     basis?: { filtered_sum?: number; real_legs?: number; dated_fraction?: number; text_monotone?: boolean; end_date_monotone?: boolean };
     headline?: { label: string; raw_probability: number | null };
   };
