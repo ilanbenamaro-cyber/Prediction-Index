@@ -70,6 +70,14 @@ can turn it red for reasons unrelated to our code. Hermetic recorded fixtures: p
   stray-leg class as the bucket quorum (P1-campaign INC 4); revisit if a mixed board misroutes.
   Standing from before: plausibility monitor approval gate; latestModeSegment-inert-on-lean
   (being closed by P1-campaign INC 2); time-CDF EPIC.
+- **FUTURES (appended, INC 4 bucket quorum — parked wording gap):** BUCKET_RE/PCT_BETWEEN_RE
+  require the literal word "between" — a percent board worded "-0.5% to 0%" is not
+  bucket-routed (true today AND post-fix; not a regression). Digit-less tail legs parse null
+  (live example: `uk-gdp-growth-in-q2-2026-qoq`'s "Will UK GDP growth in Q2 2026 be
+  negative?"). Parked with example. Adjacent accepted edge (same fix, deliberate): a
+  1-between minimal bucket board fails the ≥2 quorum and falls to the honest 5.5 chain —
+  unobserved in the wild (census: every real bucket board carries ≥5 between legs); the
+  `[shape-tripwire]` monotonicity warn is the instrument if one ever appears.
 
 ## ⮕ DIRECTION (2026-08-03): RESOLVED-TRANSITION SETTLED TRUTH — MERGED + LIVE + SWEPT (`main` @ `046680f`, PR #5)
 - **`main` is at merge `046680f`** (PR #5, branch `fix/resolved-transition-settled-truth`, 6 commits,
