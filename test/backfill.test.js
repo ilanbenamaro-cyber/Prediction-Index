@@ -91,6 +91,72 @@ test('backfillMarket: one failing write does not abort the batch', async () => {
   assert.equal(warns.length, 1);
 });
 
+test('backfillMarket: every leg throws (total outage) → status failed (retryable), not done', async () => {
+  const statuses = [];
+  const deps = {
+    fetchMeta: async () => ladderMeta(),
+    fetchHistory: async () => { throw new Error('CLOB 502'); },
+    writeRow: async () => true,
+    setStatus: async (slug, status, through) => { statuses.push({ status, through }); },
+  };
+  const res = await backfillMarket({ slug: 'lad', deps, log: { warn() {}, error() {} } });
+  assert.equal(res.written, 0);
+  assert.equal(res.failed, 0);
+  assert.equal(res.days, 0);
+  assert.equal(statuses.at(-1).status, 'failed');
+});
+
+test('backfillMarket: every leg answers empty (genuinely never traded) → status no_history, terminal', async () => {
+  const statuses = [];
+  const deps = {
+    fetchMeta: async () => ladderMeta(),
+    fetchHistory: async () => [], // all 3 legs answer 200 with empty history
+    writeRow: async () => true,
+    setStatus: async (slug, status, through) => { statuses.push({ status, through }); },
+  };
+  const res = await backfillMarket({ slug: 'lad', deps, log: { warn() {}, error() {} } });
+  assert.equal(res.written, 0);
+  assert.equal(res.failed, 0);
+  assert.equal(res.days, 0);
+  assert.equal(statuses.at(-1).status, 'no_history');
+});
+
+test('backfillMarket: mixed — one leg throws, the rest answer empty → status failed (any error is retryable)', async () => {
+  const statuses = [];
+  let calls = 0;
+  const deps = {
+    fetchMeta: async () => ladderMeta(),
+    fetchHistory: async () => {
+      calls++;
+      if (calls === 1) throw new Error('CLOB 500');
+      return [];
+    },
+    writeRow: async () => true,
+    setStatus: async (slug, status, through) => { statuses.push({ status, through }); },
+  };
+  const res = await backfillMarket({ slug: 'lad', deps, log: { warn() {}, error() {} } });
+  assert.equal(res.written, 0);
+  assert.equal(res.days, 0);
+  assert.equal(statuses.at(-1).status, 'failed');
+});
+
+test('backfillMarket: already-complete (real rows, but every write is a dup) → status done, byte-identical branch', async () => {
+  const statuses = [];
+  const deps = {
+    fetchMeta: async () => ladderMeta(),
+    fetchHistory: async (tok) => ({
+      A: [D('2026-01-01', 0.90)], B: [D('2026-01-01', 0.60)], C: [D('2026-01-01', 0.30)],
+    })[tok],
+    writeRow: async () => false, // real assembled row, but the write reports "already present"
+    setStatus: async (slug, status, through) => { statuses.push({ status, through }); },
+  };
+  const res = await backfillMarket({ slug: 'lad', deps, log: { warn() {}, error() {} } });
+  assert.equal(res.written, 0);
+  assert.equal(res.failed, 0);
+  assert.ok(res.days > 0); // assembled non-empty
+  assert.equal(statuses.at(-1).status, 'done');
+});
+
 test('backfillMarket: a fatal fetch error marks the market failed, never throws', async () => {
   const statuses = [];
   const deps = {
