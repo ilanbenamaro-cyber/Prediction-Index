@@ -1,0 +1,44 @@
+# ci.yml — the hermetic test gate (P1 campaign INC 1, 2026-08-03).
+#
+# WHAT GATES HERE — the CI-REQUIRED set, proven hermetic (541/541 under `env -i`,
+# ~1s wall time = physically no network): the full `node --test` suite in test/
+# (INCLUDING test/phase1-spacex-parity.test.js — the frozen-record parity tripwire)
+# plus `tsc --noEmit`. Zero env, zero secrets, zero DB, zero server: any test that
+# needs those does NOT belong in test/ — it belongs in scripts/verify-*.
+#
+# WHAT DOES NOT GATE HERE — the live-API verify gates (scripts/verify-*.mjs): they
+# depend on gamma/CLOB/Supabase/deployed-app state and go red for upstream reasons
+# unrelated to our code (see primer GATE INVENTORY). They stay operator-run (their
+# env/secrets are deliberately NOT in GitHub) — running them here would reintroduce
+# exactly the infra flakiness this split removes.
+#
+# ENFORCEMENT — this workflow only bites once branch protection requires the
+# "CI / hermetic-tests" check on main (operator step, see PR #7). Main then only
+# advances via merged PRs with CI green; Vercel builds from a main that can't go red.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hermetic-tests:
+    name: hermetic-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The full hermetic suite — includes the SpaceX parity gate (4 tests).
+      - run: node --test
+      - run: npx tsc --noEmit
