@@ -433,7 +433,14 @@ export function ladderShapeFromMarkets(markets) {
   // verb-worded touch needs the QUORUM (≥2 legs, the pipeline's own usable-leg minimum) —
   // some() would let one stray leg reclassify a whole categorical/survival event
   if (questions.filter((qn) => TOUCH_VERB_RE.test(qn)).length >= 2) return 'directional_touch';
-  if (questions.some((qn) => BUCKET_RE.test(qn))) return 'bucket_pmf';
+  // bucket needs the same ≥2 quorum as the touch-verb check above — one stray "between"
+  // leg must not reclassify a whole board — and BOTH witnesses per leg: the "between"
+  // wording marker AND a successful structural parse. Keyword alone is not a witness
+  // (a categorical board can idly say "between" without meaning a $/% interval); parse
+  // alone is a TRAP — parseBucketLeg's single-bound fallback parses ANY leg carrying a
+  // money/percent amount ("hit $104" → {lo:104,hi:∞}), so a parse-only quorum would
+  // swallow every survival ladder into bucket_pmf (see the widening-control test).
+  if (questions.filter((qn) => BUCKET_RE.test(qn) && parseBucketLeg(qn) != null).length >= 2) return 'bucket_pmf';
   // 5.5 (operator-approved): survival requires EVERY leg to carry a $ threshold — the
   // observed separator (21/21 live + 5/5 stored genuine ladders are 100% $-legs). A MIXED
   // board (some-but-not-all $-legs, e.g. one stray "hit $1m" leg in a categorical event)

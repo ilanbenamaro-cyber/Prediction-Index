@@ -1,5 +1,5 @@
 {
-  "version": "1.13.0",
+  "version": "1.14.0",
   "asset": "spacex-ipo-market-cap",
   "summary": "Derived valuation metrics from Polymarket 'closing market cap above $X' YES prices. Each 'above $X' market is a separate order book, so raw midpoints are arbitrage-adjusted (volume-weighted isotonic regression) into a monotone CDF before any metric is computed. Raw values are preserved alongside the adjusted ones. Two output tiers are kept strictly separate: TIER 1 (derived.market) are pure market transforms with no assumptions; TIER 2 (derived.scenarios) require external inputs and each carries a sourced, dated, ranged assumption (see assumptions.json). A scenario with no usable assumption renders 'input_required', never a fabricated number.",
   "metrics": {
@@ -180,6 +180,11 @@
     }
   },
   "changelog": [
+    {
+      "version": "1.14.0",
+      "date": "2026-08-03",
+      "change": "BUCKET CLASSIFICATION QUORUM (core-fix, shape classification only, preventive — zero live misroutes at fix time). ladderShapeFromMarkets' bucket_pmf check previously used .some() over the 'between' wording alone, so ONE stray 'between' leg reclassified a whole board to bucket_pmf. bucket_pmf now requires a ≥2-leg quorum (the same quorum the touch-verb rule already carries) where each counted leg carries BOTH witnesses: the 'between' wording marker (BUCKET_RE) AND a successful structural interval parse (parseBucketLeg != null). The conjunction — not parse-only — is deliberate and load-bearing: parseBucketLeg's single-bound fallback parses ANY question carrying a money/percent amount ('hit $104' → [104,∞)), so a parse-only quorum would have swallowed every survival ladder into bucket_pmf; the widening-control test locks this permanently. Census at fix time: zero live misroutes (preventive), and every real bucket board passes with margin ≥5 (all carry ≥5 between legs against the quorum of 2). Accepted trade-off: a 1-between minimal bucket board fails the ≥2 quorum and falls to the honest 5.5 chain — unobserved in the wild (census: every real bucket board carries ≥5 between legs); the [shape-tripwire] monotonicity warn is the instrument if one ever appears. Schema unchanged at 2.1.0. Frozen SpaceX replay untouched — parity 4/4 byte-identical."
+    },
     {
       "version": "1.13.0",
       "date": "2026-08-03",
