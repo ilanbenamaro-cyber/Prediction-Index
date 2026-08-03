@@ -38,7 +38,37 @@ healthy — it had simply never been run. See [[decisions]] "A gate that cannot 
 aliases). Every gate is an **integration gate by construction** — the Live-API column marks what
 can turn it red for reasons unrelated to our code. Hermetic recorded fixtures: parked future item.
 
-## ⮕ DIRECTION (2026-08-03, latest): RESOLVED-TRANSITION SETTLED TRUTH — MERGED + LIVE + SWEPT (`main` @ `046680f`, PR #5)
+## ⮕ DIRECTION (2026-08-03, latest): LAST-TRADE WITNESS GUARD — MERGED + LIVE + ACCEPTED (`main` @ `5460542`, PR #6)
+- **`main` is at merge `5460542`** (PR #6, branch `fix/last-trade-witness-guard`, 3 commits,
+  methodology **1.12.0**, no migration). Gates: parity 4/4 first · **541/541** (+7) · tsc 0 ·
+  Opus review MERGE-no-blockers (its P2 evaporated on data: zero binary boards carry a
+  fabricated leg; uppercase CLOB sides occur in the wild — case-insensitivity is required).
+- **THE RULE:** a last-trade response without a trade side is NOT an observation. Witness guard
+  in the single choke point (`fetchLastTradePrice`, sole consumer of the endpoint repo-wide):
+  side must be buy/sell (case-insensitive) or → null + one greppable `[last-trade] fabricated
+  (no witness)` warn; null flows into the pre-existing per-shape skip machinery. No caller
+  touched, no tier reordered. **Witness principle recorded in [[decisions]]** (a CLOB scalar is
+  an observation only with its structural witness — two-sided book for a midpoint, side for a
+  trade; instances 1.10.0 + 1.12.0). Gotcha flipped OPEN→FIXED. Empirical basis: 369/432
+  last_trade legs fabricated at exactly 0.5; 8 REAL trades at exactly 0.5 prove side-not-price.
+- **Live acceptance (guard, OPEN board):** Israel-next-PM re-serve removed all 10 fabricated
+  legs at source (raw_inputs 28→18, raw sum 6.002→0.989) with display continuity (18 outcomes,
+  dominant 0.503→0.512 real drift). FP control: openai-ipo precedence trace — its two real
+  0.001 last trades were NOT skipped, they climbed to `resolved_settlement:0` (6→6 legs);
+  keep-real-trades locked by permanent tests.
+- **3 contaminated ladders healed by SETTLEMENT, not the guard** (they resolved upstream while
+  stuck-OPEN; re-serve ran the 1.11.0 transition): laso mean 60.86→27.50, rklb/xagusd fabricated
+  mid-series 0.5s replaced by true settled 0/1. **Purge ledger (operator-ruled, raw-is-false):**
+  the 3 superseded contaminated snapshots deleted — exactly 1 row each (laso @07-02T12:30:37,
+  rklb @07-02T12:40:45, xagusd @07-06T17:06:04); history had ZERO contaminated rows (verified,
+  2,508-row categorical scan + 18-row ladder scan → de-vig contamination count 0 — no purge
+  beyond the 3 snapshots).
+- **FUTURES (added):** laso unit-collision — "$500k"/"$750k" legs on a $M-denominated board parse
+  into garbled rung order (settlement honest, ordering wrong); parse-gap cousin of the
+  deadline-ladder family; browse+resolved, low priority. Standing from before: plausibility
+  monitor approval gate; latestModeSegment-inert-on-lean; time-CDF EPIC.
+
+## ⮕ DIRECTION (2026-08-03): RESOLVED-TRANSITION SETTLED TRUTH — MERGED + LIVE + SWEPT (`main` @ `046680f`, PR #5)
 - **`main` is at merge `046680f`** (PR #5, branch `fix/resolved-transition-settled-truth`, 6 commits,
   methodology **1.11.0**, migration **0015 cron_runs applied dev AND prod**). Gates: parity 4/4 ·
   **534/534** · tsc 0 · clean build · verify 2c3/2c2/categorical/phase2-binary · Opus adversarial
