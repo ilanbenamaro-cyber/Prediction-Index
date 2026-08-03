@@ -5,6 +5,22 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## CLOB /last-trade-price FABRICATES `{"price":"0.5","side":""}` for a token with NO order book — the EMPTY SIDE is the tell
+**Confirmed live (2026-07-21, prod, plausibility survey; probe-verified on 3 tokens):** for a
+never-traded/delisted token whose `book` endpoint answers "No orderbook exists", `last-trade-price`
+returns `{"price":"0.5","side":""}` — a real trade always carries side BUY/SELL. The 1.10.0
+settled-leg rule routes dead-book legs to last_trade believing it is "an OBSERVED datum"; for
+bookless tokens the endpoint FABRICATES, one tier below the midpoint-0.5 lie (entry below). At
+discovery: **17/17 last_trade-sourced watched legs stored exactly 0.5** (LeBron 6 OPEN placeholder
+legs, world-cup 10+1 pending legs) — zero real values in the tier. Display was shielded ONLY by a
+coincidence: every such leg carried a placeholder-style label ("Team A", "Any Other …") that the
+categorical placeholder filter drops — one REAL label on a bookless leg puts a fabricated ~50%
+into the sum, the de-vig, and the board lead. **The discriminator is the side field, never the
+price value** (a genuine 0.5 trade has a side). Status: OPEN, needs its own core-fix increment
+(priceLeg's last-trade tier must reject side:"" → loud skip); monitor signature S1b watches it
+meanwhile. The 10 world-cup legs were remediated by the 1.11.0 resolved-transition rebuild;
+LeBron's 6 OPEN legs still carry fabricated 0.5s in raw_inputs today.
+
 ## CLOB midpoint returns a SYNTHETIC 0.5 for an empty book on a settled/closed leg — midpoint-present ≠ midpoint-trustworthy
 **Confirmed live (2026-07-16, prod):** Norway (eliminated, `closed=true`, `uma=resolved`,
 settled `["0","1"]` = P(win) 0) displayed at **50%** — because CLOB's `midpoint` endpoint

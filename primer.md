@@ -38,7 +38,48 @@ healthy — it had simply never been run. See [[decisions]] "A gate that cannot 
 aliases). Every gate is an **integration gate by construction** — the Live-API column marks what
 can turn it red for reasons unrelated to our code. Hermetic recorded fixtures: parked future item.
 
-## ⮕ DIRECTION (2026-07-16, latest): SETTLED-LEG PRICING — MERGED (`main` @ `bdc3bcb`)
+## ⮕ DIRECTION (2026-08-03, latest): RESOLVED-TRANSITION SETTLED TRUTH — MERGED + LIVE + SWEPT (`main` @ `046680f`, PR #5)
+- **`main` is at merge `046680f`** (PR #5, branch `fix/resolved-transition-settled-truth`, 6 commits,
+  methodology **1.11.0**, migration **0015 cron_runs applied dev AND prod**). Gates: parity 4/4 ·
+  **534/534** · tsc 0 · clean build · verify 2c3/2c2/categorical/phase2-binary · Opus adversarial
+  review (1 P1 + 3 P2, all fixed pre-merge).
+- **Root cause (diagnosed from prod, not guessed):** the resolved-transition freeze was a SILENT
+  NO-OP — freezePriorRecord keeps the prior fetched_at; writeRecord upserts market_snapshots on
+  (market_id, fetched_at) with ignoreDuplicates; the key never changes → the RESOLVED row dropped,
+  lifecycle never flipped, every serve looped probe→freeze→no-op forever. Second instance of the
+  C4 conflict-ignoring-upsert class. Live victims: the world-cup pair (resolved 07-19, displayed
+  pre-final 58.9/41.1 for 9 days).
+- **THE RULE (operator ruling, Option A):** a RESOLVED transition stores SETTLED TRUTH via the
+  same buildMinimalResolvedRecord the no-prior path uses — APPEND with a NEW fetched_at, never
+  rewrite; degrade-to-freeze (replace:true) ONLY on unparseable settled prices, logged loud.
+  writeRecord now THROWS on any undeclared silent upsert no-op. One final history row per
+  transition (source='transition', precedence transition>cron>backfill); stripResolutionRows keeps
+  the settlement step out of ALL move narration (jumps/velocity/headline/movers/deltas/dispersion)
+  while the chart still renders it. refreshMarket refuses stored-RESOLVED before any compute
+  (Opus P1: the old silent no-op was accidentally the SpaceX anchor's only shield on that path).
+  **SpaceX anchor GRANDFATHERED** — froze last-open quotes (0.9995/0.0005, not settled 0/1), kept
+  as the freeze-epoch historical artifact, never re-frozen (raw_sha256 immutability); census
+  proved it is the ONLY old-semantic record on either env.
+- **WC acceptance (operator-eyeballed) + sweep both green:** WC pair flipped RESOLVED, Spain/
+  Europe 1.00 stored all-legs resolved_settlement, ONE transition row each, loop dead
+  (SERVE_FINAL); detectJumps discriminator control on real prod rows: with marker no jump, marker
+  relabeled cron → the 0.4108 spurious jump reappears. **Sweep 10/10 stuck browse markets (8 prod
+  + 2 dev) = clean settled rebuilds, ZERO degrade fires** (one, spacex-closing-ipo-month, had
+  already healed organically 07-29 — all-settled, proving the path unprompted).
+- **CLOSED: the carried "prod cron rows land at 2/18 UTC" standup item** — verified healthy
+  (writes at 02:00:16/18:00:50 daily); cron_runs now ledgers every run (failures[] survives the
+  Vercel log void).
+- **OPEN, must not evaporate:** (a) **CLOB /last-trade-price FABRICATES {"price":"0.5","side":""}
+  for bookless tokens** (see new gotcha) — 17 watched legs at discovery, display-shielded only by
+  the placeholder-label coincidence; needs its own core-fix increment (reject side:"" → loud skip);
+  (b) **PLAUSIBILITY MONITOR** — survey + design report delivered (8 signatures, distributions,
+  thresholds), awaiting operator approval of the rules in prose; the monitor's S5 cron-clock gains
+  a watchlisted-since gate, S8 catches stuck transitions via the markets↔market_latest same-DB
+  join; (c) latestModeSegment is INERT on the lean read (lean rows don't project exclusivity) —
+  own increment, needs a mode-flipping fixture; (d) July-13 dominant_* null P2 self-heals as cron
+  rows land (unchanged).
+
+## ⮕ DIRECTION (2026-07-16): SETTLED-LEG PRICING — MERGED (`main` @ `bdc3bcb`)
 - **`main` is at merge `bdc3bcb`** (--no-ff, branch `fix/settled-leg-pricing`, 2 commits, base
   `21299d4`). Gates at merge, clean production build: **parity 4/4 · 512/512 · tsc 0 ·
   verify 11/11 · 9 negative controls · before/after screenshots.**
