@@ -549,6 +549,94 @@ test('deriveCategoricalSeries: null for non-categorical rows, <2 days, or no out
   assert.equal(deriveCategoricalSeries([catRow(0, []), catRow(1, [])]), null);
 });
 
+// ── lean read mode-flip (fix/lean-exclusivity-projection): the lean read never projected
+//    derived.exclusivity, so exclusivityMode always defaulted 'exclusive' on lean rows and
+//    latestModeSegment (5.6 guard) never trimmed on the display path — velocity/jumps/the
+//    categorical chart spliced de-vig-era and guarded-era probabilities across a mode boundary.
+//    This is the full≡lean equivalence check for THAT boundary specifically. ───────────────────
+test('lean read mode-flip: full≡lean segmentation identical across a de-vig→guarded exclusivity boundary', () => {
+  const devigOutcomes = (a, b) => [
+    { label: 'Outcome A', probability: a },
+    { label: 'Outcome B', probability: b },
+  ];
+  const guardedOutcomes = (a, b) => [
+    { label: 'Outcome A', raw_probability: a },
+    { label: 'Outcome B', raw_probability: b },
+  ];
+  const scalarCols = (i, dominantProb) => ({
+    snapshot_date: dateAt(i), snapshot_hour: 18, source: 'cron', kind: 'categorical',
+    implied_median: null, implied_mean: null,
+    confidence_tier: 'medium', confidence_score: 0.7,
+    reliability_tier: 'medium', reliability_score: 0.7, liquidity_tier: 'medium', liquidity_score: 0.7,
+    probability: null, touch_range_lo: null, touch_range_hi: null,
+    dominant_outcome: 'Outcome A', dominant_prob: dominantProb,
+    raw_sha256: null,
+  });
+
+  // Days 0-3: de-vig era. `derived` has NO `exclusivity` key at all — the real stored shape
+  // (absent-means-exclusive), not something the projection strips.
+  const devigDominants = [0.40, 0.44, 0.47, 0.49];
+  const fullDevig = devigDominants.map((a, i) => ({
+    ...scalarCols(i, a),
+    record: { snapshot: { derived: { outcomes: devigOutcomes(a, 1 - a) } } },
+  }));
+  // Days 4-6: guarded era (real 5.6 shape — raw_probability, no `probability`). The dominant
+  // steps 0.49 → 0.31 across the era boundary (≥0.08 — a real "jump" by magnitude alone), then
+  // only small in-era moves — the boundary step is what mode segmentation must swallow.
+  const guardedDominants = [0.31, 0.33, 0.35];
+  const exclusivity = { verdict: 'non_exclusive', basis: { filtered_sum: 1.57, real_legs: 5 } };
+  const fullGuarded = guardedDominants.map((a, i) => ({
+    ...scalarCols(devigDominants.length + i, a),
+    record: { snapshot: { derived: { outcomes: guardedOutcomes(a, 1 - a), exclusivity } } },
+  }));
+  const full = [...fullDevig, ...fullGuarded];
+
+  // The post-fix PostgREST lean projection: LEAN_BASE_COLS scalars + outcomes + exclusivity —
+  // `null` on the de-vig rows because `derived->exclusivity` genuinely has nothing there, exactly
+  // what Postgres returns for a row whose JSONB never had the key (not us stripping it).
+  const leanRaw = full.map((r) => {
+    const { record, ...cols } = r;
+    return {
+      ...cols,
+      outcomes: record.snapshot.derived.outcomes,
+      exclusivity: record.snapshot.derived.exclusivity ?? null,
+    };
+  });
+  const lean = leanRaw.map(leanHistoryRow);
+
+  // (a) both paths trim to ONLY the guarded 3-day segment — same dates, raw_probability values.
+  const fullSeries = deriveCategoricalSeries(full);
+  const leanSeries = deriveCategoricalSeries(lean);
+  assert.deepEqual(fullSeries, leanSeries);
+  const guardedDates = [dateAt(4), dateAt(5), dateAt(6)];
+  for (const line of fullSeries.probLines) {
+    assert.deepEqual(line.points.map((p) => p.date), guardedDates, 'chart must not splice in the de-vig days');
+  }
+  const lineA = fullSeries.probLines.find((l) => l.label === 'Outcome A');
+  assert.deepEqual(lineA.points.map((p) => p.value), guardedDominants, 'values come from the guarded era (raw_probability)');
+
+  // (b) detectJumps / deriveVelocity identical full vs lean, and the era step is invisible to both.
+  const fullJumps = detectJumps(full);
+  const leanJumps = detectJumps(lean);
+  assert.deepEqual(fullJumps, leanJumps);
+  assert.equal(fullJumps.hasRecentJump, false, 'the 0.49→0.31 era step must not be read as a jump on either path');
+
+  const fullVel = deriveVelocity(full);
+  const leanVel = deriveVelocity(lean);
+  assert.deepEqual(fullVel, leanVel);
+
+  // (c) DISCRIMINATOR CONTROL: the same lean raws WITHOUT the exclusivity field (the pre-fix
+  // projection shape) DO splice — proving the projection, not some other guard, is load-bearing.
+  const leanRawUnmarked = leanRaw.map(({ exclusivity: _drop, ...rest }) => rest);
+  const leanUnmarked = leanRawUnmarked.map(leanHistoryRow);
+  const unmarkedSeries = deriveCategoricalSeries(leanUnmarked);
+  const unmarkedJumps = detectJumps(leanUnmarked);
+  assert.equal(unmarkedSeries.probLines[0].points.length, full.length,
+    'without the exclusivity projection the chart splices all 7 days together');
+  assert.equal(unmarkedJumps.hasRecentJump, true,
+    'without the exclusivity projection the era step reads as a real jump — the guard is the discriminator');
+});
+
 // ── deriveChartSeries IQR band (multi-series pass, 2026-07-06) ─────────────────────────────────
 test('deriveChartSeries: P25–P75 band from object iqr; absent for width-only/missing iqr', () => {
   const mk = (i, iqr) => ({
