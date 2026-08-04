@@ -16,7 +16,6 @@ import { AddToWatchlist, type Membership } from './AddToWatchlist';
 import { ShapeNotice } from './ShapeNotice';
 import { canonicalizeRawInputs } from '@/core/fetch.js';
 import { after } from 'next/server';
-import { headers } from 'next/headers';
 import { readHistoryLean, headlineValue, deriveVelocity, deriveDispersion, deriveDeltas, deriveBiggestMoves, deriveChartSeries, deriveTouchSeries, deriveCategoricalSeries, headlineChange, latestSnapshotWindow, deriveReliabilityTrend, readBackfillStatus, needsBackfill } from '@/lib/market-history.mjs';
 import { triggerBackfill } from '@/lib/trigger-backfill.mjs';
 import { unitFromLadder, fmtMoney, fmtRange, fmtEastern, impliedMedianLabel, displayTitle, fmtDeltaPp, deltaSign, meanRobustnessLabel, modeBucket, detailNarrative, daysToExpiryLabel, synthesizeSignals, platformLabel } from '@/lib/format-detail.mjs';
@@ -110,10 +109,7 @@ export async function DetailData({ id }: { id: string }) {
   // render already shows "Backfilling history…". A resolved market (e.g. SpaceX) is already 'done'
   // → skips; backfill only ever writes market_history, never the frozen record.
   if (needsBackfill(backfillStatus)) {
-    const h = await headers();
-    const host = h.get('host');
-    const proto = h.get('x-forwarded-proto') ?? (host?.startsWith('localhost') ? 'http' : 'https');
-    after(() => triggerBackfill(id, host, proto));
+    after(() => triggerBackfill(id));
   }
   const hist: HistoryUI = {
     velocity: deriveVelocity(rows) as VelocityResult,

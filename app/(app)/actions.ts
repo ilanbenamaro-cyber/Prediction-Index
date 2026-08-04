@@ -9,7 +9,6 @@
 // or removed market appears without a full reload or a client-state layer.
 import { revalidatePath } from 'next/cache';
 import { after } from 'next/server';
-import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { serveMarket, MARKET_ID_RE } from '@/lib/serve-market.mjs';
 import { DEPS } from '@/lib/market-deps.mjs';
@@ -70,14 +69,7 @@ export async function addMarket(slug: string, orgId: string | null): Promise<Act
   // triggers here, so "add a fresh market" is unchanged; a 'failed' status re-fires (self-heal).
   const bfStatus = await readBackfillStatus(id).catch(() => null);
   if (needsBackfill(bfStatus)) {
-    // Capture the request host/proto NOW (request scope), not inside the after() callback: Next 15
-    // does allow headers() inside after() for a Server Function, but reading request data before the
-    // deferred callback is the documented-robust pattern (and lets triggerBackfill be unit-tested
-    // without a request context). See https://nextjs.org/docs/app/api-reference/functions/after.
-    const h = await headers();
-    const host = h.get('host');
-    const proto = h.get('x-forwarded-proto') ?? (host?.startsWith('localhost') ? 'http' : 'https');
-    after(() => triggerBackfill(id, host, proto));
+    after(() => triggerBackfill(id));
   }
   return { ok: true, slug: id };
 }
