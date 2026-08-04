@@ -38,7 +38,46 @@ healthy — it had simply never been run. See [[decisions]] "A gate that cannot 
 aliases). Every gate is an **integration gate by construction** — the Live-API column marks what
 can turn it red for reasons unrelated to our code. Hermetic recorded fixtures: parked future item.
 
-## ⮕ DIRECTION (2026-08-03, latest): LAST-TRADE WITNESS GUARD — MERGED + LIVE + ACCEPTED (`main` @ `5460542`, PR #6)
+## ⮕ DIRECTION (2026-08-04, latest): P1 FIX CAMPAIGN — ALL 8 INCREMENTS MERGED (`main` @ `42d5cd5`, PRs #7–#14)
+- **Eight gated increments from the 2026-08-03 audit, each surveyed→prose-approved→implemented→
+  reviewed→merged under the new CI gate.** Gates final: **573/573** (+39 permanent locks over the
+  534 baseline) · parity 4/4 at every checkpoint · tsc 0 · hermetic-tests REQUIRED on main
+  (branch protection, API-set). All merges via `gh` (operator UI clicks glitch — standing order).
+- **INC 1** CI gate (541/541 proven hermetic under env -i; live verify-* stays operator-run).
+  **INC 2** lean read projects exclusivity — LIVE-HEALED 7 mixed-era boards (fed-rate-cut-by-629:
+  153-pt splice + a −20.4pt phantom "jump" that was our own guard flipping — gone; closed the
+  latestModeSegment-inert-on-lean item). **INC 3** single-real-leg categorical → verdict
+  'insufficient_outcomes' (guarded raw display; a 0.30 leg can never normalize to 100%; census 0,
+  preventive). **INC 4** bucket classifier ≥2 both-witness quorum (BUCKET_RE ∧ parseBucketLeg —
+  parse-only would swallow every survival ladder via the single-bound fallback; widening-control
+  test is LOAD-BEARING, never delete; accepted edge: 1-between minimal boards → survival,
+  unobserved, tripwire-instrumented). **INC 5** resolved categorical banner names the WINNER —
+  LIVE-HEALED 13 boards ("resolved: Yes" → Spain/Trump/…; zero-winner and multi-winner proven on
+  live instances; exact-settled predicate lock: probability===1, never near-1). **INC 6** backfill
+  legErrors: outage→'failed' (retryable), genuine-empty→'no_history' (terminal by construction;
+  never masquerades as done; census 0, preventive). **INC 7** cron start-row + soft-budget ledger
+  (hard-kill leaves a 'started' orphan; truncation itemized; pool of 3 — per-serve internal burst
+  math), migration 0016 dev+prod — **which exposed the prod cron_runs 42501: every ledger insert
+  since 0015 had failed silently** (grants now IN the migration; see gotchas "newly-created
+  table…service_role"; verify-after-apply is now checklist). **INC 8** self-call base configured,
+  never request-derived (PUBLIC_APP_URL→VERCEL_URL→loud skip; host/proto params deleted wholesale,
+  signature-locked; Opus: zero request-derived values reach any credentialed call; 300s decoupling
+  byte-identical — the direct-call "clean fix" was rejected on caller-budget truncation grounds).
+- **Live proof of the new ledger (2026-08-04 18:03 UTC):** prod cron_runs row id 2 — the FIRST
+  genuinely-recorded run — status 'completed', 6 watched (4 success / 2 skipped_resolved / 0
+  failed, 2.7s). Retry set self-emptied earlier that day (all backfill_status now 'done'), so INC
+  8's live fan-out-through-new-base proof awaits its next natural subject (any market add/browse
+  with needsBackfill); unit + Opus by-construction proof standing.
+- **OPEN operator items (non-blocking):** set PUBLIC_APP_URL in the Vercel prod env (belt against
+  future deployment-protection on the VERCEL_URL fallback — Opus F1); run 0016's two GRANT lines
+  on dev (makes dev's accidental default-privileges explicit); `delete from public.cron_runs
+  where id = 1;` (the grant-verify test row, run_date 1999-01-01).
+- **DEFERRED by scope:** the P2/P3 audit findings (a11y pass, compute.mjs DI refactor,
+  legacy-stack retirement, duplication) = a separate later campaign. Standing threads unchanged:
+  plausibility monitor approval gate (signature list now enriched by INC 6/7/8 banked signatures
+  + the meta-signature); time-CDF EPIC; laso unit-collision; TOUCH_RE .some().
+
+## ⮕ DIRECTION (2026-08-03): LAST-TRADE WITNESS GUARD — MERGED + LIVE + ACCEPTED (`main` @ `5460542`, PR #6)
 - **`main` is at merge `5460542`** (PR #6, branch `fix/last-trade-witness-guard`, 3 commits,
   methodology **1.12.0**, no migration). Gates: parity 4/4 first · **541/541** (+7) · tsc 0 ·
   Opus review MERGE-no-blockers (its P2 evaporated on data: zero binary boards carry a
