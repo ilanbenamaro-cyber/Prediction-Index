@@ -20,3 +20,14 @@
 
 alter table public.cron_runs add column if not exists status text not null default 'completed';
 alter table public.cron_runs add column if not exists completed_at timestamptz;
+
+-- ── EXPLICIT service_role GRANTS (added after the prod 42501, 2026-08-04) ────────────────────
+-- SECOND INSTANCE of the 0012-class trap (see gotchas "newly-created table + service_role"):
+-- whether table creation confers privileges on service_role is PROJECT-DEPENDENT default-
+-- privilege behavior — dev had it, prod did not, and every prod cron_runs insert since the
+-- 0015 deploy failed 42501 into the exact log void this ledger exists to escape. Never rely
+-- on defaults: grant explicitly in the migration (PR #3's lesson, re-learned).
+-- SELECT: reads/verification · INSERT: the start-row · UPDATE: the final update (new in 0016 —
+-- the old insert-only code was why 0015's missing grant could hide). No DELETE: append-only.
+grant select, insert, update on public.cron_runs to service_role;
+grant usage, select on sequence public.cron_runs_id_seq to service_role;

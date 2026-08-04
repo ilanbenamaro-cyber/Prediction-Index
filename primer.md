@@ -88,7 +88,10 @@ can turn it red for reasons unrelated to our code. Hermetic recorded fixtures: p
   budget stopped dispatching before the list was exhausted, see failures[] for the skipped ids
   (marker `skipped: soft budget exhausted`); false-orphan disambiguation for the 'started' case
   = check whether the slot's snapshots actually landed (a ledger-update failure alone, with the
-  run's real work having completed, is the accepted false-positive cost — see lib/cron-batch.mjs).
+  run's real work having completed, is the accepted false-positive cost — see lib/cron-batch.mjs);
+  and the META-signature (2026-08-04, the prod cron_runs 42501): **a ledger that SHOULD have rows
+  but is empty = the observability mechanism itself is broken** — check the watcher before
+  trusting its silence (see gotchas "newly-created table … service_role privileges").
 
 ## ⮕ DIRECTION (2026-08-03): RESOLVED-TRANSITION SETTLED TRUTH — MERGED + LIVE + SWEPT (`main` @ `046680f`, PR #5)
 - **`main` is at merge `046680f`** (PR #5, branch `fix/resolved-transition-settled-truth`, 6 commits,
