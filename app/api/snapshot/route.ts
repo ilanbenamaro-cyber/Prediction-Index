@@ -23,6 +23,7 @@ import { DEPS } from '@/lib/market-deps.mjs';
 import { serveMarket } from '@/lib/serve-market.mjs';
 import { allWatchedMarketIds, marketsSnapshottedOn, writeHistory, marketsNeedingBackfill, insertCronRunStart, updateCronRunFinal } from '@/lib/market-history.mjs';
 import { runSnapshotBatch } from '@/lib/cron-batch.mjs';
+import { selfBaseUrl } from '@/lib/trigger-backfill.mjs';
 
 // Node runtime: core/ + the service-role Supabase client require Node APIs (not edge).
 export const runtime = 'nodejs';
@@ -67,7 +68,6 @@ export async function GET(req: Request): Promise<Response> {
     return Response.json({ error: `watchlist read failed: ${(e as Error).message}` }, { status: 500, headers: NO_STORE });
   }
 
-  const origin = new URL(req.url).origin;
   const secret = process.env.CRON_SECRET as string; // authorized() passed ⇒ secret is set
 
   let summary;
@@ -86,7 +86,15 @@ export async function GET(req: Request): Promise<Response> {
         updateLedgerFinal: updateCronRunFinal,
         marketsNeedingBackfill,
         fireBackfill: async (id: string) => {
-          await fetch(`${origin}/api/backfill?id=${encodeURIComponent(id)}`, {
+          // Base MUST be configured, never request-derived (Host / x-forwarded-proto / req.url) —
+          // see lib/trigger-backfill.mjs selfBaseUrl's doc comment: a header-controlled destination
+          // for a credentialed fetch (this carries the CRON_SECRET Bearer) is an egress surface.
+          const base = selfBaseUrl();
+          if (!base) {
+            console.warn('[snapshot] backfill retry skipped — no configured base url');
+            return;
+          }
+          await fetch(`${base}/api/backfill?id=${encodeURIComponent(id)}`, {
             method: 'POST', headers: { authorization: `Bearer ${secret}` }, cache: 'no-store',
           });
         },

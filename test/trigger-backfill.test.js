@@ -2,17 +2,25 @@
 //
 // triggerBackfill is used by BOTH addMarket (add path) and DetailData (browse path), so its
 // fail-closed + fire behavior is load-bearing for the whole "any viewed market loads its history"
-// contract. Pure of a request context (host/proto are passed in) → unit-testable here with a mocked
-// fetch + captured console + a controlled CRON_SECRET.
+// contract. Pure of a request context (the base url is CONFIGURED, never request-derived — see
+// selfBaseUrl's own tests below) → unit-testable here with a mocked fetch + captured console + a
+// controlled CRON_SECRET / PUBLIC_APP_URL / VERCEL_URL.
+//
+// security(ops): fix/self-call-configured-base — triggerBackfill previously took (id, host, proto)
+// read from request headers at each call site, making the credentialed self-call's destination a
+// header-controlled (CRON_SECRET-egress) surface. The base now comes ONLY from selfBaseUrl()
+// (PUBLIC_APP_URL / VERCEL_URL, both platform/operator-configured, never request-derived).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { triggerBackfill } from '../lib/trigger-backfill.mjs';
+import { triggerBackfill, selfBaseUrl } from '../lib/trigger-backfill.mjs';
 
-/** Run `fn` with a stubbed console (capturing [backfill-trigger] lines) + fetch + CRON_SECRET,
- *  restoring everything after. Returns { events, fetchCalls }. */
-async function withStubs({ secret, fetchImpl }, fn) {
+/** Run `fn` with a stubbed console (capturing [backfill-trigger] lines) + fetch + CRON_SECRET +
+ *  PUBLIC_APP_URL/VERCEL_URL, restoring everything after. Returns { events, fetchCalls }. */
+async function withStubs({ secret, publicAppUrl, vercelUrl, fetchImpl }, fn) {
   const origSecret = process.env.CRON_SECRET;
+  const origPublicAppUrl = process.env.PUBLIC_APP_URL;
+  const origVercelUrl = process.env.VERCEL_URL;
   const origLog = console.log, origWarn = console.warn, origFetch = globalThis.fetch;
   const events = [];       // parsed [backfill-trigger] payloads
   const fetchCalls = [];   // { url, init }
@@ -20,37 +28,71 @@ async function withStubs({ secret, fetchImpl }, fn) {
   console.log = cap; console.warn = cap;
   globalThis.fetch = async (url, init) => { fetchCalls.push({ url, init }); return fetchImpl(url, init); };
   if (secret === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = secret;
+  if (publicAppUrl === undefined) delete process.env.PUBLIC_APP_URL; else process.env.PUBLIC_APP_URL = publicAppUrl;
+  if (vercelUrl === undefined) delete process.env.VERCEL_URL; else process.env.VERCEL_URL = vercelUrl;
   try { await fn(); return { events, fetchCalls }; }
   finally {
     console.log = origLog; console.warn = origWarn; globalThis.fetch = origFetch;
     if (origSecret === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = origSecret;
+    if (origPublicAppUrl === undefined) delete process.env.PUBLIC_APP_URL; else process.env.PUBLIC_APP_URL = origPublicAppUrl;
+    if (origVercelUrl === undefined) delete process.env.VERCEL_URL; else process.env.VERCEL_URL = origVercelUrl;
   }
 }
 
+/* ── selfBaseUrl ── */
+
+test('selfBaseUrl: PUBLIC_APP_URL wins over VERCEL_URL, trailing slash trimmed', async () => {
+  await withStubs(
+    { publicAppUrl: 'https://example.com/', vercelUrl: 'other-host.vercel.app' },
+    () => { assert.equal(selfBaseUrl(), 'https://example.com'); },
+  );
+});
+
+test('selfBaseUrl: VERCEL_URL alone → https://<value>', async () => {
+  await withStubs(
+    { publicAppUrl: undefined, vercelUrl: 'my-app-abc123.vercel.app' },
+    () => { assert.equal(selfBaseUrl(), 'https://my-app-abc123.vercel.app'); },
+  );
+});
+
+test('selfBaseUrl: neither configured → null', async () => {
+  await withStubs(
+    { publicAppUrl: undefined, vercelUrl: undefined },
+    () => { assert.equal(selfBaseUrl(), null); },
+  );
+});
+
+/* ── triggerBackfill ── */
+
+test('triggerBackfill: signature lock — only the id (host/proto were the vulnerability; their', () => {
+  // absence IS the fix — do not reintroduce request-derived parameters).
+  assert.equal(triggerBackfill.length, 1);
+});
+
 test('triggerBackfill: fails CLOSED when CRON_SECRET is unset — no fetch, logs skipped', async () => {
   const { events, fetchCalls } = await withStubs(
-    { secret: undefined, fetchImpl: async () => ({ ok: true, status: 202 }) },
-    () => triggerBackfill('mkt', 'localhost:3000', 'http'),
+    { secret: undefined, publicAppUrl: 'http://localhost:3000', fetchImpl: async () => ({ ok: true, status: 202 }) },
+    () => triggerBackfill('mkt'),
   );
   assert.equal(fetchCalls.length, 0, 'must NOT hit the route without a secret');
   assert.deepEqual(events.map((e) => e.event), ['attempt', 'skipped']);
   assert.equal(events[1].reason, 'CRON_SECRET unset');
 });
 
-test('triggerBackfill: skips when host is null — no fetch, logs skipped', async () => {
+test('triggerBackfill: fails CLOSED when no base url is configured — no fetch, logs skipped', async () => {
   const { events, fetchCalls } = await withStubs(
-    { secret: 's3cret', fetchImpl: async () => ({ ok: true, status: 202 }) },
-    () => triggerBackfill('mkt', null, 'https'),
+    { secret: 's3cret', publicAppUrl: undefined, vercelUrl: undefined, fetchImpl: async () => ({ ok: true, status: 202 }) },
+    () => triggerBackfill('mkt'),
   );
   assert.equal(fetchCalls.length, 0);
   assert.deepEqual(events.map((e) => e.event), ['attempt', 'skipped']);
-  assert.equal(events[1].reason, 'no host header');
+  assert.equal(events[1].reason, 'no configured base url');
 });
 
 test('triggerBackfill: fires a bearer POST to /api/backfill and logs success', async () => {
   const { events, fetchCalls } = await withStubs(
-    { secret: 's3cret', fetchImpl: async () => ({ ok: true, status: 202 }) },
-    () => triggerBackfill('my-market', 'example.com', 'https'),
+    { secret: 's3cret', publicAppUrl: 'https://example.com', fetchImpl: async () => ({ ok: true, status: 202 }) },
+    () => triggerBackfill('my-market'),
   );
   assert.equal(fetchCalls.length, 1);
   const { url, init } = fetchCalls[0];
@@ -64,16 +106,16 @@ test('triggerBackfill: fires a bearer POST to /api/backfill and logs success', a
 
 test('triggerBackfill: url-encodes the id in the route query', async () => {
   const { fetchCalls } = await withStubs(
-    { secret: 's', fetchImpl: async () => ({ ok: true, status: 202 }) },
-    () => triggerBackfill('a b/c&d', 'h', 'http'),
+    { secret: 's', publicAppUrl: 'http://h', fetchImpl: async () => ({ ok: true, status: 202 }) },
+    () => triggerBackfill('a b/c&d'),
   );
   assert.equal(fetchCalls[0].url, 'http://h/api/backfill?id=a%20b%2Fc%26d');
 });
 
 test('triggerBackfill: a non-ok route response logs failure (never throws)', async () => {
   const { events } = await withStubs(
-    { secret: 's', fetchImpl: async () => ({ ok: false, status: 401 }) },
-    () => triggerBackfill('mkt', 'h', 'http'),
+    { secret: 's', publicAppUrl: 'http://h', fetchImpl: async () => ({ ok: false, status: 401 }) },
+    () => triggerBackfill('mkt'),
   );
   assert.deepEqual(events.map((e) => e.event), ['attempt', 'failure']);
   assert.equal(events[1].route_status, 401);
@@ -81,8 +123,8 @@ test('triggerBackfill: a non-ok route response logs failure (never throws)', asy
 
 test('triggerBackfill: a thrown fetch is swallowed + logged (fire-and-forget never affects caller)', async () => {
   const { events } = await withStubs(
-    { secret: 's', fetchImpl: async () => { throw new Error('network down'); } },
-    () => triggerBackfill('mkt', 'h', 'http'),
+    { secret: 's', publicAppUrl: 'http://h', fetchImpl: async () => { throw new Error('network down'); } },
+    () => triggerBackfill('mkt'),
   );
   assert.deepEqual(events.map((e) => e.event), ['attempt', 'failure']);
   assert.equal(events[1].error, 'network down');
