@@ -79,9 +79,16 @@ can turn it red for reasons unrelated to our code. Hermetic recorded fixtures: p
   unobserved in the wild (census: every real bucket board carries ≥5 between legs); the
   `[shape-tripwire]` monotonicity warn is the instrument if one ever appears.
 - **FUTURES (appended, operator-mandated fail-loud follow-through):** plausibility-monitor
-  signature (banked, INC 6): a market backfill_status='failed' for N consecutive cron runs =
-  persistently stuck (e.g. permanently-404 legs) — surface via the monitor/cron_runs failures[]
-  rather than silent bounded retry-forever; the accepted v1 residual must become observable.
+  signatures banked — persistently-'failed' backfill_status for N consecutive cron runs (INC 6:
+  e.g. permanently-404 legs, surface via the monitor/cron_runs failures[] rather than silent
+  bounded retry-forever; the accepted v1 residual must become observable); an orphaned
+  cron_runs row with status='started' older than ~2× maxDuration WITH missing slot snapshots =
+  a hard-killed run (INC 7, migration 0016 — the start-row lands before any market is served,
+  so a Vercel hard kill leaves a trace instead of nothing); status='truncated' rows = the soft
+  budget stopped dispatching before the list was exhausted, see failures[] for the skipped ids
+  (marker `skipped: soft budget exhausted`); false-orphan disambiguation for the 'started' case
+  = check whether the slot's snapshots actually landed (a ledger-update failure alone, with the
+  run's real work having completed, is the accepted false-positive cost — see lib/cron-batch.mjs).
 
 ## ⮕ DIRECTION (2026-08-03): RESOLVED-TRANSITION SETTLED TRUTH — MERGED + LIVE + SWEPT (`main` @ `046680f`, PR #5)
 - **`main` is at merge `046680f`** (PR #5, branch `fix/resolved-transition-settled-truth`, 6 commits,
