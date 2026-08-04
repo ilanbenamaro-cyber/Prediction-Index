@@ -5,6 +5,20 @@ Concrete failure modes hit during development. Check here before diagnosing a
 
 ---
 
+## A newly-created table does NOT reliably grant service_role privileges — project-dependent defaults, SECOND instance
+**Bit prod 2026-08-04 (cron_runs, 0015/0016):** dev's service_role could insert/select `cron_runs`
+from day one; prod answered **42501 permission denied** to the same key — every prod ledger insert
+since the 0015 deploy failed, non-fatally, into the exact Vercel log void the ledger exists to
+escape. Nobody watched the watcher until a verify-after-apply read tripped on it. Same root as the
+0012 invite-grant trap (whether creation confers privileges is project-level default-privilege
+behavior — NEVER assume). **THE CHECKLIST (every new-table migration):** (1) explicit
+`grant select/insert/update on <table> to service_role` + `grant usage, select on sequence
+<table>_id_seq` IN the migration file — never manual-only; (2) after EVERY apply (dev AND prod),
+a verify-after-apply probe that exercises the real privileges (a round-trip write/read, not just a
+schema select); (3) the write path's failure mode must be loud somewhere durable — a warn into
+rotating logs is not loud. Monitor meta-signature (banked): a ledger that SHOULD have rows but is
+empty = the observability mechanism itself is broken — the deepest silent-failure case.
+
 ## CLOB /last-trade-price FABRICATES `{"price":"0.5","side":""}` for a token with NO order book — the EMPTY SIDE is the tell
 **Confirmed live (2026-07-21, prod, plausibility survey; probe-verified on 3 tokens):** for a
 never-traded/delisted token whose `book` endpoint answers "No orderbook exists", `last-trade-price`
